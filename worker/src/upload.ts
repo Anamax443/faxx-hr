@@ -398,7 +398,7 @@ a{color:var(--accent)}
   <input type="file" id="file" accept=".pdf,.docx">
 </label>
 <div class="res" id="res"></div>
-<div class="f0">DOCX: WCAG kontrast, Unicode nosiče, hlavičky/patičky, visible/hidden split. PDF: čtení textové vrstvy (pdf.js) + injection sken; detekce skrytí podle barvy = on-prem F1.</div>
+<div class="f0">DOCX: WCAG kontrast, Unicode nosiče, hlavičky/patičky, visible/hidden split. PDF: čtení textové vrstvy (Cloudflare Workers AI) + injection sken; detekce skrytí podle barvy = on-prem F1.</div>
 <div class="build">faxx-hr · v2 · commit <span title="${COMMIT_FULL}">${COMMIT}</span> · build ${BUILT}</div>
 </div>
 <script>
