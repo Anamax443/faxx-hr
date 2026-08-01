@@ -13,7 +13,7 @@ JSON. Rasterizace/OCR běží on-prem v ČR (GDPR).
 - **R2** — immutable originály CV + mezivýstupy (bitmapy, extrahované texty).
 - **D1 (SQLite)** — stav dokumentu, metadata, flags, scores, decisions, audit_log.
 - **Conduit gateway → on-prem runner (Beelink)** — rasterizace PDF a OCR/vision (cesta B dual-path diffu). Jediné místo, kde vizuální podoba dokumentu s osobními údaji opouští cloud — a záměrně zůstává v ČR.
-- **Detektor skrytého textu** — deterministické kontroly (delta E, font < 4pt, render mode 3, off-mediabox, opacity; DOCX w:vanish/komentáře/metadata/alt-text) + sémantika (PhantomLint princip + Haiku klasifikátor). Viz `detector/`.
+- **Detektor skrytého textu (v2)** — deterministické kontroly (WCAG kontrast vůči skutečnému pozadí, font < 4pt, render mode 3, off-mediabox; DOCX w:vanish/hlavičky/patičky/Unicode nosiče; komentáře/metadata/alt-texty jen při injekci). Rozděluje `visible_text`/`hidden_text`. PDF na edge přes **Cloudflare Workers AI `toMarkdown`**, deep detekce on-prem (PyMuPDF). Viz `detector/` + `docs/DETECTOR-V2.md`.
 - **Cloudflare Workers AI (edge, free-tier)** — nejlevnější vrstva kaskády: klasifikace (CV? jazyk?), injection/safety klasifikátor (Llama Guard), embeddings pro sémantickou detekci. Eskaluje na Claude u nuance/češtiny/skenů.
 - **LLM #1 (Haiku 4.5 → Sonnet 5)** — extrakce do `schema/extraction.schema.json`, s evidence kotvami; Sonnet + vision na hard/sken. *Nehodnotí.*
 - **Validační/normalizační kód** — typy, rozsahy, konzistence, kanonizace (YYYY-MM, CEFR).

@@ -76,18 +76,21 @@ python detector/test_vectors.py    # 12 vektorů, bez závislostí, bez sítě
 Osm útočných vektorů (V01–V08) a čtyři **false-positive kontroly** (N01–N04).
 FP kontroly jsou stejně důležité jako útoky: exit kritérium F0 je recall
 ≥ 98 % **při** FP ≤ 5–10 %, a grafická CV s bílým textem na tmavém pozadí
-jsou přesně to, na čem naivní detektor FP rate rozbije. Aktuálně **12/12**.
+jsou přesně to, na čem naivní detektor FP rate rozbije. Aktuálně **14/14** (9 útoků + 5 FP kontrol; N05 = benigní Word metadata → čisto, V09 = injekce v metadatech → critical).
 
 Sada je **ladicí**, ne held-out. Neslouží k prohlášení o splnění gate F0 —
 slouží k tomu, aby změna kódu nerozbila to, co už fungovalo.
 
 ## Poznámka k DESIGN.md a Workeru
 
-- DESIGN.md §8 zmiňuje „delta E" — v2 používá WCAG kontrastní poměr
-  (praktičtější, má definované prahy). Sjednotit při příští revizi DESIGN.
+- DESIGN.md §8 sjednoceno na **WCAG kontrastní poměr** (v2 používá WCAG místo delta E).
 - **Živý Worker (`worker/src/upload.ts`) doportován na v2** pro DOCX (WCAG
   kontrast, Unicode nosiče, hlavičky/patičky, visible/hidden split, správná
   polarita) — nasazeno a ověřeno živě proti stejným vektorům (N02 sidebar
   čistý, #E8E8E8/#FEFEFE/patička chyceny, otrávené demo vis/hid split sedí).
-  PDF ve Workeru zůstává dekomprese + injection sken; hloubková PDF detekce
-  (render mode, CID/Identity-H glyfy) je pro on-prem runner (PyMuPDF).
+  **PDF ve Workeru čte text přes Cloudflare Workers AI `toMarkdown`** (embedded/CID
+  fonty z Word exportu vč. skrytého textu) + ruční fflate fallback (union) → injekce
+  se chytne na edge. Hloubková diagnóza skrytí (barva/render mode/pozice) + OCR skenů
+  = on-prem runner (PyMuPDF). **Metadata/alt-texty se flagují jen při injekci** (fix FP:
+  každý Word doc má core.xml/app.xml → nesmí být „nález" za pouhou existenci).
+  pdf.js/unpdf ve workerd nefunguje (padá na `_isSameOrigin`), proto toMarkdown.

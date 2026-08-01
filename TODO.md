@@ -30,7 +30,9 @@ Cílem NENÍ hotový produkt, ale doložitelné číslo. Bez něj nemá smysl st
 
 - [x] Detektor v2: kontrast, Unicode nosiče, hlavičky/patičky, PDF render mode
 - [x] Rozdělení na `visible_text` / `hidden_text` (invariant proti úniku)
-- [x] Ladicí regresní sada `detector/test_vectors.py` (8 útoků + 4 FP kontroly), 12/12
+- [x] Ladicí regresní sada `detector/test_vectors.py` (9 útoků + 5 FP kontrol), 14/14
+- [x] Živě na Cloudflare: DOCX plná v2 + PDF přes Workers AI `toMarkdown` (embedded fonty)
+- [x] Oprava FP: metadata/alt-texty jen při injekci; lidské popisy nálezů v UI; otisk verze
 - [ ] **HELD-OUT sada** — sestavuje někdo jiný než autor detektorů
   - [ ] ≥ 50 reálných čistých CV (anonymizovaných), z toho ≥ 15 grafických
         s tmavými sidebary a textboxy — hlavní zdroj false positives

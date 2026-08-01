@@ -65,7 +65,8 @@ přítomnost (antidiskriminace). Každý skill/role nese `evidence` kotvu + **ko
 ## 8. Bezpečnostní detekce
 
 - **Deterministicky (PDF):** kontrast text↔pozadí (implementace v2 = **WCAG poměr**, zachytí i #FEFEFE/#E8E8E8), font < 4pt, text render mode 3, off-mediabox/z-order. Pozadí z vykreslených ploch.
-- **Deterministicky (DOCX):** kontrast vůči **skutečnému pozadí** (highlight/shd/background), `w:vanish`, mikropísmo, hlavičky/patičky, komentáře/poznámky/metadata/alt-texty, **Unicode nosiče** (zero-width, bidi, Tags E0000+). Textboxy/sidebary se NEflagují (viditelné). Regex jen eskaluje severity. Viz [`detector/`](detector/) + [`docs/DETECTOR-V2.md`](docs/DETECTOR-V2.md) — spustitelné, bez závislostí; regresní sada 12/12.
+- **Deterministicky (DOCX):** kontrast vůči **skutečnému pozadí** (highlight/shd/background), `w:vanish`, mikropísmo, hlavičky/patičky, komentáře/poznámky/metadata/alt-texty, **Unicode nosiče** (zero-width, bidi, Tags E0000+). Textboxy/sidebary se NEflagují (viditelné). Regex jen eskaluje severity; metadata/alt-texty se flagují jen při injekci (jinak FP). Viz [`detector/`](detector/) + [`docs/DETECTOR-V2.md`](docs/DETECTOR-V2.md) — spustitelné, bez závislostí; regresní sada 14/14.
+- **Ve Workeru (edge, celé v cloudu):** PDF text čte **Cloudflare Workers AI `toMarkdown`** (embedded/CID fonty z Word exportu vč. skrytého textu) → injekce se chytne na edge; hloubkovou diagnózu skrytí (barva/render mode/pozice) a OCR skenů dělá on-prem runner. DOCX detekce plná v2 v TypeScriptu. (pdf.js/unpdf ve workerd nefunguje — padá na `_isSameOrigin`.)
 - **CDR:** rasterizace (Dangerzone) párovaná s kontrolou kontrastu/velikosti (OCR vrací drobný text).
 - **Sémanticky (kaskáda):** nejlevnější vrstva = **Llama Guard na Workers AI** (edge) + embeddings (PhantomLint princip); eskalace na Haiku 4.5 „obsahuje text instrukce pro AI? ano/ne" jen u sporných.
 - **Politika:** flag se **zobrazí** (severity info/warn/critical), netiše nefiltruje.

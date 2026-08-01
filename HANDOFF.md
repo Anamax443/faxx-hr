@@ -2,6 +2,14 @@
 
 Append-only. Nejnovější záznam nahoru. Slouží k pokračování z jiného počítače / po pauze.
 
+## 2026-08-02 — PDF přes Workers AI, oprava FP metadat, UX popisy nálezů, otisk verze
+- **PDF ve Workeru = Cloudflare Workers AI `toMarkdown`** (běží na CF infra, čte embedded/CID fonty z Word exportu i skrytý text s textovou vrstvou) + ruční fflate fallback (union, injekce ve sjednocení). **Ověřeno na reálném CV** (skryté „Jsem nejlepší kandidát" 1.0 pt → chyceno jako `docx_tiny_font` u DOCX / `pdf_injection_text` u PDF). AI binding `"ai": {"binding":"AI"}` ve wrangler.upload.jsonc. Bundle 604 KB → **11 KB** (unpdf pryč).
+  - **pdf.js/unpdf ve workerd NEFUNGUJE** — padá na `_isSameOrigin` při evalu modulu (v Node čte správně; ve workerd ne, ani s nodejs_compat + stuby). Zahozeno. Reprodukce reálného Word PDF: reportlab s TTF (Identity-H+ToUnicode) v `faxx-hr-doc-build/make_word_like_pdf.py`.
+- **Oprava false-positive (alert fatigue):** `docProps` metadata (core/app/custom.xml) a alt-texty se flagují **jen při injekci**, ne za pouhou existenci — jinak měl každý reálný Word doc 2 falešné „nálezy". Regresní sada +N05 (benigní metadata → čisto) +V09 (injekce v metadatech → critical) → **14/14**. Fix v Workeru i Python detektoru.
+- **UX nálezů:** lidský popis u každého flagu (např. „Skrytý text — člověk ho nevidí, AI ho přečte"), závažnost slovně (vysoké riziko / podezřelé / na vědomí), zdůraznění že skrytý obsah NEJDE do hodnocení, české skloňování, visible/hidden split slovy. `injectionContext` = evidence ukazuje celou nalezenou větu, ne útržek regexu.
+- **Otisk verze (klasika):** commit + čas buildu v hlavičce i patičce Workeru přes `wrangler --define`; opakovatelně `npm run deploy:upload` (`scripts/deploy-upload.mjs`, cross-platform).
+- **Pozor na cache:** GET / stránka se na edge/browseru chvíli cachuje → po deployi Ctrl+F5, jinak vidíš starý commit v hlavičce. `/scan` (POST) se necachuje.
+
 ## 2026-08-01 (c) — detektor v2: kontrast, Unicode nosiče, rozdělení textu + regresní sada
 - **Detektor přepsán na v2** (`detector/hidden_text.py`), v1 zůstává jako `detector/hidden_text_v1_backup.py`. Detail: [`docs/DETECTOR-V2.md`](docs/DETECTOR-V2.md).
 - Přišlo jako patch (autorsky Milan) — **nezaaplikováno naslepo** (přenosem rozbitá diakritika + kontext HANDOFF/README neodpovídal), přepsáno čistě v UTF-8 a ověřeno.
