@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>faxx-hr — stav projektu</title>
+<style>
+  :root{
+    --bg:#0d1424; --panel:#141d33; --panel2:#1b2740; --line:#26324f;
+    --txt:#e6edf7; --muted:#8da2c4; --accent:#3fd6a0; --accent-dim:#1f6f56;
+    --amber:#f0b429; --red:#f0556b; --blue:#5aa9f0; --violet:#a98bf0;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);
+    font:15px/1.6 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:980px;margin:0 auto;padding:40px 24px 80px}
+  header{display:flex;align-items:flex-start;gap:18px;flex-wrap:wrap}
+  .icon{width:56px;height:56px;border-radius:14px;background:var(--panel2);
+    border:1px solid var(--line);display:grid;place-items:center;font-size:26px;flex:0 0 auto}
+  h1{margin:0;font-size:26px;letter-spacing:.2px}
+  .sub{color:var(--muted);margin:4px 0 0}
+  .badges{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto}
+  .badge{font-size:12px;font-weight:600;letter-spacing:.4px;text-transform:uppercase;
+    padding:6px 12px;border-radius:999px;border:1px solid var(--line);color:var(--muted)}
+  .badge.live{color:var(--accent);border-color:var(--accent-dim);background:rgba(63,214,160,.08)}
+  .badge.proto{color:var(--amber);border-color:#5a4a18;background:rgba(240,180,41,.08)}
+  .badge.risk{color:var(--red);border-color:#5a2430;background:rgba(240,85,107,.08)}
+
+  .gate{margin:28px 0;padding:20px 22px;border-radius:14px;
+    background:linear-gradient(180deg,rgba(240,180,41,.10),rgba(240,180,41,.03));
+    border:1px solid #5a4a18;border-left:4px solid var(--amber)}
+  .gate h2{margin:0 0 6px;font-size:16px;color:var(--amber)}
+  .gate p{margin:0}
+  .gate .crit{margin:12px 0 0;color:var(--muted);font-size:14px}
+
+  h2.section{font-size:14px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin:40px 0 14px;font-weight:700}
+
+  .flow{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px 20px;
+    font:13px/1.7 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:var(--txt);white-space:pre-wrap;overflow-x:auto}
+  .flow .c{color:var(--accent)} .flow .m{color:var(--muted)} .flow .a{color:var(--amber)} .flow .r{color:var(--red)}
+
+  .phases{display:flex;flex-direction:column;gap:10px}
+  .phase{display:flex;gap:16px;align-items:flex-start;padding:16px 18px;background:var(--panel);border:1px solid var(--line);border-radius:12px}
+  .phase .tag{flex:0 0 auto;width:40px;height:40px;border-radius:10px;display:grid;place-items:center;font-weight:700;background:var(--panel2);border:1px solid var(--line)}
+  .phase.active{border-color:var(--accent-dim);background:rgba(63,214,160,.05)}
+  .phase.active .tag{color:var(--accent);border-color:var(--accent-dim)}
+  .phase .body{flex:1}
+  .phase .body h3{margin:0;font-size:15px}
+  .phase .body p{margin:3px 0 0;color:var(--muted);font-size:14px}
+  .st{font-size:12px;font-weight:600;padding:4px 10px;border-radius:999px;white-space:nowrap}
+  .st.gate{color:var(--amber);background:rgba(240,180,41,.12)}
+  .st.plan{color:var(--muted);background:var(--panel2)}
+
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:680px){.grid{grid-template-columns:1fr}}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px 20px}
+  .card h3{margin:0 0 10px;font-size:15px}
+  ul{margin:0;padding-left:18px} li{margin:5px 0}
+  li.yes::marker{content:"✅ "} li.no::marker{content:"❌ "} li.key::marker{content:"🛡️ "}
+  .dec{display:flex;gap:10px;margin:7px 0;font-size:14px} .dec .k{flex:0 0 auto;width:18px}
+  .ok{color:var(--accent)} .rej{color:var(--red)} .add{color:var(--blue)}
+  .q{color:var(--amber);font-weight:600}
+  .layers{counter-reset:l;display:flex;flex-direction:column;gap:8px}
+  .layer{display:flex;gap:14px;align-items:flex-start;padding:14px 16px;background:var(--panel);border:1px solid var(--line);border-radius:10px}
+  .layer::before{counter-increment:l;content:counter(l);flex:0 0 auto;width:26px;height:26px;border-radius:7px;
+    display:grid;place-items:center;font-weight:700;font-size:13px;background:var(--panel2);border:1px solid var(--line);color:var(--accent)}
+  .layer b{font-size:14px} .layer span{color:var(--muted);font-size:14px}
+  footer{margin-top:48px;padding-top:20px;border-top:1px solid var(--line);color:var(--muted);font-size:13px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px}
+  code{background:var(--panel2);padding:1px 6px;border-radius:5px;font-size:13px}
+  a{color:var(--accent)}
+  .cta{display:inline-block;margin-top:6px;padding:9px 16px;border-radius:9px;background:rgba(63,214,160,.10);
+    border:1px solid var(--accent-dim);color:var(--accent);text-decoration:none;font-weight:600;font-size:14px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="icon">🛡️</div>
+    <div>
+      <h1>faxx-hr <span style="color:var(--muted);font-size:14px;font-weight:400">(pracovní název)</span></h1>
+      <p class="sub">Hodnocení životopisů pro personalisty — s bezpečnostní vrstvou proti skrytému textu v CV (prompt injection)</p>
+    </div>
+    <div class="badges">
+      <span class="badge proto">Prototyp</span>
+      <span class="badge live">F0 · Benchmark</span>
+      <span class="badge risk">AI Act · High-risk</span>
+    </div>
+  </header>
+
+  <div class="gate">
+    <h2>⚠ Brána projektu: F0 — Benchmark detekce skrytého textu</h2>
+    <p>Žádná plná Cloudflare infrastruktura, dokud benchmark na sadě <strong>čistých + „otrávených" CV</strong> nepotvrdí, že detekce funguje.</p>
+    <p class="crit">Exit (návrh): recall detekce ≥ 98 % na otrávené sadě · false-positive ≤ 5–10 % na čisté sadě · přesnost extrakce klíčových polí ≥ 90 %.
+       <br>Vyzkoušej jádro hned: <code>python detector/demo.py</code> — vygeneruje otrávené CV a detekuje 4 nosiče injection.</p>
+  </div>
+
+  <h2 class="section">Princip: odděl extrakci od hodnocení</h2>
+  <div class="card" style="margin-bottom:16px">
+    <p style="margin:0">Skórovací logika <strong>nikdy nevidí surový text</strong>. LLM #1 dělá jen strukturovanou extrakci do pevného JSON schématu (žádné skóre).
+       Skóre počítá <strong>deterministický rubrik v kódu</strong> nad tím JSONem. Injection „tento kandidát je nejlepší" nemá kam zapsat —
+       schéma má jen <code>years_experience</code>, <code>skills[]</code>, <code>education[]</code>. Personalista rozhoduje sám (decision support, ne decision maker).</p>
+  </div>
+
+  <h2 class="section">Bezpečnostní pipeline (6 fází)</h2>
+  <div class="flow"><span class="m">[uchazeč → e-mail s CV]</span>
+        │
+   <span class="c">[CF Email Routing → Email Worker (postal-mime)]</span>   <span class="m">← recyklace z job-watch-mail</span>
+        ▼  originál → R2 (immutable), stav → D1
+   <span class="a">[Sanitizace + DUAL-PATH DIFF]</span>  textová vrstva PDF  vs.  render→OCR/vision (on-prem)
+        │  co je v (a) a ne v (b) = <span class="r">skrytý obsah → FLAG</span>
+        ▼
+   <span class="c">[LLM #1 extrakce]</span>  pevné JSON schéma + evidence  <span class="m">(žádné skóre)</span>
+        ▼
+   <span class="c">[Normalizace + validace KÓDEM]</span>
+        ▼
+   <span class="c">[Deterministický rubrik]</span>  váhy personalisty  (+ volitelně LLM #2 na měkká kritéria)
+        ▼
+   <span class="a">[Review personalisty]</span>  skóre + důvody + zdrojové pasáže + flagy → <span class="c">rozhoduje člověk</span></div>
+
+  <h2 class="section">5 vrstev obrany (defense in depth)</h2>
+  <div class="layers">
+    <div class="layer"><div><b>Ingest do R2 (immutable)</b> <span>— originál se nikdy nepřepisuje; auditní kotva.</span></div></div>
+    <div class="layer"><div><b>Dual-path diff</b> <span>— detektor skrytého textu (ne tichý filtr); nález se zobrazí personalistovi.</span></div></div>
+    <div class="layer"><div><b>Deterministické detektory + CDR</b> <span>— delta E barvy, font &lt; 4pt, render mode 3, opacity, DOCX w:vanish; rasterizace (Dangerzone) párovaná s kontrastem.</span></div></div>
+    <div class="layer"><div><b>Extrakce s omezeným schématem</b> <span>— model nemá pole na verdikt; identity / qualification / sensitive odděleně, chráněné znaky se neskórují.</span></div></div>
+    <div class="layer"><div><b>Deterministický rubrik + audit</b> <span>— skóre v kódu, breakdown s evidence; audit_log append-only, záznam lidského rozhodnutí.</span></div></div>
+  </div>
+
+  <h2 class="section">Fáze</h2>
+  <div class="phases">
+    <div class="phase active">
+      <div class="tag">F0</div>
+      <div class="body"><h3>Benchmark detekce (gate, bez infrastruktury)</h3>
+        <p>Sada čistých + otrávených CV; deterministické detektory + CDR + sémantika. Měří recall / false-positive / přesnost extrakce.</p></div>
+      <span class="st gate">GATE · aktivní</span>
+    </div>
+    <div class="phase"><div class="tag">F1</div>
+      <div class="body"><h3>Pipeline skeleton</h3>
+        <p>Email Worker → R2/D1 → sanitizace + dual-path → LLM#1 extrakce → validace → uložení (identity/qualification/sensitive odděleně).</p></div>
+      <span class="st plan">plánováno</span></div>
+    <div class="phase"><div class="tag">F2</div>
+      <div class="body"><h3>Review UI personalisty</h3>
+        <p>Skóre, důvody, zdrojové pasáže, flagy. Ruční korekce s auditní stopou. Human-in-the-loop.</p></div>
+      <span class="st plan">plánováno</span></div>
+    <div class="phase"><div class="tag">F3</div>
+      <div class="body"><h3>Deterministický rubrik + skórování</h3>
+        <p>Kritéria s vahami, must-have gates, breakdown s evidence, tabulka decisions.</p></div>
+      <span class="st plan">plánováno</span></div>
+    <div class="phase"><div class="tag">F4</div>
+      <div class="body"><h3>AI Act dokumentace + zpevnění na produkt</h3>
+        <p>Technická dokumentace (Annex IV), DPIA, návrh lidského dohledu, red-team/pen-test.</p></div>
+      <span class="st plan">plánováno</span></div>
+  </div>
+
+  <h2 class="section">Rozhodovací log</h2>
+  <div class="grid">
+    <div class="card"><h3>Přijato</h3>
+      <div class="dec"><span class="k ok">✓</span>Odděl extrakci od hodnocení (LLM extrahuje, kód skóruje)</div>
+      <div class="dec"><span class="k ok">✓</span>Dual-path diff jako detektor skrytého textu</div>
+      <div class="dec"><span class="k ok">✓</span>Identity / qualification / sensitive odděleně; chráněné znaky se neskórují</div>
+      <div class="dec"><span class="k ok">✓</span>Flag se zobrazí, netiše nefiltruje</div>
+      <div class="dec"><span class="k ok">✓</span>On-prem runner (Beelink) přes Conduit — GDPR, data v ČR</div>
+      <div class="dec"><span class="k ok">✓</span>Decision support, NIKDY auto-zamítnutí</div>
+    </div>
+    <div class="card"><h3>Zamítnuto</h3>
+      <div class="dec"><span class="k rej">✕</span>Rasterizace jako jediná obrana (#FEFEFE ji obejde)</div>
+      <div class="dec"><span class="k rej">✕</span>Stavět obranu na tom, že LLM injection ignoruje</div>
+      <div class="dec"><span class="k rej">✕</span>Tesseract OCR na finální extrakci (čeština) → vision LLM</div>
+      <div class="dec"><span class="k rej">✕</span>Odložit AI Act vrstvu kvůli posunu termínů</div>
+      <div class="dec"><span class="k add">＋</span>Build vs. buy: převzít Dangerzone + PhantomLint, zbytek postavit</div>
+    </div>
+  </div>
+
+  <h2 class="section">Vyzkoušej &amp; čti dál</h2>
+  <div class="card">
+    <p style="margin:0 0 8px"><strong>Demo detektoru (bez závislostí):</strong> <code>python detector/demo.py</code> — vytvoří otrávené CV a odhalí skrytou injection.</p>
+    <p style="margin:0 0 8px"><strong>Demo UI personalisty:</strong> otevři <a href="ui/index.html">ui/index.html</a> v prohlížeči — ukázková obrazovka hodnocení se skóre, důvody a bezpečnostním flagem.</p>
+    <p style="margin:0"><strong>Plný návrh:</strong> <a href="DESIGN.md">DESIGN.md</a> · <a href="docs/AI-ACT.md">docs/AI-ACT.md</a> · <a href="docs/THREAT-MODEL.md">docs/THREAT-MODEL.md</a> · deník <a href="HANDOFF.md">HANDOFF.md</a></p>
+  </div>
+
+  <h2 class="section">Otevřené otázky</h2>
+  <div class="card">
+    <p class="q">1. Interní pilot vs. produkt — kdy certifikovat (mění rozsah AI Act povinností).</p>
+    <p class="q">2. Doména pro e-mail ingest · 3. Realizace Conduit → Beelink runner · 4. Prahy detektorů (delta E, opacity) · 5. Rozsah F0 sady otrávených CV.</p>
+  </div>
+
+  <footer>
+    <span>faxx-hr · návrh v0.1 · 2026-08-01</span>
+    <span>Sdílí extraction jádro s <a href="https://github.com/Anamax443/faxx-dox">faxx-dox</a> · cíl: bezpečné HR hodnocení pod AI Act</span>
+  </footer>
+
+</div>
+</body>
+</html>

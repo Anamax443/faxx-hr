@@ -1,0 +1,32 @@
+{
+  // faxx-hr — Cloudflare Worker (F1+). Doplň database_id po `wrangler d1 create faxx-hr`.
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "faxx-hr",
+  "main": "worker/src/index.ts",
+  "compatibility_date": "2026-08-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": { "enabled": true },
+
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "faxx-hr",
+      "database_id": "TODO-po-wrangler-d1-create",
+      "migrations_dir": "migrations"
+    }
+  ],
+
+  "r2_buckets": [
+    {
+      "binding": "DOCS",
+      "bucket_name": "faxx-hr-docs"
+    }
+  ],
+
+  "vars": {
+    "CONDUIT_URL": "https://TODO-on-prem-gateway"
+  }
+
+  // Secrets (mimo git):  wrangler secret put ANTHROPIC_API_KEY
+  // Email Routing → tento Worker se nastaví v CF dashboardu (nebo `send_email` binding).
+}

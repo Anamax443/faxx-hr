@@ -28,6 +28,12 @@ __pycache__/
 .venv/
 *.pyc
 
+# === faxx-hr artefakty ===
+detector/ukazka_otravene_cv.docx
+*.docx
+*.pdf
+!docs/**/*.pdf
+
 # === OS / editor / logy ===
 .DS_Store
 Thumbs.db

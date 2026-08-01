@@ -1,0 +1,77 @@
+{
+  "$schema": "https://github.com/Anamax443/faxx-hr/schema/rubric.schema.json",
+  "rubric_version": 1,
+  "job_title": "Backend vývojář (Python)",
+  "note": "Ilustrativní rubrik. Váhy a pravidla nastavuje personalista per pozice. Scoring engine čte pouze qualification_json, nikdy identity ani sensitive.",
+  "must_have_gates": [
+    {
+      "key": "min_praxe_obor",
+      "rule": "qualification.years_total_experience >= 2",
+      "on_fail": "disqualify",
+      "reason": "Méně než 2 roky praxe = diskvalifikace bez ohledu na ostatní kritéria."
+    }
+  ],
+  "criteria": [
+    {
+      "key": "roky_praxe",
+      "label": "Roky praxe v oboru",
+      "type": "numeric_scale",
+      "weight": 0.25,
+      "rule": { "source": "qualification.years_total_experience", "min": 0, "max": 8, "clamp": true }
+    },
+    {
+      "key": "shoda_dovednosti",
+      "label": "Shoda klíčových dovedností",
+      "type": "set_overlap",
+      "weight": 0.30,
+      "rule": {
+        "source": "qualification.skills[].name",
+        "required": ["python", "sql", "git", "docker", "rest api"],
+        "score": "ratio_of_intersection"
+      }
+    },
+    {
+      "key": "vzdelani",
+      "label": "Úroveň vzdělání",
+      "type": "category_map",
+      "weight": 0.15,
+      "rule": {
+        "source": "qualification.education[].level",
+        "map": { "secondary": 5, "bachelor": 7, "master": 10, "phd": 10, "course": 4, "other": 2 },
+        "aggregate": "max"
+      }
+    },
+    {
+      "key": "jazyk_en",
+      "label": "Angličtina (CEFR)",
+      "type": "cefr_map",
+      "weight": 0.10,
+      "rule": {
+        "source": "qualification.languages[language=EN].level",
+        "map": { "A1": 0, "A2": 0, "B1": 4, "B2": 7, "C1": 9, "C2": 10, "native": 10 }
+      }
+    },
+    {
+      "key": "stabilita",
+      "label": "Stabilita zaměstnání",
+      "type": "derived_metric",
+      "weight": 0.10,
+      "rule": {
+        "source": "qualification.experience[].months",
+        "metric": "avg_tenure_months",
+        "penalty_below": 6
+      }
+    },
+    {
+      "key": "certifikace",
+      "label": "Relevantní certifikace",
+      "type": "bonus",
+      "weight": 0.10,
+      "rule": {
+        "source": "qualification.certifications[]",
+        "points_each": 2,
+        "cap": 10
+      }
+    }
+  ]
+}
