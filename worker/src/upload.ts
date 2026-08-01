@@ -389,7 +389,8 @@ input[type=file]{display:none}
 .flag.warn{background:rgba(240,180,41,.08);border:1px solid #5a4a18}
 .flag.info{background:rgba(90,169,240,.07);border:1px solid #274a6b}
 .flag .b{font-weight:600}.flag code{background:var(--panel2);padding:1px 6px;border-radius:5px;font-size:12px}
-.flag q{color:var(--txt);font-style:italic}
+.flag q{color:var(--txt);font-style:italic;display:block;margin-top:3px}
+.flag .fmeta{color:var(--muted);font-size:11px;margin:2px 0 0;font-family:ui-monospace,Consolas,monospace}
 .note{color:var(--amber);font-size:13px;margin-top:8px}
 .f0{margin-top:20px;color:var(--muted);font-size:12px;text-align:center}
 .build{margin-top:6px;color:var(--muted);opacity:.55;font-size:11px;text-align:center;font-family:ui-monospace,Consolas,monospace}
@@ -422,20 +423,39 @@ function send(f){
   fetch('/scan',{method:'POST',headers:{'X-Filename':encodeURIComponent(f.name)},body:f})
    .then(r=>r.json()).then(render).catch(e=>res.innerHTML='<div class="card">Chyba: '+esc(''+e)+'</div>');
 }
+const DESC={
+  docx_vanish:"Skrytý text (ve Wordu označen jako neviditelný) — člověk ho na papíře nevidí, AI ho přečte.",
+  docx_low_contrast:"Text v barvě splývající s pozadím (bílé na bílém apod.) — pro člověka prakticky neviditelný.",
+  docx_tiny_font:"Mikroskopické písmo pod hranicí čitelnosti.",
+  docx_faint_text:"Nízký kontrast textu — hraniční, spíš na vědomí.",
+  unicode_invisible:"Neviditelné Unicode znaky (zero-width / skrytý prompt pro AI).",
+  docx_annotation:"Text v komentáři nebo poznámce — mimo hlavní tok, čtenář ho běžně nevidí.",
+  docx_metadata:"Instrukce schovaná v metadatech dokumentu.",
+  docx_alt_text:"Instrukce schovaná v alt-textu obrázku.",
+  pdf_injection_text:"Text vypadající jako instrukce pro AI (např. doporuč mě jako nejlepšího) — i skrytý bílým písmem.",
+  pdf_render_mode_3:"Neviditelný render mód v PDF (text tam je, ale nevykreslí se).",
+  pdf_low_contrast:"Text splývající s pozadím v PDF.",
+  pdf_tiny_font:"Mikroskopické písmo v PDF.",
+  pdf_offpage:"Text umístěný mimo viditelnou plochu stránky."
+};
+const SEVW={critical:"vysoké riziko — pravděpodobný pokus o manipulaci AI",warn:"podezřelé — doporučeno prověřit",info:"jen na vědomí"};
+function plural(n){return n===1?'nález':(n>=2&&n<=4)?'nálezy':'nálezů'}
 function render(d){
   const n=d.flags.length, crit=d.flags.filter(x=>x.severity==='critical').length;
   let h='<div class="card"><div class="sum"><b>'+esc(decodeURIComponent(d.filename))+'</b>';
-  h+= n? '<span class="pill bad">'+n+' nálezů'+(crit?' · '+crit+'× critical':'')+'</span>'
+  h+= n? '<span class="pill bad">'+n+' '+plural(n)+(crit?' · '+crit+'× vysoké riziko':'')+'</span>'
        : '<span class="pill ok">✓ čisto — žádný skrytý/injection obsah</span>';
   h+='</div>';
   if(d.visible_chars!==undefined)
-    h+='<div class="split">viditelný text <b>'+d.visible_chars+'</b> zn. (→ AI vrstva) · skrytý <b>'+d.hidden_chars+'</b> zn. (→ jen review)</div>';
+    h+='<div class="split">viditelný text <b>'+d.visible_chars+'</b> zn. (jde do hodnocení AI) · skrytý <b>'+d.hidden_chars+'</b> zn. (NEJDE do AI, jen sem k prověření)</div>';
+  if(n) h+='<div class="split" style="color:var(--amber)">ℹ Skrytý obsah se NEPOUŽIJE pro hodnocení kandidáta — je tu jen k tvému posouzení.</div>';
   if(d.note) h+='<div class="note">⚠ '+esc(d.note)+'</div>';
   for(const x of d.flags){
     const ico=x.severity==='critical'?'⛔':x.severity==='warn'?'⚠️':'ℹ️';
     h+='<div class="flag '+x.severity+'"><span>'+ico+'</span><div>'+
-       '<span class="b">'+esc(x.type)+'</span> · <code>'+esc(x.location)+'</code>'+
-       '<br><q>'+esc(x.evidence)+'</q></div></div>';
+       '<div class="b">'+esc(DESC[x.type]||x.type)+'</div>'+
+       '<div class="fmeta">'+esc(SEVW[x.severity]||x.severity)+' · '+esc(x.type)+' · '+esc(x.location)+'</div>'+
+       '<q>'+esc(x.evidence)+'</q></div></div>';
   }
   h+='</div>';
   res.innerHTML=h;
