@@ -61,6 +61,11 @@ python detector/demo.py
 # 1b) Regresní sada — 9 útoků + 5 false-positive kontrol (14/14)
 python detector/test_vectors.py
 
+# 1c) Boundary matice — 11 hraničních PDF vektorů (CID/Identity-H, ToUnicode
+#     obfuskace, XFA, JS, render mode 3 …) proti lokálnímu detektoru I živému
+#     Workeru → docs/PDF-BOUNDARY-MATRIX.md  (vyžaduje pip install -r detector/requirements.txt)
+python detector/boundary_matrix.py
+
 # 2) Lokální web upload — přetáhni reálné PDF/DOCX a uvidíš detekci
 python detector/serve.py   # → otevře http://127.0.0.1:8765
 
@@ -96,11 +101,17 @@ zpracovávají on-prem v ČR. `docs/THREAT-MODEL.md` popisuje model hrozeb.
 
 ```
 detector/       spustitelný detektor skrytého textu (Python, stdlib) + demo
+                ├ hidden_text.py       detektor v2 (DOCX/PDF, visible/hidden split)
+                ├ test_vectors.py      regresní sada (14/14)
+                ├ adversarial_pdf.py   generátor hraničních PDF vektorů (F0)
+                ├ boundary_matrix.py   runner: edge (Worker) vs. on-prem → matice
+                └ requirements.txt     defusedxml + PyMuPDF (volitelné)
 schema/         extraction.schema.json (identity/qualification/sensitive) + rubric.example.json
 migrations/     0001_init.sql — D1 datový model
-worker/         skeleton Cloudflare Workeru (email ingest + API)  [F1]
+worker/         upload.ts (živě, F0 detekce) + skeleton email ingest [F1]
 ui/             demo review UI personalisty (statické)
-docs/           ARCHITECTURE / BUILD / AI-ACT / THREAT-MODEL
+docs/           ARCHITECTURE / BUILD / AI-ACT / THREAT-MODEL / DETECTOR-V2 /
+                OPONENTURA-RESPONSE / PDF-BOUNDARY-MATRIX
 status.html     front page se stavem projektu
 DESIGN.md       plný technický návrh
 ```
