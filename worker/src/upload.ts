@@ -53,6 +53,15 @@ const inj = (t: string): string | null => {
   const m = fold(t).match(INJ);
   return m ? m[0].slice(0, 120) : null;
 };
+// Vrátí CELOU větu/řádek, který vypadá jako instrukce (ne jen shodu regexu) — lepší evidence.
+function injectionContext(text: string): string | null {
+  const chunks = (text || "").split(/[\r\n]+/).flatMap((l) => l.split(/(?<=[.!?])\s+/));
+  for (const c of chunks) {
+    const t = c.trim();
+    if (t && inj(t)) return t.slice(0, 300);
+  }
+  return inj(text) ? (text || "").replace(/\s+/g, " ").trim().slice(0, 300) : null;
+}
 function sevFor(txt: string, base: "info" | "warn" = "warn"): ["info" | "warn" | "critical", string] {
   const hit = inj(txt);
   if (hit) return ["critical", `[shoda: ${hit}] ${txt.slice(0, 180)}`];
@@ -452,9 +461,9 @@ export default {
           result.hidden_chars = out.hidden.trim().length;
         } else if (ext === "pdf") {
           const { text, via, err } = await extractPdfText(buf, fname, env);
-          const h = inj(text);
-          if (h) result.flags.push({ type: "pdf_injection_text", severity: "warn", location: `PDF (textová vrstva, ${via})`, evidence: "instrukční text: „" + h + "“", method: "classifier" });
-          const base = h
+          const ctx = injectionContext(text);
+          if (ctx) result.flags.push({ type: "pdf_injection_text", severity: "warn", location: `PDF (textová vrstva, ${via})`, evidence: "nalezená pasáž: „" + ctx + "“", method: "classifier" });
+          const base = ctx
             ? "Nalezen text instrukčního charakteru (čte se i neviditelné bílé písmo, které má textovou vrstvu). Detekci SKRYTÍ podle barvy doplní on-prem runner (PyMuPDF)."
             : text.trim()
             ? "PDF: přečtena textová vrstva, nic instrukčního nenalezeno. Detekci skrytí podle barvy doplní on-prem (F1)."
