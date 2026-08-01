@@ -10,7 +10,8 @@ Append-only. Nejnovější záznam nahoru. Slouží k pokračování z jiného p
 - **Regresní sada** `detector/test_vectors.py` — 8 útoků + 4 FP kontroly, **12/12 ověřeno**. Ladicí, ne held-out.
 - **CLI:** `sys.stdout.reconfigure(utf-8)` (Windows cp1250 padal na emoji). `serve.py` upraven na nové API `scan()→ScanResult`.
 - **Nový backlog** [`TODO.md`](TODO.md) — celý rozsah systému, ne jen detekce.
-- **Zbývá:** doportovat v2 do Workeru (nebo edge=triáž + full on-prem); kalibrace prahů na held-out; DESIGN §8 sjednotit (delta E → WCAG kontrast).
+- **Worker DOPORTOVÁN na v2** (`worker/src/upload.ts`) — DOCX plná v2 (WCAG kontrast, Unicode nosiče, hlavičky/patičky, visible/hidden split, správná polarita), nasazeno na https://faxx-hr-upload.bass443.workers.dev a **ověřeno živě**: N02 sidebar čistý (vis 171/hid 0), #E8E8E8/#FEFEFE/patička chyceny critical, otrávené demo vis 110/hid 286. PDF zůstává dekomprese+injection sken (deep = on-prem).
+- **Zbývá:** kalibrace prahů na held-out sadě; DESIGN §8 sjednotit (delta E → WCAG kontrast); on-prem runner (PyMuPDF) pro deep PDF (render mode, CID glyfy).
 
 ## 2026-08-01 (b) — 2× externí oponentura zapracována + kaskáda AI vrstev
 - Přišly **dvě nezávislé oponentury** (technický garant/investor; AI Collaborator) → konsolidovaná reakce v [`docs/OPONENTURA-RESPONSE.md`](docs/OPONENTURA-RESPONSE.md).

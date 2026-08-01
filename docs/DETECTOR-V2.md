@@ -85,6 +85,9 @@ slouží k tomu, aby změna kódu nerozbila to, co už fungovalo.
 
 - DESIGN.md §8 zmiňuje „delta E" — v2 používá WCAG kontrastní poměr
   (praktičtější, má definované prahy). Sjednotit při příští revizi DESIGN.
-- **Živý Worker (`worker/src/upload.ts`) běží zatím na logice v1.** Buď
-  doportovat (kontrast + Unicode + polarita pro DOCX), nebo — lépe — nechat
-  edge jen na triáž a plnou detekci přesunout na on-prem runner (PyMuPDF).
+- **Živý Worker (`worker/src/upload.ts`) doportován na v2** pro DOCX (WCAG
+  kontrast, Unicode nosiče, hlavičky/patičky, visible/hidden split, správná
+  polarita) — nasazeno a ověřeno živě proti stejným vektorům (N02 sidebar
+  čistý, #E8E8E8/#FEFEFE/patička chyceny, otrávené demo vis/hid split sedí).
+  PDF ve Workeru zůstává dekomprese + injection sken; hloubková PDF detekce
+  (render mode, CID/Identity-H glyfy) je pro on-prem runner (PyMuPDF).
