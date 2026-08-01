@@ -7,7 +7,8 @@ Append-only. Nejnovější záznam nahoru. Slouží k pokračování z jiného p
 - Přijato: tvrdší F0 (held-out sada, externí red-team, hraniční vektory, FP na grafických CV), soft-validace JSON (ne whole-doc ERROR), runner vyměnitelný Beelink↔EU VPS, TCO + měření vision poměru, DPIA/Annex IV před reálnými daty, měřitelný lidský dohled, pre-F1 market validace (~10 HR manažerů).
 - Sporné (rozhodne provozovatel/právník): únik z high-risk přeznačením (nestavět na tom), pilot vs. produkt.
 - **Kaskáda AI vrstev:** Cloudflare Workers AI (free-tier, edge) na hrubou práci + Llama Guard injection klasifikátor + embeddings → eskalace na Claude (Haiku→Sonnet+vision) u nuance/češtiny/skenů.
-- **Web upload (F0):** `detector/serve.py` — lokální drag&drop pro PDF/DOCX (stdlib), ověřeno HTTP end-to-end na otráveném CV (4/4 flagy). Vstupní kanál: provozovatel = obojí (web upload první, pak e-mail). Až bude Worker, stránka se přesměruje z localhostu na něj.
+- **Web upload (F0):** `detector/serve.py` — lokální drag&drop pro PDF/DOCX (stdlib), ověřeno HTTP end-to-end na otráveném CV (4/4 flagy). Vstupní kanál: provozovatel = obojí (web upload první, pak e-mail).
+- **🌐 ŽIVĚ na Cloudflare:** `worker/src/upload.ts` + `wrangler.upload.jsonc` nasazeno na **https://faxx-hr-upload.bass443.workers.dev** (účet bass443, bez bindings). DOCX detekce portována 1:1 do TS (fflate ZIP+XML) — ověřeno, **identické 4 flagy** jako lokálně. PDF = rychlý textový sken (hloubková detekce = F1 on-prem). Deploy: `npx wrangler deploy -c wrangler.upload.jsonc`.
 
 ## 2026-08-01 — F0 scaffold + oponentura záměru
 - **Hotové:**

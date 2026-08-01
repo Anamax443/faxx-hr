@@ -1,0 +1,9 @@
+{
+  // faxx-hr — živá F0 upload verze (bez bindings). Deploy: npx wrangler deploy -c wrangler.upload.jsonc
+  "name": "faxx-hr-upload",
+  "main": "worker/src/upload.ts",
+  "compatibility_date": "2026-08-01",
+  "account_id": "a37a36270aa2db7382f62912ba5a0130",
+  "workers_dev": true,
+  "observability": { "enabled": true }
+}

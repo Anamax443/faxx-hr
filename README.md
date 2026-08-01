@@ -51,6 +51,8 @@ tím ztrácí attack surface.
 
 ## Vyzkoušej hned
 
+**🌐 Živě (F0 upload):** https://faxx-hr-upload.bass443.workers.dev — přetáhni PDF/DOCX rovnou v prohlížeči.
+
 ```bash
 # 1) Demo detektoru skrytého textu (čistě stdlib, bez závislostí, bez sítě)
 python detector/demo.py
