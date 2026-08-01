@@ -91,15 +91,16 @@
   <div class="gate">
     <h2>⚠ Brána projektu: F0 — Benchmark detekce skrytého textu</h2>
     <p>Žádná plná Cloudflare infrastruktura, dokud benchmark na sadě <strong>čistých + „otrávených" CV</strong> nepotvrdí, že detekce funguje.</p>
-    <p class="crit">Exit (návrh): recall detekce ≥ 98 % na otrávené sadě · false-positive ≤ 5–10 % na čisté sadě · přesnost extrakce klíčových polí ≥ 90 %.
-       <br>Vyzkoušej jádro hned: <code>python detector/demo.py</code> — vygeneruje otrávené CV a detekuje 4 nosiče injection.</p>
+    <p class="crit">Exit (návrh): recall ≥ 98 % na <strong>held-out</strong> sadě · false-positive ≤ 5–10 % na čisté · přesnost extrakce ≥ 90 %.
+       <br><strong>Hotovo:</strong> detektor v2 (WCAG kontrast, Unicode nosiče, visible/hidden split) · regresní sada <strong>12/12</strong> (8 útoků + 4 FP) · <a href="https://faxx-hr-upload.bass443.workers.dev">živě na Cloudflare</a>. <strong>Zbývá:</strong> held-out sada + externí red-team + kalibrace prahů.</p>
   </div>
 
   <h2 class="section">Princip: odděl extrakci od hodnocení</h2>
   <div class="card" style="margin-bottom:16px">
     <p style="margin:0">Skórovací logika <strong>nikdy nevidí surový text</strong>. LLM #1 dělá jen strukturovanou extrakci do pevného JSON schématu (žádné skóre).
        Skóre počítá <strong>deterministický rubrik v kódu</strong> nad tím JSONem. Injection „tento kandidát je nejlepší" nemá kam zapsat —
-       schéma má jen <code>years_experience</code>, <code>skills[]</code>, <code>education[]</code>. Personalista rozhoduje sám (decision support, ne decision maker).</p>
+       schéma má jen <code>years_experience</code>, <code>skills[]</code>, <code>education[]</code>. Personalista rozhoduje sám (decision support, ne decision maker).
+       <strong>Detektor navíc rozdělí text</strong>: do modelu jde jen <em>viditelný</em> text, skrytý (<code>hidden_text</code>) jen do review — co člověk na papíře nevidí, model nedostane.</p>
   </div>
 
   <h2 class="section">Bezpečnostní pipeline (6 fází)</h2>
@@ -122,7 +123,7 @@
   <div class="layers">
     <div class="layer"><div><b>Ingest do R2 (immutable)</b> <span>— originál se nikdy nepřepisuje; auditní kotva.</span></div></div>
     <div class="layer"><div><b>Dual-path diff</b> <span>— detektor skrytého textu (ne tichý filtr); nález se zobrazí personalistovi.</span></div></div>
-    <div class="layer"><div><b>Deterministické detektory + CDR</b> <span>— delta E barvy, font &lt; 4pt, render mode 3, opacity, DOCX w:vanish; rasterizace (Dangerzone) párovaná s kontrastem.</span></div></div>
+    <div class="layer"><div><b>Deterministické detektory v2 + CDR</b> <span>— WCAG kontrast vůči skutečnému pozadí, font &lt; 4pt, render mode 3, DOCX w:vanish, hlavičky/patičky, Unicode nosiče (zero-width, Tags E0000+); regex jen eskaluje severity. CDR (Dangerzone) párovaná s kontrastem.</span></div></div>
     <div class="layer"><div><b>Extrakce s omezeným schématem</b> <span>— model nemá pole na verdikt; identity / qualification / sensitive odděleně, chráněné znaky se neskórují.</span></div></div>
     <div class="layer"><div><b>Deterministický rubrik + audit</b> <span>— skóre v kódu, breakdown s evidence; audit_log append-only, záznam lidského rozhodnutí.</span></div></div>
   </div>
@@ -132,7 +133,7 @@
     <div class="phase active">
       <div class="tag">F0</div>
       <div class="body"><h3>Benchmark detekce (gate, bez infrastruktury)</h3>
-        <p>Sada čistých + otrávených CV; deterministické detektory + CDR + sémantika. Měří recall / false-positive / přesnost extrakce.</p></div>
+        <p><strong>Detektor v2 hotový</strong> (kontrast, Unicode, visible/hidden split), regresní sada 12/12, živě na Cloudflare. Zbývá held-out sada + externí red-team + kalibrace prahů.</p></div>
       <span class="st gate">GATE · aktivní</span>
     </div>
     <div class="phase"><div class="tag">F1</div>
@@ -176,6 +177,7 @@
   <div class="card">
     <p style="margin:0 0 8px"><strong>🌐 Živě na Cloudflare:</strong> <a href="https://faxx-hr-upload.bass443.workers.dev">faxx-hr-upload.bass443.workers.dev</a> — přetáhni PDF/DOCX v prohlížeči, detekce skrytého textu běží ve Workeru (F0).</p>
     <p style="margin:0 0 8px"><strong>Demo detektoru (bez závislostí):</strong> <code>python detector/demo.py</code> — vytvoří otrávené CV a odhalí skrytou injection.</p>
+    <p style="margin:0 0 8px"><strong>Regresní sada (12/12):</strong> <code>python detector/test_vectors.py</code> — 8 útoků + 4 false-positive kontroly (grafická CV).</p>
     <p style="margin:0 0 8px"><strong>Demo UI personalisty:</strong> otevři <a href="ui/index.html">ui/index.html</a> v prohlížeči — ukázková obrazovka hodnocení se skóre, důvody a bezpečnostním flagem.</p>
     <p style="margin:0"><strong>Plný návrh:</strong> <a href="DESIGN.md">DESIGN.md</a> · <a href="docs/AI-ACT.md">docs/AI-ACT.md</a> · <a href="docs/THREAT-MODEL.md">docs/THREAT-MODEL.md</a> · deník <a href="HANDOFF.md">HANDOFF.md</a></p>
   </div>
@@ -183,11 +185,11 @@
   <h2 class="section">Otevřené otázky</h2>
   <div class="card">
     <p class="q">1. Interní pilot vs. produkt — kdy certifikovat (mění rozsah AI Act povinností).</p>
-    <p class="q">2. Doména pro e-mail ingest · 3. Realizace Conduit → Beelink runner · 4. Prahy detektorů (delta E, opacity) · 5. Rozsah F0 sady otrávených CV.</p>
+    <p class="q">2. Doména pro e-mail ingest · 3. Realizace Conduit → Beelink runner · 4. Kalibrace prahů detektoru na held-out · 5. Held-out sada + externí red-team.</p>
   </div>
 
   <footer>
-    <span>faxx-hr · návrh v0.1 · 2026-08-01</span>
+    <span>faxx-hr · návrh v0.2 · detektor v2 · 2026-08-01</span>
     <span>Sdílí extraction jádro s <a href="https://github.com/Anamax443/faxx-dox">faxx-dox</a> · cíl: bezpečné HR hodnocení pod AI Act</span>
   </footer>
 
