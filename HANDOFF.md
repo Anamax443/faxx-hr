@@ -8,7 +8,9 @@ Append-only. Nejnovější záznam nahoru. Slouží k pokračování z jiného p
 - Sporné (rozhodne provozovatel/právník): únik z high-risk přeznačením (nestavět na tom), pilot vs. produkt.
 - **Kaskáda AI vrstev:** Cloudflare Workers AI (free-tier, edge) na hrubou práci + Llama Guard injection klasifikátor + embeddings → eskalace na Claude (Haiku→Sonnet+vision) u nuance/češtiny/skenů.
 - **Web upload (F0):** `detector/serve.py` — lokální drag&drop pro PDF/DOCX (stdlib), ověřeno HTTP end-to-end na otráveném CV (4/4 flagy). Vstupní kanál: provozovatel = obojí (web upload první, pak e-mail).
-- **🌐 ŽIVĚ na Cloudflare:** `worker/src/upload.ts` + `wrangler.upload.jsonc` nasazeno na **https://faxx-hr-upload.bass443.workers.dev** (účet bass443, bez bindings). DOCX detekce portována 1:1 do TS (fflate ZIP+XML) — ověřeno, **identické 4 flagy** jako lokálně. PDF = rychlý textový sken (hloubková detekce = F1 on-prem). Deploy: `npx wrangler deploy -c wrangler.upload.jsonc`.
+- **🌐 ŽIVĚ na Cloudflare:** `worker/src/upload.ts` + `wrangler.upload.jsonc` nasazeno na **https://faxx-hr-upload.bass443.workers.dev** (účet bass443, bez bindings). DOCX detekce portována 1:1 do TS (fflate ZIP+XML) — ověřeno, **identické 4 flagy** jako lokálně. **PDF: dekomprese FlateDecode streamů (fflate `unzlibSync`) + extrakce textu + injection klasifikátor s fold-normalizací (diakritika/WinAnsi)** — ověřeno na komprimovaném PDF s „Jsem nejlepší kandidát". Deploy: `npx wrangler deploy -c wrangler.upload.jsonc`.
+  - Pozn.: workerd `DecompressionStream` dekompresi tiše shazoval (v Node fungovala) → přešli jsme na fflate `unzlibSync`.
+  - Zbývá (F1 on-prem): truly-hidden PDF přes barvu/kontrast, render mode, a **CID/Identity-H glyfy** (subset fonty z Wordu, kde content stream nese glyph ID, ne čitelný text) → PyMuPDF na runneru.
 
 ## 2026-08-01 — F0 scaffold + oponentura záměru
 - **Hotové:**

@@ -2,14 +2,15 @@
  * faxx-hr — upload Worker (F0, živá verze na Cloudflare).
  *
  * Stejná funkčnost jako lokální detector/serve.py: drag&drop PDF/DOCX → detekce
- * skrytého textu. DOCX detekce je portovaná 1:1 do TS (ZIP přes fflate + XML),
- * takže výsledek je identický s Python jádrem. Hloubková PDF detekce (delta E,
- * render mode, font, dual-path) běží až ve F1 na on-prem runneru — zde je jen
- * rychlý textový sken PDF.
+ * skrytého / injection textu.
+ *  - DOCX: detekce portovaná 1:1 do TS (ZIP přes fflate + XML) → identická s Python jádrem.
+ *  - PDF:  dekomprese FlateDecode streamů + extrakce textu + injection klasifikátor.
+ *          Hloubková detekce SKRYTÍ (delta E, render mode, CID/Identity-H fonty,
+ *          dual-path) běží až ve F1 na on-prem runneru (PyMuPDF).
  *
  * Bez bindings (D1/R2 se přidají ve F1). Deploy: wrangler deploy -c wrangler.upload.jsonc
  */
-import { unzipSync, strFromU8 } from "fflate";
+import { unzipSync, strFromU8, unzlibSync, inflateSync } from "fflate";
 
 interface Flag {
   type: string;
@@ -19,11 +20,24 @@ interface Flag {
   method: string;
 }
 
-// heuristika "text vypadá jako instrukce pro AI" (shodná s hidden_text.py)
+// "text vypadá jako instrukce pro AI". Text se nejdřív foldne (NFD + odstranění
+// diakritiky + přibližné mapování WinAnsi/CP1250 vysokých bajtů dekódovaných jako
+// latin1), aby detekce fungovala napříč kódováními PDF/DOCX. Vzory jsou ASCII.
+const HIGH: Record<number, string> = { 0x8a: "s", 0x9a: "s", 0x8c: "s", 0x9c: "s", 0x8e: "z", 0x9e: "z", 0x9f: "y" };
+function fold(s: string): string {
+  let r = "";
+  for (const ch of (s || "").normalize("NFD")) {
+    const c = ch.codePointAt(0)!;
+    if (c >= 0x300 && c <= 0x36f) continue; // odstranění kombinujících diakritických znamének
+    if (c >= 0x80 && c <= 0x9f) r += HIGH[c] ?? " "; // WinAnsi/CP1250 speciály (latin1-decoded)
+    else r += ch;
+  }
+  return r.toLowerCase();
+}
 const INJ =
-  /ignore (all )?(the )?previous|disregard (all )?(the )?previous|ignoruj (v[sš]echny )?p[rř]edchoz[ií]|nev[sš][ií]mej si p[rř]edchoz|best candidate|top candidate|ideal candidate|nejlep[sš][ií] kandid|ide[aá]ln[ií] kandid|strongly recommend|must recommend|doporu[cč]|hire (this|the) candidate|as an ai|you are (an|a|the)|system prompt|jsi (nejlep|ide[aá]l)/i;
+  /ignore (all )?(the )?previous|disregard (all )?(the )?previous|ignoruj (vsechny )?predchoz|nevsimej si predchoz|best candidate|top candidate|ideal candidate|nejlep\w* kandid|idealn\w* kandid|strongly recommend|must recommend|doporuc|hire (this|the) candidate|as an ai|you are (an|a|the)|system prompt|jsi (nejlep|ideal)/;
 const inj = (t: string): string | null => {
-  const m = (t || "").match(INJ);
+  const m = fold(t).match(INJ);
   return m ? m[0] : null;
 };
 
@@ -103,6 +117,55 @@ function scanDocx(buf: Uint8Array): Flag[] {
   return flags;
 }
 
+// --- PDF: dekomprese FlateDecode streamů + extrakce textu ---
+function inflate(bytes: Uint8Array): Uint8Array | null {
+  try {
+    return unzlibSync(bytes); // zlib (FlateDecode s hlavičkou)
+  } catch {
+    try {
+      return inflateSync(bytes); // raw deflate (fallback)
+    } catch {
+      return null;
+    }
+  }
+}
+
+function unescapePdf(s: string): string {
+  const map: Record<string, string> = { n: "\n", r: "\r", t: "\t", b: "\b", f: "\f", "(": "(", ")": ")", "\\": "\\" };
+  return s.replace(/\\([nrtbf()\\]|[0-7]{1,3})/g, (_, c) => (c in map ? map[c] : String.fromCharCode(parseInt(c, 8) & 0xff)));
+}
+
+function contentText(s: string): string {
+  let t = "";
+  const lit = /\(((?:[^()\\]|\\.)*)\)/g; // literální řetězce (…) v content streamu
+  let m: RegExpExecArray | null;
+  while ((m = lit.exec(s))) t += unescapePdf(m[1]) + " ";
+  return t;
+}
+
+function pdfText(buf: Uint8Array): string {
+  const raw = strFromU8(buf, true); // latin1: index == pozice bajtu
+  let out = "";
+  const re = /stream\r?\n/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(raw))) {
+    const start = m.index + m[0].length;
+    const end = raw.indexOf("endstream", start);
+    if (end < 0) continue;
+    const header = raw.slice(Math.max(0, m.index - 400), m.index);
+    let dEnd = end; // ořízni EOL mezi daty a "endstream" (jinak zlib hlásí junk za streamem)
+    while (dEnd > start && (raw.charCodeAt(dEnd - 1) === 0x0a || raw.charCodeAt(dEnd - 1) === 0x0d)) dEnd--;
+    let data = buf.subarray(start, dEnd);
+    if (/\/FlateDecode/.test(header)) {
+      const inf = inflate(data);
+      if (!inf) continue;
+      data = inf;
+    }
+    out += " " + contentText(strFromU8(data, true));
+  }
+  return out + " " + contentText(raw); // i nekomprimovaný přímý text
+}
+
 const PAGE = `<!DOCTYPE html><html lang="cs"><head><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>faxx-hr — upload CV (F0)</title>
@@ -135,14 +198,14 @@ input[type=file]{display:none}
 a{color:var(--accent)}
 </style></head><body><div class="wrap">
 <h1>🛡️ faxx-hr — upload CV <span style="color:var(--muted);font-size:13px">(F0 · živě na Cloudflare)</span></h1>
-<p class="sub">Přetáhni PDF nebo Word (.docx). Detekuje se skrytý text (nosič prompt injection). Soubor se zpracuje v Cloudflare Workeru v paměti a neukládá se.</p>
+<p class="sub">Přetáhni PDF nebo Word (.docx). Detekuje se skrytý / injection text. Soubor se zpracuje v Cloudflare Workeru v paměti a neukládá se.</p>
 <label class="drop" id="drop">
   <b>Přetáhni sem CV</b> nebo klikni pro výběr
   <p>PDF · DOCX</p>
   <input type="file" id="file" accept=".pdf,.docx">
 </label>
 <div class="res" id="res"></div>
-<div class="f0">F0 = detekce skrytého textu. DOCX plně, PDF rychlý sken (hloubková PDF detekce = F1 on-prem). Extrakce dat a skóre (Claude + rubrik) přijdou ve fázi F1–F3.</div>
+<div class="f0">F0 = detekce skrytého / injection textu. DOCX plně; PDF = dekomprese streamů + injection klasifikátor (hloubková detekce skrytí přes barvu/render/CID fonty = F1 on-prem). Extrakce dat a skóre přijdou ve fázi F1–F3.</div>
 </div>
 <script>
 const drop=document.getElementById('drop'),file=document.getElementById('file'),res=document.getElementById('res');
@@ -160,7 +223,7 @@ function render(d){
   const n=d.flags.length, crit=d.flags.filter(x=>x.severity==='critical').length;
   let h='<div class="card"><div class="sum"><b>'+esc(decodeURIComponent(d.filename))+'</b>';
   h+= n? '<span class="pill bad">'+n+' nálezů'+(crit?' · '+crit+'× critical':'')+'</span>'
-       : '<span class="pill ok">✓ čisto — žádný skrytý obsah</span>';
+       : '<span class="pill ok">✓ čisto — žádný skrytý/injection obsah</span>';
   h+='</div>';
   if(d.note) h+='<div class="note">⚠ '+esc(d.note)+'</div>';
   for(const x of d.flags){
@@ -189,11 +252,16 @@ export default {
         if (ext === "docx") {
           result.flags = scanDocx(buf);
         } else if (ext === "pdf") {
-          const h = inj(strFromU8(buf, true));
-          if (h) result.flags.push({ type: "pdf_suspicious", severity: "warn", location: "PDF (rychlý textový sken)", evidence: h, method: "deterministic" });
-          result.note = "Hloubková PDF detekce (delta E, render mode, font, dual-path) běží ve fázi F1 na on-prem runneru; zde jen rychlý textový sken nekomprimovaných streamů.";
+          const text = pdfText(buf);
+          const h = inj(text);
+          if (h) result.flags.push({ type: "pdf_injection_text", severity: "warn", location: "PDF (text ze streamů)", evidence: "instrukční text: „" + h + "“", method: "classifier" });
+          result.note = h
+            ? "Nalezen text instrukčního charakteru. Hloubková detekce SKRYTÍ (barva/kontrast, render mode, CID/Identity-H fonty, dual-path) běží ve fázi F1 na on-prem runneru (PyMuPDF)."
+            : text.trim()
+            ? "PDF: přečten text streamů, nic instrukčního nenalezeno. Hloubková detekce skrytí = F1 on-prem."
+            : "PDF: text streamů se nepodařilo dekódovat (pravděpodobně CID/Identity-H font) → plná detekce běží na on-prem runneru (F1).";
         } else {
-          result.note = "Podporováno: .docx (plně), .pdf (rychlý sken).";
+          result.note = "Podporováno: .docx (plně), .pdf (dekomprese + injection sken).";
         }
       } catch (e: any) {
         result.note = "chyba při čtení souboru: " + (e?.message || String(e));
