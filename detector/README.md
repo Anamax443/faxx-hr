@@ -28,6 +28,19 @@ python hidden_text.py cesta/k/cv.docx [dalsi.pdf ...]
 Návratový kód: `0` = čisto, `2` = nalezen kritický flag, `1` = chyba vstupu.
 Vypíše i strojově čitelný souhrn pro pipeline.
 
+## Web upload (lokálně, F0)
+
+Chceš přetahovat reálná CV myší místo přes příkazovou řádku?
+
+```bash
+python serve.py
+# → otevře http://127.0.0.1:8765 — přetáhni PDF/DOCX, hned uvidíš detekci
+```
+
+Bez závislostí, soubor neopustí tvůj počítač. Toto je F0 náhrada za budoucí
+Cloudflare Pages upload — až bude Worker, stránka se jen přesměruje z localhostu
+na něj (stejné UI, stejné detektory).
+
 ## Co detekuje
 
 - **DOCX** (čistě stdlib): `w:vanish`, bílý/téměř bílý font, komentáře, poznámky,

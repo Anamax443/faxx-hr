@@ -56,10 +56,13 @@ tím ztrácí attack surface.
 python detector/demo.py
 #    → vytvoří "otrávené" CV se 4 nosiči injection a všechny detekuje
 
-# 2) Demo UI personalisty — otevři v prohlížeči
+# 2) Lokální web upload — přetáhni reálné PDF/DOCX a uvidíš detekci
+python detector/serve.py   # → otevře http://127.0.0.1:8765
+
+# 3) Demo UI personalisty (statické) — otevři v prohlížeči
 #    ui/index.html   (ukázková obrazovka hodnocení se skóre, důvody a flagem)
 
-# 3) Front page se stavem projektu
+# 4) Front page se stavem projektu
 #    status.html
 ```
 
