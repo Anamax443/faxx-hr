@@ -58,6 +58,9 @@ tím ztrácí attack surface.
 python detector/demo.py
 #    → vytvoří "otrávené" CV se 4 nosiči injection a všechny detekuje
 
+# 1b) Regresní sada — 8 útoků + 4 false-positive kontroly (12/12)
+python detector/test_vectors.py
+
 # 2) Lokální web upload — přetáhni reálné PDF/DOCX a uvidíš detekci
 python detector/serve.py   # → otevře http://127.0.0.1:8765
 

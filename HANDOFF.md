@@ -2,6 +2,16 @@
 
 Append-only. Nejnovější záznam nahoru. Slouží k pokračování z jiného počítače / po pauze.
 
+## 2026-08-01 (c) — detektor v2: kontrast, Unicode nosiče, rozdělení textu + regresní sada
+- **Detektor přepsán na v2** (`detector/hidden_text.py`), v1 zůstává jako `detector/hidden_text_v1_backup.py`. Detail: [`docs/DETECTOR-V2.md`](docs/DETECTOR-V2.md).
+- Přišlo jako patch (autorsky Milan) — **nezaaplikováno naslepo** (přenosem rozbitá diakritika + kontext HANDOFF/README neodpovídal), přepsáno čistě v UTF-8 a ověřeno.
+- **Změna role:** detektor je teď **rozdělovač** — vrací `visible_text` (jediný vstup do AI) a `hidden_text` (nikdy do modelu, jen review). Invariant proti úniku hlídá regresní sada.
+- **Sedm oprav proti v1:** WCAG kontrast vůči skutečnému pozadí (ne `min(r,g,b)>=0xF0`); pozadí z highlight/shd/background; regex jen eskaluje severity (parafráze v1 procházela); hlavičky/patičky; Unicode nosiče (zero-width, bidi, Tags E0000+); PDF render mode 3 + mimo-mediabox; defusedxml + limity dekomprese. Textboxy/sidebary se NEflagují (viditelné → FP na grafických CV).
+- **Regresní sada** `detector/test_vectors.py` — 8 útoků + 4 FP kontroly, **12/12 ověřeno**. Ladicí, ne held-out.
+- **CLI:** `sys.stdout.reconfigure(utf-8)` (Windows cp1250 padal na emoji). `serve.py` upraven na nové API `scan()→ScanResult`.
+- **Nový backlog** [`TODO.md`](TODO.md) — celý rozsah systému, ne jen detekce.
+- **Zbývá:** doportovat v2 do Workeru (nebo edge=triáž + full on-prem); kalibrace prahů na held-out; DESIGN §8 sjednotit (delta E → WCAG kontrast).
+
 ## 2026-08-01 (b) — 2× externí oponentura zapracována + kaskáda AI vrstev
 - Přišly **dvě nezávislé oponentury** (technický garant/investor; AI Collaborator) → konsolidovaná reakce v [`docs/OPONENTURA-RESPONSE.md`](docs/OPONENTURA-RESPONSE.md).
 - Přijato: tvrdší F0 (held-out sada, externí red-team, hraniční vektory, FP na grafických CV), soft-validace JSON (ne whole-doc ERROR), runner vyměnitelný Beelink↔EU VPS, TCO + měření vision poměru, DPIA/Annex IV před reálnými daty, měřitelný lidský dohled, pre-F1 market validace (~10 HR manažerů).

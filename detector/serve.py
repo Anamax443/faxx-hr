@@ -131,7 +131,12 @@ class Handler(BaseHTTPRequestHandler):
                     import fitz  # noqa: F401
                 except ImportError:
                     result["note"] = "PDF sken vyžaduje PyMuPDF (pip install pymupdf) — DOCX jede i bez toho."
-            result["flags"] = [asdict(x) for x in hidden_text.scan(tmp)]
+            r = hidden_text.scan(tmp)
+            result["flags"] = [asdict(f) for f in r.flags]
+            result["visible_chars"] = r.stats.get("visible_chars", 0)
+            result["hidden_chars"] = r.stats.get("hidden_chars", 0)
+            if not r.ok and r.error:
+                result["note"] = r.error
         except Exception as e:  # noqa: BLE001
             result["note"] = f"chyba: {e}"
         finally:
