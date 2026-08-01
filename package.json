@@ -12,8 +12,7 @@
   },
   "dependencies": {
     "fflate": "^0.8.2",
-    "postal-mime": "^2.2.7",
-    "unpdf": "^1.8.0"
+    "postal-mime": "^2.2.7"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.0.0",

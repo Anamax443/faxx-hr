@@ -5,13 +5,19 @@
  *    Unicode nosiče (zero-width/bidi/Tags E0000+), hlavičky/patičky, vanish,
  *    mikropísmo. Regex je jen ESKALÁTOR severity, ne brána detekce.
  *    Vrací visible_text (→ AI vrstva) a hidden_text (→ jen review).
- *  - PDF: dekomprese FlateDecode streamů + injection klasifikátor. Hloubková
- *    detekce SKRYTÍ (render mode, CID glyfy) zůstává pro on-prem runner (PyMuPDF).
+ *  - PDF: Cloudflare Workers AI toMarkdown (čte text vč. embedded/CID fontů z Word
+ *    exportu a skrytého textu s textovou vrstvou) + ruční fflate fallback. Detekci
+ *    SKRYTÍ podle barvy/render mode a OCR skenů řeší on-prem runner (PyMuPDF).
  *
  * Port z detector/hidden_text.py v2. Deploy: wrangler deploy -c wrangler.upload.jsonc
  */
 import { unzipSync, strFromU8, unzlibSync, inflateSync } from "fflate";
-import { extractText, getDocumentProxy } from "unpdf";
+// Cloudflare Workers AI binding — toMarkdown převede PDF→text na CF infrastruktuře
+// (zvládá embedded/CID fonty i skrytý text s textovou vrstvou). pdf.js ve workerd
+// nefunguje (padá na _isSameOrigin), proto tahle cloud-native cesta.
+interface Env {
+  AI?: { toMarkdown: (docs: { name: string; blob: Blob }[]) => Promise<Array<{ name: string; data: string }>> };
+}
 
 // build stamp — injektuje se přes wrangler --define při deployi (scripts/deploy-upload.mjs)
 declare const __COMMIT__: string;
@@ -312,20 +318,28 @@ function pdfText(buf: Uint8Array): string {
 //  - unpdf (pdf.js) čte textovou vrstvu přes ToUnicode/CID fonty (Word export,
 //    i neviditelné bílé písmo, které má textovou vrstvu)
 //  - ruční fflate extraktor pokryje edge případy s nestandardním kódováním
-async function extractPdfText(buf: Uint8Array): Promise<{ text: string; via: string }> {
+async function extractPdfText(buf: Uint8Array, fname: string, env: Env): Promise<{ text: string; via: string; err?: string }> {
   const parts: string[] = [];
   const via: string[] = [];
-  try {
-    const pdf = await getDocumentProxy(buf.slice()); // kopie: pdf.js jinak odpojí buffer
-    const { text } = await extractText(pdf, { mergePages: true });
-    const t = Array.isArray(text) ? text.join("\n") : text || "";
-    if (t.trim()) {
-      parts.push(t);
-      via.push("pdf.js");
+  let err: string | undefined;
+  // 1) Cloudflare Workers AI toMarkdown — text z PDF na CF infrastruktuře,
+  //    zvládá embedded/CID fonty (Word export) i skrytý text s textovou vrstvou
+  if (env?.AI?.toMarkdown) {
+    try {
+      const res = await env.AI.toMarkdown([{ name: fname || "cv.pdf", blob: new Blob([buf], { type: "application/pdf" }) }]);
+      const md = Array.isArray(res) ? res.map((r) => r?.data || "").join("\n") : "";
+      if (md.trim()) {
+        parts.push(md);
+        via.push("cf-toMarkdown");
+      } else {
+        via.push("cf-md:0");
+      }
+    } catch (e: any) {
+      err = String(e?.message || e).slice(0, 180);
+      via.push("cf-md:ERR");
     }
-  } catch {
-    /* pokračuj ručním */
   }
+  // 2) fallback: ruční extraktor (jednoduchá text-layer PDF bez embedded fontů)
   try {
     const raw = pdfText(buf);
     if (raw.trim()) {
@@ -335,7 +349,7 @@ async function extractPdfText(buf: Uint8Array): Promise<{ text: string; via: str
   } catch {
     /* nic */
   }
-  return { text: parts.join("\n"), via: via.join("+") || "none" };
+  return { text: parts.join("\n"), via: via.join("+") || "none", err };
 }
 
 const PAGE = `<!DOCTYPE html><html lang="cs"><head><meta charset="UTF-8">
@@ -420,7 +434,7 @@ function render(d){
 </script></body></html>`;
 
 export default {
-  async fetch(req: Request): Promise<Response> {
+  async fetch(req: Request, env: Env): Promise<Response> {
     const url = new URL(req.url);
     if (req.method === "GET" && (url.pathname === "/" || url.pathname === "/index.html")) {
       return new Response(PAGE, { headers: { "content-type": "text/html; charset=utf-8" } });
@@ -437,14 +451,15 @@ export default {
           result.visible_chars = out.visible.trim().length;
           result.hidden_chars = out.hidden.trim().length;
         } else if (ext === "pdf") {
-          const { text, via } = await extractPdfText(buf);
+          const { text, via, err } = await extractPdfText(buf, fname, env);
           const h = inj(text);
           if (h) result.flags.push({ type: "pdf_injection_text", severity: "warn", location: `PDF (textová vrstva, ${via})`, evidence: "instrukční text: „" + h + "“", method: "classifier" });
-          result.note = h
-            ? "Nalezen text instrukčního charakteru (čte se i neviditelné bílé písmo, které má textovou vrstvu). Detekci SKRYTÍ podle barvy/render mode/pozice doplní on-prem runner (PyMuPDF)."
+          const base = h
+            ? "Nalezen text instrukčního charakteru (čte se i neviditelné bílé písmo, které má textovou vrstvu). Detekci SKRYTÍ podle barvy doplní on-prem runner (PyMuPDF)."
             : text.trim()
-            ? `PDF: přečtena textová vrstva (${via}), nic instrukčního nenalezeno. Detekci skrytí podle barvy doplní on-prem (F1).`
-            : "PDF: textovou vrstvu se nepodařilo přečíst (naskenované/obrázkové CV) → OCR/vision na on-prem runneru (F1).";
+            ? "PDF: přečtena textová vrstva, nic instrukčního nenalezeno. Detekci skrytí podle barvy doplní on-prem (F1)."
+            : "PDF: textovou vrstvu se nepodařilo přečíst (naskenované CV / chyba parseru) → OCR/vision na on-prem runneru (F1).";
+          result.note = `${base} [extrakce: ${via}${err ? " · chyba: " + err : ""}]`;
         } else {
           result.note = "Podporováno: .docx (plná v2 detekce), .pdf (dekomprese + injection sken).";
         }
