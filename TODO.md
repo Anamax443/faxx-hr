@@ -39,10 +39,14 @@ Cílem NENÍ hotový produkt, ale doložitelné číslo. Bez něj nemá smysl st
   - [ ] ≥ 30 otrávených, min. 10 vektorů, včetně **parafrázovaných** injection
         bez shody s blocklistem
 - [ ] **Externí red-team** — někdo dostane detektor a má za úkol ho obejít
-- [ ] Hraniční PDF vektory: CID/Identity-H glyfy, EPS/PS, obfuskovaná cmap, XFA, JS-text
+- [x] Hraniční PDF vektory změřeny (edge vs. on-prem) → [`docs/PDF-BOUNDARY-MATRIX.md`](docs/PDF-BOUNDARY-MATRIX.md)
+      — CID/Identity-H, ToUnicode/cmap obfuskace, XFA, JS/OpenAction, render mode 3, off-page,
+      Form XObject. Reprodukce: `python detector/boundary_matrix.py`. **EPS/PS nepostaven**
+      (v praxi subsumován Form XObjectem — nízká priorita).
+  - Nálezy → hardening níže (F1): on-prem protéká render-mode-3 a ToUnicode-mismatch; XFA nikdo nehlásí; edge FP na viditelné sebeprezentaci.
 - [ ] **Změřit podíl dokumentů s vision fallbackem** (sken/foto) — při 10 % vyskočí náklady řádově
 - [ ] Kalibrovat prahy (`CONTRAST_HIDDEN`, `CONTRAST_LOW`, `MIN_FONT_PT`) na held-out
-- [ ] `defusedxml` do `requirements.txt` (teď jen volitelný import)
+- [x] `defusedxml` (+ PyMuPDF) do [`detector/requirements.txt`](detector/requirements.txt)
 
 **Exit:** recall ≥ 98 % na held-out otrávených · FP ≤ 5–10 % na čistých ·
 přesnost extrakce ≥ 90 %. **Dvě čísla zvlášť** — atributová detekce a
@@ -63,6 +67,11 @@ dual-path diff se měří odděleně (diff ještě neexistuje, viz F1).
 - [ ] Kaskáda: Workers AI (klasifikace, Llama Guard) → Haiku 4.5 → Sonnet 5 + vision; logovat `model`, tokeny, `cost_czk`
 - [ ] Denní práh nákladů + alert
 - [ ] **Doportovat detekci do Workeru** (kontrast/Unicode) NEBO edge jen triáž + full on-prem
+- [ ] **Hardening on-prem z boundary matice** (viz [`docs/PDF-BOUNDARY-MATRIX.md`](docs/PDF-BOUNDARY-MATRIX.md)):
+  - [ ] render mode 3 zadržet do `hidden_text` (teď se jen coarse-flagne a text proteče do `visible_text`)
+  - [ ] pokrýt ToUnicode/cmap ↔ glyph mismatch (injection nad `visible_text` nebo porovnání glyf↔ToUnicode)
+  - [ ] číst XFA/AcroForm XML (nebo aspoň flag „dokument obsahuje XFA")
+  - [ ] edge: viditelný instrukční tón hlásit jako mírnější kategorii odděleně od skrytého injection (méně FP)
 
 ---
 

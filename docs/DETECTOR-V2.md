@@ -50,9 +50,15 @@ sighted čtenář na papíře nevidí: `docProps`, komentáře, poznámky, alt-t
 
 `3 Tr` v content streamu je **hrubá detekce** (`method="deterministic-coarse"`):
 řekne „na této straně je neviditelný render mode", ale ne který text. Přesné
-zaměření vyžaduje PyMuPDF na on-prem runneru. Nepokryté PDF vektory (zůstávají
-pro F1 / on-prem): **CID/Identity-H glyfy** u subset fontů z Wordu, EPS/PS
-objekty, obfuskované cmap, XFA a JS-generovaný text.
+zaměření vyžaduje PyMuPDF na on-prem runneru.
+
+Tyhle hraniční vektory jsou teď **změřené** na obou vrstvách (on-prem + živý
+Worker) → [`PDF-BOUNDARY-MATRIX.md`](PDF-BOUNDARY-MATRIX.md), reprodukce
+`python detector/boundary_matrix.py`. Shrnutí: **napříč oběma vrstvami neprojde
+k modelu žádný z nich nezachycen** (defense-in-depth). Zbývající on-prem mezery
+(render-mode-3 protéká do `visible_text`; ToUnicode/cmap obfuskace; XFA nikdo
+nehlásí; edge FP na viditelné sebeprezentaci) jsou v matici i v [`TODO.md`](../TODO.md)
+jako hardening položky. EPS/PS zvlášť nepostaveno (subsumováno Form XObjectem).
 
 ## Prahy
 

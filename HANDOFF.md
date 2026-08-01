@@ -2,6 +2,31 @@
 
 Append-only. Nejnovější záznam nahoru. Slouží k pokračování z jiného počítače / po pauze.
 
+## 2026-08-02 (b) — hraniční PDF vektory: coverage matice edge vs. on-prem
+- **Nová položka F0 hotová: hraniční PDF vektory změřeny na OBOU vrstvách.** Generátor
+  [`detector/adversarial_pdf.py`](detector/adversarial_pdf.py) staví 11 laboratorních PDF
+  (byte-přesný ručně sestavený xref + reportlab pro embedded CID): render mode 3, bílý na
+  bílém, mikropísmo, off-page, **CID/Identity-H** (Word-like), **ToUnicode/cmap obfuskace**
+  (display ≠ extrakce), **XFA**, **JS/OpenAction**, Form XObject + 2 FP kontroly.
+  Runner [`detector/boundary_matrix.py`](detector/boundary_matrix.py) prožene každý vektor
+  lokálním detektorem (on-prem, PyMuPDF) **i živým Workerem** `/scan` a vypíše reprodukovatelnou
+  matici → [`docs/PDF-BOUNDARY-MATRIX.md`](docs/PDF-BOUNDARY-MATRIX.md).
+- **Závěr: žádný vektor neprojde k modelu nezachycen napříč oběma vrstvami** (defense-in-depth:
+  on-prem visible/hidden split + edge injection klasifikátor). Konkrétně:
+  - **on-prem protéká do `visible_text`**: `V-PDF-01` (render mode 3 — jen coarse flag, text
+    vyjde s výchozí barvou) a `V-PDF-06` (ToUnicode obfuskace — injection regex jistí jen
+    skryté spany, ne viditelný text). **Obojí jistí edge** (toMarkdown čte přes ToUnicode i
+    render-mode-3 → klasifikátor flagne). → 2 hardening úkoly on-prem (viz TODO).
+  - **transparency gap**: `V-PDF-07` (XFA) se neextrahuje ani jednou vrstvou (payload nedosáhne
+    modelu), ale ani se nenahlásí člověku → přidat XFA/AcroForm XML parser.
+  - **edge FP**: `N-PDF-02` — injection klasifikátor běží i na viditelném textu → legitimní
+    „jsem ideální kandidát" označí. Vědomý trade-off, proto edge = _warn_, rozhoduje člověk.
+- **Pozn. k reprodukci:** Cloudflare Bot Fight Mode vrací `Python-urllib` UA → **403**;
+  runner proto posílá prohlížečový User-Agent. Generované PDF jsou v `.gitignore` (`*.pdf`),
+  do repa jde jen matice + generátory.
+- **defusedxml + PyMuPDF do [`detector/requirements.txt`](detector/requirements.txt)** (dřív jen
+  volitelný import). Regresní sada beze změny **14/14**.
+
 ## 2026-08-02 — PDF přes Workers AI, oprava FP metadat, UX popisy nálezů, otisk verze
 - **PDF ve Workeru = Cloudflare Workers AI `toMarkdown`** (běží na CF infra, čte embedded/CID fonty z Word exportu i skrytý text s textovou vrstvou) + ruční fflate fallback (union, injekce ve sjednocení). **Ověřeno na reálném CV** (skryté „Jsem nejlepší kandidát" 1.0 pt → chyceno jako `docx_tiny_font` u DOCX / `pdf_injection_text` u PDF). AI binding `"ai": {"binding":"AI"}` ve wrangler.upload.jsonc. Bundle 604 KB → **11 KB** (unpdf pryč).
   - **pdf.js/unpdf ve workerd NEFUNGUJE** — padá na `_isSameOrigin` při evalu modulu (v Node čte správně; ve workerd ne, ani s nodejs_compat + stuby). Zahozeno. Reprodukce reálného Word PDF: reportlab s TTF (Identity-H+ToUnicode) v `faxx-hr-doc-build/make_word_like_pdf.py`.

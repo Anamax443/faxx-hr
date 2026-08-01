@@ -1,0 +1,15 @@
+# faxx-hr detektor skrytého textu — závislosti
+#
+# Jádro (hidden_text.py, serve.py, test_vectors.py) běží čistě na stdlib.
+# Níže jsou tvrdě doporučené / volitelné knihovny; instalace:
+#   pip install -r detector/requirements.txt
+
+# XML bezpečnost — brání XML bombám / entity expansion při parsování DOCX.
+# Bez ní detektor spadne zpět na stdlib xml.etree (funkční, ale bez ochran).
+defusedxml>=0.7.1
+
+# On-prem PDF runner — hloubková diagnostika, PROČ je text skrytý
+# (barva/render mode/pozice) + čtení CID/Identity-H glyfů (subset fonty z Wordu).
+# NENÍ potřeba pro edge/Worker cestu (ta čte text přes Cloudflare Workers AI).
+# Volitelné: bez ní PDF cesta funguje v hrubém režimu (deterministic-coarse).
+PyMuPDF>=1.24.0
