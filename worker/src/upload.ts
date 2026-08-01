@@ -13,6 +13,14 @@
 import { unzipSync, strFromU8, unzlibSync, inflateSync } from "fflate";
 import { extractText, getDocumentProxy } from "unpdf";
 
+// build stamp — injektuje se přes wrangler --define při deployi (scripts/deploy-upload.mjs)
+declare const __COMMIT__: string;
+declare const __COMMIT_FULL__: string;
+declare const __BUILT__: string;
+const COMMIT = typeof __COMMIT__ !== "undefined" ? __COMMIT__ : "dev";
+const COMMIT_FULL = typeof __COMMIT_FULL__ !== "undefined" ? __COMMIT_FULL__ : "";
+const BUILT = typeof __BUILT__ !== "undefined" ? __BUILT__ : "local";
+
 interface Flag {
   type: string;
   severity: "info" | "warn" | "critical";
@@ -361,9 +369,14 @@ input[type=file]{display:none}
 .flag q{color:var(--txt);font-style:italic}
 .note{color:var(--amber);font-size:13px;margin-top:8px}
 .f0{margin-top:20px;color:var(--muted);font-size:12px;text-align:center}
+.build{margin-top:6px;color:var(--muted);opacity:.55;font-size:11px;text-align:center;font-family:ui-monospace,Consolas,monospace}
+.build span{cursor:help}
+.ver{margin:6px 0 0;color:var(--muted);font-size:12px;font-family:ui-monospace,Consolas,monospace}
+.ver b{color:var(--accent);font-weight:600;cursor:help}
 a{color:var(--accent)}
 </style></head><body><div class="wrap">
 <h1>🛡️ faxx-hr — upload CV <span style="color:var(--muted);font-size:13px">(F0 · v2 · živě na Cloudflare)</span></h1>
+<div class="ver">commit <b title="${COMMIT_FULL}">${COMMIT}</b> · build ${BUILT}</div>
 <p class="sub">Přetáhni PDF nebo Word (.docx). Skrytý text se oddělí od viditelného; do „AI vrstvy" by šel jen viditelný. Soubor se zpracuje v paměti a neukládá se.</p>
 <label class="drop" id="drop">
   <b>Přetáhni sem CV</b> nebo klikni pro výběr
@@ -371,7 +384,8 @@ a{color:var(--accent)}
   <input type="file" id="file" accept=".pdf,.docx">
 </label>
 <div class="res" id="res"></div>
-<div class="f0">DOCX: WCAG kontrast, Unicode nosiče, hlavičky/patičky, visible/hidden split. PDF: dekomprese + injection sken (hloubková detekce skrytí = on-prem F1).</div>
+<div class="f0">DOCX: WCAG kontrast, Unicode nosiče, hlavičky/patičky, visible/hidden split. PDF: čtení textové vrstvy (pdf.js) + injection sken; detekce skrytí podle barvy = on-prem F1.</div>
+<div class="build">faxx-hr · v2 · commit <span title="${COMMIT_FULL}">${COMMIT}</span> · build ${BUILT}</div>
 </div>
 <script>
 const drop=document.getElementById('drop'),file=document.getElementById('file'),res=document.getElementById('res');
