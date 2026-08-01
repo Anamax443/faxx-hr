@@ -11,6 +11,7 @@
  * Port z detector/hidden_text.py v2. Deploy: wrangler deploy -c wrangler.upload.jsonc
  */
 import { unzipSync, strFromU8, unzlibSync, inflateSync } from "fflate";
+import { extractText, getDocumentProxy } from "unpdf";
 
 interface Flag {
   type: string;
@@ -299,6 +300,36 @@ function pdfText(buf: Uint8Array): string {
   return out + " " + contentText(raw);
 }
 
+// Text z PDF dvěma cestami a injekci hledáme ve SJEDNOCENÍ:
+//  - unpdf (pdf.js) čte textovou vrstvu přes ToUnicode/CID fonty (Word export,
+//    i neviditelné bílé písmo, které má textovou vrstvu)
+//  - ruční fflate extraktor pokryje edge případy s nestandardním kódováním
+async function extractPdfText(buf: Uint8Array): Promise<{ text: string; via: string }> {
+  const parts: string[] = [];
+  const via: string[] = [];
+  try {
+    const pdf = await getDocumentProxy(buf.slice()); // kopie: pdf.js jinak odpojí buffer
+    const { text } = await extractText(pdf, { mergePages: true });
+    const t = Array.isArray(text) ? text.join("\n") : text || "";
+    if (t.trim()) {
+      parts.push(t);
+      via.push("pdf.js");
+    }
+  } catch {
+    /* pokračuj ručním */
+  }
+  try {
+    const raw = pdfText(buf);
+    if (raw.trim()) {
+      parts.push(raw);
+      via.push("raw");
+    }
+  } catch {
+    /* nic */
+  }
+  return { text: parts.join("\n"), via: via.join("+") || "none" };
+}
+
 const PAGE = `<!DOCTYPE html><html lang="cs"><head><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>faxx-hr — upload CV (F0)</title>
@@ -392,14 +423,14 @@ export default {
           result.visible_chars = out.visible.trim().length;
           result.hidden_chars = out.hidden.trim().length;
         } else if (ext === "pdf") {
-          const text = pdfText(buf);
+          const { text, via } = await extractPdfText(buf);
           const h = inj(text);
-          if (h) result.flags.push({ type: "pdf_injection_text", severity: "warn", location: "PDF (text ze streamů)", evidence: "instrukční text: „" + h + "“", method: "classifier" });
+          if (h) result.flags.push({ type: "pdf_injection_text", severity: "warn", location: `PDF (textová vrstva, ${via})`, evidence: "instrukční text: „" + h + "“", method: "classifier" });
           result.note = h
-            ? "Nalezen text instrukčního charakteru. Hloubková detekce SKRYTÍ (kontrast, render mode, CID/Identity-H fonty) běží ve fázi F1 na on-prem runneru (PyMuPDF)."
+            ? "Nalezen text instrukčního charakteru (čte se i neviditelné bílé písmo, které má textovou vrstvu). Detekci SKRYTÍ podle barvy/render mode/pozice doplní on-prem runner (PyMuPDF)."
             : text.trim()
-            ? "PDF: přečten text streamů, nic instrukčního nenalezeno. Hloubková detekce skrytí = F1 on-prem."
-            : "PDF: text streamů se nepodařilo dekódovat (pravděpodobně CID/Identity-H font) → plná detekce na on-prem runneru (F1).";
+            ? `PDF: přečtena textová vrstva (${via}), nic instrukčního nenalezeno. Detekci skrytí podle barvy doplní on-prem (F1).`
+            : "PDF: textovou vrstvu se nepodařilo přečíst (naskenované/obrázkové CV) → OCR/vision na on-prem runneru (F1).";
         } else {
           result.note = "Podporováno: .docx (plná v2 detekce), .pdf (dekomprese + injection sken).";
         }
