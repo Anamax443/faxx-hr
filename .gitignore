@@ -1,0 +1,34 @@
+# === Secrets — NIKDY do gitu (v repu jen *.example) ===
+.env
+.env.*
+!.env.example
+*.local.json
+.dev.vars
+secrets.*
+*.key
+*.pfx
+*private*.pem
+id_rsa
+
+# === Node / web ===
+node_modules/
+dist/
+build/
+.wrangler/
+
+# === .NET ===
+bin/
+obj/
+.vs/
+*.user
+*.suo
+
+# === Python ===
+__pycache__/
+.venv/
+*.pyc
+
+# === OS / editor / logy ===
+.DS_Store
+Thumbs.db
+*.log
