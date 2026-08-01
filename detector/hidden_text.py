@@ -444,8 +444,9 @@ def scan_docx(path: str, res: ScanResult) -> None:
             # alt-texty a názvy obrázků — sighted čtenář je nevidí
             for e in root.iter():
                 for k, v in e.attrib.items():
-                    if localname(k) in ("descr", "title") and len((v or "").strip()) >= MIN_TEXT_LEN:
-                        sev, ev = sev_for(v, base="info")
+                    # alt-text flagujeme jen při injekci (benigní alt-texty jako „logo" = šum)
+                    if localname(k) in ("descr", "title") and injection_hit(v or ""):
+                        sev, ev = sev_for(v)
                         res.flags.append(Flag(res.doc, "docx_alt_text", sev,
                                               f"{main} (alt-text obrázku)", ev))
                         res.hidden_text += v.strip() + "\n"
@@ -475,8 +476,9 @@ def scan_docx(path: str, res: ScanResult) -> None:
                 txt = strip_invisible(
                     " ".join((e.text or "") for e in root.iter() if (e.text or "").strip())
                 ).strip()
-                if len(txt) >= MIN_TEXT_LEN:
-                    sev, ev = sev_for(txt, base="info")
+                # metadata jsou v KAŽDÉM Word dokumentu → flag jen při injekci, ne za existenci
+                if injection_hit(txt):
+                    sev, ev = sev_for(txt)
                     res.flags.append(Flag(res.doc, "docx_metadata", sev, part, ev))
                     res.hidden_text += txt + "\n"
 

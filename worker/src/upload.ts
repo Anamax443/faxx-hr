@@ -234,8 +234,8 @@ function scanDocx(buf: Uint8Array): Out {
     // alt-texty a názvy obrázků — sighted čtenář je nevidí
     for (const am of doc.matchAll(/\b(?:descr|title)="([^"]+)"/g)) {
       const v = unesc(am[1]).trim();
-      if (v.length >= MIN_TEXT_LEN) {
-        const [sev, ev] = sevFor(v, "info");
+      if (inj(v)) { // alt-text flagujeme jen při injekci (benigní alt-texty = šum)
+        const [sev, ev] = sevFor(v);
         out.flags.push({ type: "docx_alt_text", severity: sev, location: "word/document.xml (alt-text obrázku)", evidence: ev, method: "deterministic" });
         out.hidden += v + "\n";
       }
@@ -267,8 +267,8 @@ function scanDocx(buf: Uint8Array): Out {
     const x = get(part);
     if (x) {
       const t = stripInvisible(unesc(x.replace(/<[^>]+>/g, " "))).replace(/\s+/g, " ").trim();
-      if (t.length >= MIN_TEXT_LEN) {
-        const [sev, ev] = sevFor(t, "info");
+      if (inj(t)) { // metadata jsou v KAŽDÉM Word dokumentu → flagujeme jen při injekci, ne za pouhou existenci
+        const [sev, ev] = sevFor(t);
         out.flags.push({ type: "docx_metadata", severity: sev, location: part, evidence: ev, method: "deterministic" });
         out.hidden += t + "\n";
       }
