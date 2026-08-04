@@ -135,49 +135,48 @@ export function groupByPerson(files: { name: string; buf?: Uint8Array; visible?:
   return [...m.values()];
 }
 
-async function evaluate(cands: CandidateInput[], req: Requirements, ai: AiBinding, model: string, env: Env) {
-  const rubric = buildRubric(req);
-  const results = [];
-  for (const c of cands) {
-    let flags: { type: string; severity: string; location: string; evidence: string; doc?: string }[] = [];
-    let hiddenChars = 0, extMs = 0, extOk = false, totalVisible = 0;
-    const notes: string[] = [];
-    const docsMeta: { name: string; visible_chars: number; hidden_chars: number; flags: number; note: string }[] = [];
-    const quals: Qualification[] = [];
-    const ids: Identity[] = [];
-    let allVisible = "";
-    for (const d of c.docs) {
-      let visible = d.visible ?? "", dflags = d.flags ?? [], dhidden = d.hidden_chars ?? 0, note = d.note ?? "";
-      if (d.buf) {
-        const scan = await scanOrVision(d.name, d.buf, env);
-        visible = scan.visible; dflags = scan.flags; dhidden = scan.hiddenChars; note = scan.note;
-      }
-      totalVisible += visible.length;
-      if (visible.trim()) allVisible += visible + "\n";
-      // extrakce PO DOKUMENTECH — CV spolehlivě dá roky, dopisy doplní; pak se sloučí
-      if (visible.trim()) {
-        const ext = await extractQualification(visible, ai, model);
-        quals.push(ext.qualification); ids.push(ext.identity); extMs += ext.ms; extOk = extOk || ext.ok;
-      }
-      flags = flags.concat(dflags.map((f) => ({ ...f, doc: d.name })));
-      hiddenChars += dhidden;
-      if (note) notes.push(note);
-      docsMeta.push({ name: d.name, visible_chars: visible.length, hidden_chars: dhidden, flags: dflags.length, note });
+// Zpracuje JEDNOHO kandidáta (všechny jeho dokumenty) → výsledek se skóre.
+async function scoreOne(c: CandidateInput, rubric: Rubric, ai: AiBinding, model: string, env: Env) {
+  let flags: { type: string; severity: string; location: string; evidence: string; doc?: string }[] = [];
+  let hiddenChars = 0, extMs = 0, extOk = false, totalVisible = 0;
+  const notes: string[] = [];
+  const docsMeta: { name: string; visible_chars: number; hidden_chars: number; flags: number; note: string }[] = [];
+  const quals: Qualification[] = [];
+  const ids: Identity[] = [];
+  let allVisible = "";
+  for (const d of c.docs) {
+    let visible = d.visible ?? "", dflags = d.flags ?? [], dhidden = d.hidden_chars ?? 0, note = d.note ?? "";
+    if (d.buf) {
+      const scan = await scanOrVision(d.name, d.buf, env);
+      visible = scan.visible; dflags = scan.flags; dhidden = scan.hiddenChars; note = scan.note;
     }
-    const merged = mergeQualifications(quals);      // celkové hodnocení = sloučení dat ze všech dokumentů
-    const identity = mergeIdentity(ids);             // full_name / location / links z modelu
-    const rx = contactsFromText(allVisible);         // e-maily a telefony JEN z reálného textu (model je jinak halucinuje)
-    identity.emails = rx.emails;
-    identity.phones = rx.phones;
-    if (!identity.full_name) identity.full_name = c.name;
-    const score = scoreCandidate(merged, rubric);
-    results.push({
-      name: identity.full_name || c.name, identity, score,
-      flags, worstSeverity: worstSeverity(flags), flagCount: flags.length,
-      qualification: merged, extract_ms: extMs, extract_ok: extOk,
-      docs: docsMeta, visible_chars: totalVisible, hidden_chars: hiddenChars, note: notes.join(" · "),
-    });
+    totalVisible += visible.length;
+    if (visible.trim()) allVisible += visible + "\n";
+    if (visible.trim()) {
+      const ext = await extractQualification(visible, ai, model);
+      quals.push(ext.qualification); ids.push(ext.identity); extMs += ext.ms; extOk = extOk || ext.ok;
+    }
+    flags = flags.concat(dflags.map((f) => ({ ...f, doc: d.name })));
+    hiddenChars += dhidden;
+    if (note) notes.push(note);
+    docsMeta.push({ name: d.name, visible_chars: visible.length, hidden_chars: dhidden, flags: dflags.length, note });
   }
+  const merged = mergeQualifications(quals);
+  const identity = mergeIdentity(ids);
+  const rx = contactsFromText(allVisible);          // e-maily a telefony JEN z reálného textu (model je jinak halucinuje)
+  identity.emails = rx.emails; identity.phones = rx.phones;
+  if (!identity.full_name) identity.full_name = c.name;
+  const score = scoreCandidate(merged, rubric);
+  return {
+    name: identity.full_name || c.name, identity, score,
+    flags, worstSeverity: worstSeverity(flags), flagCount: flags.length,
+    qualification: merged, extract_ms: extMs, extract_ok: extOk,
+    docs: docsMeta, visible_chars: totalVisible, hidden_chars: hiddenChars, note: notes.join(" · "),
+  };
+}
+
+type OneResult = Awaited<ReturnType<typeof scoreOne>>;
+function rankResults(results: OneResult[], req: Requirements, model: string) {
   const ranking = rankCandidates(results).map((r, i) => ({
     rank: i + 1, name: r.name, total: r.score.total, disqualified: r.score.disqualified,
     gatesFailed: r.score.gates.filter((g) => !g.passed).map((g) => ({ key: g.key, reason: g.reason, value: g.value })),
@@ -187,6 +186,13 @@ async function evaluate(cands: CandidateInput[], req: Requirements, ai: AiBindin
     extract_ms: r.extract_ms, extract_ok: r.extract_ok, visible_chars: r.visible_chars, hidden_chars: r.hidden_chars, note: r.note,
   }));
   return { rubric: { jobTitle: req.jobTitle, minYears: req.minYears, requiredSkills: req.requiredSkills }, model, count: ranking.length, ranking };
+}
+
+async function evaluate(cands: CandidateInput[], req: Requirements, ai: AiBinding, model: string, env: Env) {
+  const rubric = buildRubric(req);
+  const results: OneResult[] = [];
+  for (const c of cands) results.push(await scoreOne(c, rubric, ai, model, env));
+  return rankResults(results, req, model);
 }
 
 // ---------------------------------------------------------------------------
@@ -284,6 +290,32 @@ export default {
           if (inzerat.trim()) req0 = (await deriveRequirements(inzerat, env.AI, model)).req;
           else return json({ error: "chybí požadavky (inzerát nebo vyplněný formulář)" }, 400);
         }
+
+        // Streamovaný průběh (NDJSON): klient dostává stav po každém kandidátovi, ať to nevypadá zamrzle.
+        if (url.searchParams.get("stream") === "1") {
+          const rubric = buildRubric(req0);
+          const reqF = req0;
+          const { readable, writable } = new TransformStream();
+          const w = writable.getWriter();
+          const enc = new TextEncoder();
+          const send = (o: unknown) => w.write(enc.encode(JSON.stringify(o) + "\n"));
+          (async () => {
+            try {
+              await send({ type: "start", total: cands.length, names: cands.map((c) => c.name), model });
+              const results: OneResult[] = [];
+              for (let i = 0; i < cands.length; i++) {
+                const r = await scoreOne(cands[i], rubric, env.AI, model, env);
+                results.push(r);
+                await send({ type: "progress", index: i + 1, total: cands.length, name: r.name, total_score: r.score.total, disqualified: r.score.disqualified, worstSeverity: r.worstSeverity, flagCount: r.flagCount, docs: r.docs.length });
+              }
+              await send({ type: "done", result: rankResults(results, reqF, model) });
+            } catch (e: unknown) {
+              await send({ type: "error", error: String((e as { message?: string })?.message || e) });
+            } finally { await w.close(); }
+          })();
+          return new Response(readable, { headers: { "content-type": "application/x-ndjson; charset=utf-8", "cache-control": "no-store" } });
+        }
+
         return json(await evaluate(cands, req0, env.AI, model, env));
       } catch (e: unknown) { return json({ error: String((e as { message?: string })?.message || e) }, 500); }
     }
@@ -336,6 +368,9 @@ button:disabled{opacity:.5;cursor:not-allowed}
 .doclink{color:var(--accent);cursor:pointer;text-decoration:none;border-bottom:1px dotted}
 .doclink:hover{border-bottom-style:solid}
 .contact{font-size:12px;color:var(--blue);margin:2px 0 1px}
+.proglist{font-size:13px;margin-top:4px}
+.progitem{padding:4px 2px;border-bottom:1px solid var(--line)}
+.progitem.wait{color:var(--muted)}.progitem.run{color:var(--amber)}.progitem.done{color:var(--txt)}
 #inzerat.hot{border-color:var(--accent);background:rgba(63,214,160,.05)}
 .score{font-weight:800;font-size:16px}
 .bar{height:6px;background:var(--panel2);border-radius:4px;margin-top:4px;overflow:hidden}
@@ -380,6 +415,7 @@ a{color:var(--accent)}
 <div class="statusbar"><div class="sbinner">
   <span class="sbbrand">🛡️ faxx-hr</span>
   <span class="sbitem" title="verze nasazení (commit · čas buildu)">⎇ <b title="${COMMIT_FULL}">${COMMIT}</b> · ${BUILT}</span>
+  <span class="sbitem" title="aktuální čas">🕒 <b id="sbClock">--:--:--</b></span>
   <span class="sbitem" title="AI model použitý na extrakci z CV">🧠 <b id="sbModel">—</b></span>
   <span class="sbitem" title="dostupnost komunikace s AI"><i id="sbDot" class="dot wait"></i><span id="sbAI">ověřuji…</span><a class="sbre" id="sbPing" title="ověřit znovu">↻</a></span>
 </div></div>
@@ -616,6 +652,9 @@ function pingAI(){
 modelSel.onchange=()=>{localStorage.setItem('faxx_model',modelSel.value);updSb();pingAI()};
 $('#sbPing').onclick=pingAI;
 updSb();pingAI();
+// živé hodiny
+function tickClock(){const el=$('#sbClock');if(el)el.textContent=new Date().toLocaleTimeString('cs-CZ')}
+tickClock();setInterval(tickClock,1000);
 // váhy kritérií (nastavitelné, ukládané v prohlížeči)
 const WKEYS=['roky_praxe','dovednosti','vzdelani','en','stabilita','certifikace'];
 const WDEF={roky_praxe:25,dovednosti:30,vzdelani:15,en:10,stabilita:10,certifikace:10};
@@ -686,14 +725,42 @@ $('#evalBtn').onclick=async()=>{
   const req={jobTitle:$('#jobTitle').value.trim(),minYears:+$('#minYears').value||0,requiredSkills:$('#skills').value.split(',').map(s=>s.trim().toLowerCase()).filter(Boolean),weights:getWeights()};
   const fd=new FormData();fd.set('model',model());fd.set('requirements',JSON.stringify(req));fd.set('inzerat',$('#inzerat').value);
   for(const f of files)fd.append('cv',f);
-  $('#evalBtn').disabled=true;$('#evalMsg').textContent='Vyhodnocuji '+files.length+' CV…';
-  try{
-    const r=await fetch('/api/evaluate',{method:'POST',body:fd}).then(r=>r.json());
-    if(r.error){$('#err').textContent=r.error}else renderResults(r);
-    $('#evalMsg').textContent='';
-  }catch(e){$('#err').textContent='Chyba: '+e}
+  $('#evalBtn').disabled=true;$('#evalMsg').textContent='';
+  try{ await evaluateStream(fd); }catch(e){ $('#err').textContent='Chyba: '+e }
   $('#evalBtn').disabled=false;
 };
+async function evaluateStream(fd){
+  const res=await fetch('/api/evaluate?stream=1',{method:'POST',body:fd});
+  const ct=res.headers.get('content-type')||'';
+  if(!res.ok){let m='HTTP '+res.status;try{m=(await res.json()).error||m}catch(e){}$('#err').textContent=m;return}
+  if(!(res.body&&ct.indexOf('ndjson')>=0)){const j=await res.json();if(j.error)$('#err').textContent=j.error;else renderResults(j);return}
+  const reader=res.body.getReader(),dec=new TextDecoder();let buf='',state=null,t0=Date.now(),ended=false;
+  const tick=setInterval(()=>{if(state&&!ended)renderProgress(state,t0)},500);
+  try{
+    while(true){
+      const {value,done}=await reader.read();if(done)break;
+      buf+=dec.decode(value,{stream:true});
+      let nl;while((nl=buf.indexOf('\\n'))>=0){
+        const line=buf.slice(0,nl).trim();buf=buf.slice(nl+1);if(!line)continue;
+        let msg;try{msg=JSON.parse(line)}catch(e){continue}
+        if(msg.type==='start'){state={total:msg.total,done:0,items:(msg.names||[]).map(n=>({name:n,status:'wait'}))};renderProgress(state,t0)}
+        else if(msg.type==='progress'){state.done=msg.index;const it=state.items[msg.index-1];if(it){it.name=msg.name;it.status='done';it.total=msg.total_score;it.dq=msg.disqualified;it.flags=msg.flagCount}if(state.items[msg.index])state.items[msg.index].status='run';renderProgress(state,t0)}
+        else if(msg.type==='done'){ended=true;clearInterval(tick);renderResults(msg.result)}
+        else if(msg.type==='error'){ended=true;clearInterval(tick);$('#err').textContent=msg.error}
+      }
+    }
+  }finally{clearInterval(tick)}
+}
+function renderProgress(s,t0){
+  const el=Math.round((Date.now()-t0)/1000),pct=s.total?Math.round(s.done/s.total*100):0;
+  let h='<div class="card"><div class="sum"><b>Zpracovávám kandidáty…</b> <span class="pill bad">'+s.done+' / '+s.total+'</span> <span class="hint">'+el+' s</span></div>';
+  h+='<div class="bar" style="margin:10px 0"><i style="width:'+pct+'%"></i></div><div class="proglist">'+s.items.map(it=>{
+    const ic=it.status==='done'?(it.dq?'⛔':'✓'):it.status==='run'?'⏳':'·';
+    const sc=it.status==='done'?(it.dq?' — diskvalifikován':' — '+it.total+' b.'+(it.flags?' · '+it.flags+' nález':'')):(it.status==='run'?' — zpracovávám…':'');
+    return '<div class="progitem '+it.status+'">'+ic+' '+esc(it.name)+sc+'</div>';
+  }).join('')+'</div><div class="hint" style="margin-top:6px">Každý dokument čte AI zvlášť (~5–15 s). Nezavírej stránku.</div></div>';
+  $('#results').innerHTML=h;
+}
 const SEV={critical:'⛔',warn:'⚠️',info:'ℹ️'};
 let lastResult=null;
 // manažerský výstup optimalizovaný pro tisk (samostatný HTML dokument s kontakty)
