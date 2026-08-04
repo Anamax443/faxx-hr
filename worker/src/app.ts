@@ -91,12 +91,16 @@ const mimeFromName = (n: string) => { const e = (n.split(".").pop() || "").toLow
 async function visionText(buf: Uint8Array, name: string, env: Env, method = "toMarkdown"): Promise<{ text: string; via: string }> {
   const tryMd = async (): Promise<string> => {
     if (!env?.AI?.toMarkdown) return "";
-    try {
-      const res = await env.AI.toMarkdown([{ name: name || "img.png", blob: new Blob([buf], { type: mimeFromName(name || "") }) }]);
-      let md = Array.isArray(res) ? res.map((r) => r?.data || "").join("\n") : "";
-      md = md.replace(/^#[^\n]*\n+/, "").replace(/^##\s*Metadata\s*\n(?:\s*-[^\n]*\n?)*/i, "").trim();
-      return md.replace(/\s+/g, "").length >= 15 ? md : "";
-    } catch { return ""; }
+    // toMarkdown u obrázků občas vrátí prázdno → retry, ať nepadáme na slabší LLaVA
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const res = await env.AI.toMarkdown([{ name: name || "img.png", blob: new Blob([buf], { type: mimeFromName(name || "") }) }]);
+        let md = Array.isArray(res) ? res.map((r) => r?.data || "").join("\n") : "";
+        md = md.replace(/^#[^\n]*\n+/, "").replace(/^##\s*Metadata\s*\n(?:\s*-[^\n]*\n?)*/i, "").trim();
+        if (md.replace(/\s+/g, "").length >= 15) return md;
+      } catch { /* zkus znovu / pak fallback */ }
+    }
+    return "";
   };
   const tryLlava = async (): Promise<string> => {
     try {
@@ -623,13 +627,13 @@ a{color:var(--accent)}
 
   <div class="card doc" id="d-formaty">
     <h4>8 · Formáty a AI modely</h4>
-    <p><b>Podporované formáty CV:</b> PDF a DOCX (plné čtení textu + detekce skrytého obsahu). <b>Obrázky</b> (PNG/JPG, sken či screenshot CV) se čtou přes <b>vision model (OCR)</b> — je to best-effort, kvalita závisí na obrázku; u nečitelných se kandidát označí jako nevyhodnotitelný. Inzerát můžeš vložit jako text, soubor (TXT/PDF/DOCX), nebo <b>printscreen přes Ctrl+V</b> (přečte ho vision).</p>
-    <p><b>AI modely</b> (přepínač v Nastavení):</p>
+    <p><b>Podporované formáty CV:</b> PDF a DOCX (plné čtení textu + detekce skrytého obsahu). <b>Obrázky</b> (PNG/JPG, sken či screenshot CV) se čtou přes <b>OCR</b> — primárně Cloudflare toMarkdown, záložně vision model LLaVA. Je to best-effort, kvalita závisí na obrázku; u nečitelných se kandidát označí jako nevyhodnotitelný. Inzerát můžeš vložit jako text, soubor (TXT/PDF/DOCX/obrázek), <b>drag&drop</b> do pole, nebo <b>printscreen přes Ctrl+V</b>.</p>
+    <p><b>AI modely — každá agenda zvlášť</b> (Nastavení): jiný model pro <b>extrakci z CV</b>, pro <b>odvození požadavků z inzerátu</b> i pro <b>OCR obrázků</b>. AI je v systému <b>jen čtečka/extraktor</b> — nehodnotí ani nerozhoduje (to dělá deterministický rubrik a člověk).</p>
     <ul>
-      <li><b>Cloudflare Workers AI — zdarma</b> (výchozí, Llama 3.1 8B): rychlý, běží bez nákladů. Silnější varianty (70B, gpt-oss 120B) jsou přesnější, ale s kolísavou latencí.</li>
-      <li><b>Anthropic Claude</b> — nejvyšší kvalita a stabilita; vyžaduje API klíč (zatím nenastaven, proto je volba neaktivní).</li>
+      <li><b>Cloudflare Workers AI — zdarma</b> (výchozí, Llama 3.1 8B): rychlý, bez nákladů. Silnější varianty (70B, gpt-oss 120B) jsou přesnější, ale s kolísavou latencí.</li>
+      <li><b>Anthropic Claude</b> — nejvyšší kvalita a stabilita; vyžaduje API klíč (zatím nenastaven, proto neaktivní).</li>
     </ul>
-    <p>Stav zvoleného modelu a jeho <b>dostupnost</b> (ping) vidíš v horní liště. Volba modelu se ukládá v prohlížeči.</p>
+    <p><b>Instrukce pro AI</b> (systémový prompt extrakce) jsou v Nastavení <b>viditelné a editovatelné</b> (s možností obnovit výchozí). Aktivní extrakční model a jeho <b>dostupnost</b> (ping) i živý čas vidíš v horní liště. Volby se ukládají v prohlížeči.</p>
   </div>
 
   <div class="card doc" id="d-vystup">

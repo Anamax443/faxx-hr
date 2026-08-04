@@ -2,6 +2,36 @@
 
 Append-only. Nejnovější záznam nahoru. Slouží k pokračování z jiného počítače / po pauze.
 
+## 2026-08-04 (d) — appka dotažená do použitelného nástroje (velká UX vlna)
+Živě `faxx-hr-app.bass443.workers.dev` (deploy `npm run deploy:app`, otisk verze v horní liště).
+Vše postaveno kolem ověřeného jádra (detect+extract+rubric), skórování dál NIKDY nevidí surový text.
+
+- **Kandidát = OSOBA, ne soubor.** Dokumenty se seskupí podle jména ze souboru (`groupByPerson`/`personKey`);
+  hodnocení z CELKU = extrakce PO DOKUMENTECH + sloučení (`mergeQualifications`: roky=max, dovednosti/certy=sjednocení).
+  **Merge fix:** dřív spojení textů slabší 8B mátlo (Anna padala na 0) → per-dokument + merge to vyřešilo.
+- **Kontaktní údaje** (`Identity`): jméno z modelu, **e-maily/telefony JEN regexem z textu** (model je halucinoval),
+  sloučené přes dokumenty. Slouží JEN k zobrazení, do skórování NEvstupují (antidiskriminace).
+- **Streamovaný průběh** (`/api/evaluate?stream=1`, NDJSON): panel s progress barem, kandidáti naskakují ⏳→✓/⛔,
+  živé počítadlo s — konec „zamrzlého" dojmu. `evaluate` rozdělen na `scoreOne` + `rankResults`. Fallback na JSON.
+- **Nastavitelné váhy** rubriku (6 polí v %, normalizuje se) + **editovatelný systémový prompt** extrakce
+  (`DEFAULT_EXTRACT_SYSTEM`, posílá se `systemPrompt`) + **per-agendu modely** (extrakce / odvození požadavků /
+  OCR obrázků zvlášť) — vše v Nastavení, ukládané v prohlížeči.
+- **Vision/OCR obrázků:** primárně Cloudflare `toMarkdown` (s retry — občas vrátí prázdno), LLaVA jen fallback
+  (LLaVA hustý text jen hádá). Printscreen inzerátu přes **Ctrl+V** + **drag&drop** do pole; obrázky přijímá i upload CV.
+- **Otevírání dokumentů** z appky (client-side `URL.createObjectURL`, soubory jsou v prohlížeči po nahrání).
+- **Manažerský tiskový výstup** (`buildReport`): samostatný light HTML s pořadím, kontakty, skóre, rozpadem
+  a poznámkou o lidském dohledu (Tisk/PDF v novém okně + Stáhnout HTML).
+- **Oprava FP:** viditelná sebeprezentace („jsem ideální kandidát") už NENÍ nález — u viditelného textu se hlásí
+  jen manipulace SMĚŘOVANÁ na AI (`injOverride`: ignoruj/jsi AI/ohodnoť 100/doporuč k pohovoru). Skrytý text = pořád obojí.
+- **Oprava PDF smetí:** viditelný text = preferovat `toMarkdown` (vložené fonty), raw fflate jen fallback +
+  injection sken; ořez `## Metadata` hlavičky. **Detektor sdílen** `worker/src/detect.ts` (upload.ts na něj zeštíhlen).
+- **Lišta:** otisk verze (commit+čas přes `--define`, `scripts/deploy-app.mjs`), **živé hodiny**, zvolený model,
+  **dostupnost AI** (`/api/health` ping). Favicon štít. GET / má `cache-control: no-store`.
+- **AI = jen extraktor** (záměrně, kvůli injection+AI Act): nehodnotí, nerozhoduje. Rozšíření (fit-komentář,
+  sémantická shoda dovedností) = backlog, vždy nad strukturovanými daty, ne jako skórovací autorita.
+- **Zbývá:** perzistence dávek (D1/R2 — uložit, vrátit se, oslovit dalšího; stav osloven/postupuje/odmítnut).
+  Pozn.: `npm install` po čerstvém klonu; deploy appky ručně (bez CI).
+
 ## 2026-08-04 (c) — appka skeleton: záložky + dávka CV + inzerát→požadavky + ranking (F1/F2/F3 v1)
 - **Postaven skeleton hodnoticí appky** kolem ověřeného jádra (spike b). Nový worker
   [`worker/src/app.ts`](worker/src/app.ts) + [`wrangler.app.jsonc`](wrangler.app.jsonc) (`faxx-hr-app`, AI binding).
