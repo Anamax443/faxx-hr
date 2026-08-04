@@ -44,6 +44,13 @@ bezpečnostní a validační brány platí ihned na sdíleném jádře.**
 > **Klíčový přijatý reframe (bod 1 obou posudků):** invariant chrání *slot na verdikt*, ne
 > *fakta*. Skrytý fact-swap (ToUnicode) je reálná díra → **dual-path diff povýšen na P0**.
 > Naopak *viditelné* nadsazené sebehodnocení je mimo scope (self-report, řeší člověk/pohovor).
+>
+> **Stav G4 (2026-08-04):** ToUnicode sub-třída (**V-PDF-06**) je **uzavřena** on-prem glyf↔ToUnicode
+> diffem (`pdf_tounicode_obfuscation`): u neembedovaného simple fontu remapujícího ASCII kódy na
+> neidentické Unicode se payload zadrží do `hidden_text` (`critical:pdf_tounicode_mismatch`),
+> nejde do `visible_text`. Regrese 24/24, 0 FP (embedované/subset fonty se přeskočí). Zbývá plný
+> **render→OCR dual-path** (display-divergence i mimo ToUnicode: render mode, off-page) — čeká na
+> OCR engine (Tesseract) v on-prem runneru.
 
 Sekce §15.1–§15.6 níže popisují fáze a kroky podrobněji; kde mluví o D1/R2 perzistenci,
 `audit_log` a DPIA, patří to nově do **větve B**.

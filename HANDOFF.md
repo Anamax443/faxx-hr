@@ -2,6 +2,24 @@
 
 Append-only. Nejnovější záznam nahoru. Slouží k pokračování z jiného počítače / po pauze.
 
+## 2026-08-04 (n) — P0 z oponentur: uzavřen V-PDF-06 (ToUnicode fact-swap) glyf↔ToUnicode diffem
+- **Reakce na bod #1 obou oponentur** („invariant chrání slot na verdikt, ne fakta" → skrytý
+  fact-swap přes ToUnicode). On-prem detektor `detector/hidden_text.py`: nové
+  `pdf_tounicode_obfuscation` + `_parse_tounicode_cmap`. Neembedovaný **simple font**, který
+  přes `/ToUnicode` remapuje tisknutelné **ASCII kódy na neidentické Unicode** (glyf vykreslí
+  jeden znak, extraktor čte jiný = payload) → payload se přesune do `hidden_text`
+  (`critical:pdf_tounicode_mismatch`) a **strip z `visible_text`** (zádrž). **Embedované / subset
+  fonty (reálný Word/reportlab) se PŘESKOČÍ** (tam je remap legitimní) → 0 falešně pozitivních.
+- `detector/test_vectors.py`: V-PDF-06 změněn z `warn:visible_instruction_tone`/`contained=False`
+  na `critical:pdf_tounicode_mismatch`/`contained=True`. **Regrese 24/24** (čisté CV, grafický
+  sidebar, viditelná sebeprezentace zůstaly čisté — žádné nové FP). Ověřeno i probe (frag payloadu
+  zmizel z visible, je v hidden, critical flag ukazuje viditelný gibberish).
+- **Rozsah:** on-prem only; edge beze změny (toMarkdown čte přes ToUnicode, glyph diff na edge není).
+  Uzavírá ToUnicode sub-třídu; **plný render→OCR dual-path** (display-divergence mimo ToUnicode:
+  render mode, off-page) čeká na OCR engine — **Tesseract NENÍ nainstalován** (PyMuPDF OCR padá).
+- TODO + oponentura kap. 15 (§15.0 stav G4) aktualizovány. **Boundary matice** (`docs/PDF-BOUNDARY-MATRIX.md`)
+  potřebuje přegenerovat (on-prem sloupec V-PDF-06 nově „obsahuje/zadrženo").
+
 ## 2026-08-04 (m) — dokumentace pro oponenturu (~100 stran, CZ, docs/oponentura/)
 - Nová složka [`docs/oponentura/`](docs/oponentura/): technicko-regulatorní dokumentace pro
   kritického oponenta — **README (index) + 17 kapitol, ~48 600 slov ≈ ~101 stran**, česky.

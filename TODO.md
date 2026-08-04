@@ -70,7 +70,7 @@ dual-path diff se měří odděleně (diff ještě neexistuje, viz F1).
 - [~] **Hardening on-prem z boundary matice** (viz [`docs/PDF-BOUNDARY-MATRIX.md`](docs/PDF-BOUNDARY-MATRIX.md)) — 2026-08-04, PDF regrese 10/10:
   - [x] render mode 3 (+ nulová alfa `ca 0`) zadržet do `hidden_text` — přes `get_texttrace` (`type`/`opacity`), ne jen coarse `3 Tr`
   - [x] offpage: text mimo mediabox, který `get_text` zahazuje, hlásit `pdf_offpage` (z `get_texttrace`) do `hidden_text`
-  - [~] ToUnicode/cmap ↔ glyph mismatch — injection nad `visible_text` = `visible_instruction_tone` (warn); **payload ve `visible_text` zatím zůstává**, plná zádrž chce porovnat glyf↔ToUnicode (odloženo)
+  - [x] ToUnicode/cmap ↔ glyph mismatch (V-PDF-06) — **UZAVŘENO** `pdf_tounicode_obfuscation`: neembedovaný simple font, který remapuje ASCII kódy na neidentické Unicode → payload přesunut do `hidden_text` (`critical:pdf_tounicode_mismatch`), NEjde do `visible_text` (zádrž). Embedované/subset fonty se přeskočí (0 FP). Regrese 24/24. Plný render→OCR dual-path (pro render-mode/off-page display-divergenci mimo ToUnicode) stále čeká na OCR engine (Tesseract).
   - [x] číst XFA/AcroForm XML (`catalog→AcroForm→XFA`, stream i pole) → `pdf_xfa` warn/critical + obsah do `hidden_text`
   - [x] viditelný instrukční tón jako mírnější kategorie `visible_instruction_tone` (warn) odděleně od skrytého injection (méně FP)
   - [ ] JS/OpenAction na on-prem: dnes jen zadržen (neextrahuje se), jistí jen edge → volitelně flag „dokument obsahuje JavaScript"

@@ -1,15 +1,11 @@
 # faxx-hr — Dokumentace pro oponenturu
 
-> Technicko-regulatorní dokumentace projektu **faxx-hr** (pracovní název) — HR nástroj pro
-> hodnocení životopisů proti pracovnímu inzerátu s obranou proti prompt injection.
-> Určeno **kritickému oponentovi** (technický garant / investor / regulatorní posudek).
+> Technicko-regulatorní dokumentace projektu **faxx-hr** — HR nástroj proti prompt injection.
 >
-> **Verze:** 2026-08-04 · odpovídá stavu repozitáře na commitu `00394f7` (main). **Jazyk:** čeština.
-> **Rozsah:** ~100 stran (17 kapitol) — jeden souvislý dokument.
+> **Verze:** 2026-08-04 · commit `23bf2d8` · **Jazyk:** čeština · **Rozsah:** ~100 stran (17 kapitol).
+> Reakce na dvě oponentury + dvouvětvový model: `OPONENTURA-RESPONSE-2.md` (kap. 15 §15.0).
 >
-> **Reakce na dvě oponentury** a dvouvětvový model (edge vs. lokální DB): viz `OPONENTURA-RESPONSE-2.md` (kap. 15 §15.0).
->
-> **Tisk do PDF:** otevři v prohlížeči → Tisk → Uložit jako PDF; kapitoly začínají na nové stránce.
+> **Tisk do PDF:** otevři v prohlížeči → Tisk → Uložit jako PDF; kapitoly na nové stránce.
 
 ---
 
@@ -5216,6 +5212,13 @@ bezpečnostní a validační brány platí ihned na sdíleném jádře.**
 > **Klíčový přijatý reframe (bod 1 obou posudků):** invariant chrání *slot na verdikt*, ne
 > *fakta*. Skrytý fact-swap (ToUnicode) je reálná díra → **dual-path diff povýšen na P0**.
 > Naopak *viditelné* nadsazené sebehodnocení je mimo scope (self-report, řeší člověk/pohovor).
+>
+> **Stav G4 (2026-08-04):** ToUnicode sub-třída (**V-PDF-06**) je **uzavřena** on-prem glyf↔ToUnicode
+> diffem (`pdf_tounicode_obfuscation`): u neembedovaného simple fontu remapujícího ASCII kódy na
+> neidentické Unicode se payload zadrží do `hidden_text` (`critical:pdf_tounicode_mismatch`),
+> nejde do `visible_text`. Regrese 24/24, 0 FP (embedované/subset fonty se přeskočí). Zbývá plný
+> **render→OCR dual-path** (display-divergence i mimo ToUnicode: render mode, off-page) — čeká na
+> OCR engine (Tesseract) v on-prem runneru.
 
 Sekce §15.1–§15.6 níže popisují fáze a kroky podrobněji; kde mluví o D1/R2 perzistenci,
 `audit_log` a DPIA, patří to nově do **větve B**.

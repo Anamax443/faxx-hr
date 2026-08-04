@@ -612,6 +612,78 @@ def pdf_report_xfa(doc, res: ScanResult) -> None:
         res.hidden_text += text + "\n"
 
 
+def _parse_tounicode_cmap(data: bytes) -> dict:
+    """Naparsuje ToUnicode CMap (bfchar + bfrange) → {kód: unicode string}. Best-effort."""
+    s = (data or b"").decode("latin-1", "replace")
+    mapping: dict = {}
+    def _u(h: str) -> str:
+        try:
+            return bytes.fromhex(h.strip()).decode("utf-16-be", "replace")
+        except Exception:
+            return ""
+    for block in re.findall(r"beginbfchar(.*?)endbfchar", s, re.S):
+        for m in re.finditer(r"<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>", block):
+            mapping[int(m.group(1), 16)] = _u(m.group(2))
+    for block in re.findall(r"beginbfrange(.*?)endbfrange", s, re.S):
+        for m in re.finditer(r"<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>", block):
+            lo, hi, base = int(m.group(1), 16), int(m.group(2), 16), m.group(3)
+            for i, code in enumerate(range(lo, min(hi, lo + 65535) + 1)):
+                try:
+                    bb = bytearray(bytes.fromhex(base))
+                    v = (int.from_bytes(bb[-2:], "big") + i) & 0xFFFF
+                    bb[-2:] = v.to_bytes(2, "big")
+                    mapping[code] = bytes(bb).decode("utf-16-be", "replace")
+                except Exception:
+                    pass
+    return mapping
+
+
+def pdf_tounicode_obfuscation(doc) -> list:
+    """Detekce útoku 'displej != extrakce' přes ToUnicode (V-PDF-06 / glyf↔ToUnicode diff).
+
+    Neembedovaný simple font (base-14, base encoding) s /ToUnicode, který remapuje
+    tisknutelné ASCII kódy na NEidentické Unicode → glyf vykreslí jeden znak, ale extraktor
+    přes ToUnicode přečte jiný (payload). Embedované / subset fonty (reálný Word, reportlab)
+    se PŘESKOČÍ — tam je remap legitimní (glyph ID ≠ kód) → žádné falešně pozitivní.
+
+    Vrací [{payload, gibberish, font, n}] (payload = co čte model, gibberish = co vidí člověk).
+    """
+    out: list = []
+    seen: set = set()
+    for page in doc:
+        try:
+            fonts = page.get_fonts(full=True)
+        except Exception:
+            continue
+        for f in fonts:
+            xref, ext, ftype, basefont = f[0], (f[1] or "").lower(), (f[2] or ""), (f[3] or "?")
+            if xref in seen:
+                continue
+            seen.add(xref)
+            if ext not in ("n/a", ""):            # embedovaný (subset) → legitimní remap → SKIP
+                continue
+            if ftype not in ("Type1", "TrueType"):  # jen simple fonty (ne Type0/CID)
+                continue
+            obj = doc.xref_object(xref)
+            m = re.search(r"/ToUnicode\s+(\d+)\s+0\s+R", obj)
+            if not m:
+                continue
+            try:
+                cmap = _parse_tounicode_cmap(doc.xref_stream(int(m.group(1))))
+            except Exception:
+                continue
+            # kolik tisknutelných ASCII kódů ToUnicode remapuje na NEidentické Unicode?
+            remap = [c for c, u in cmap.items() if 0x20 <= c <= 0x7e and u and u != chr(c)]
+            if len(remap) < 3:                    # pár remapů (ligatury apod.) neřešíme
+                continue
+            codes = sorted(c for c, u in cmap.items() if u and 0x20 <= c <= 0xff)
+            payload = "".join(cmap.get(c, "") for c in codes).strip()
+            gibberish = "".join(chr(c) for c in codes)
+            if payload:
+                out.append({"payload": payload, "gibberish": gibberish, "font": basefont, "n": len(remap)})
+    return out
+
+
 def scan_pdf(path: str, res: ScanResult) -> None:
     try:
         import fitz  # PyMuPDF
@@ -710,6 +782,18 @@ def scan_pdf(path: str, res: ScanResult) -> None:
                                               txt[:180]))
                     res.visible_text += txt + " "
             res.visible_text += "\n"
+
+    # glyf ↔ ToUnicode diff (V-PDF-06): displej != extrakce → payload NIKDY do visible_text
+    for ob in pdf_tounicode_obfuscation(doc):
+        pl = ob["payload"]
+        if pl and pl in res.visible_text:
+            res.visible_text = res.visible_text.replace(pl, " ", 1)   # co člověk nevidí, model nedostane
+        sev, ev = sev_for(pl)
+        res.flags.append(Flag(
+            res.doc, "pdf_tounicode_mismatch", sev,
+            f"neembedovaný font {ob['font']} (glyf ≠ ToUnicode: člověk vidí „{ob['gibberish'][:24]}…“, extraktor čte payload)",
+            ev))
+        res.hidden_text += pl + "\n"
 
     res.stats["pages"] = doc.page_count
     doc.close()

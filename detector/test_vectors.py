@@ -152,9 +152,10 @@ case("V09 injection schovaná v metadatech dokumentu",
 # PDF vektory (on-prem, offline) — vyžadují PyMuPDF; jinak se přeskočí.
 # Payload/nosiče staví detector/adversarial_pdf.py (tytéž jako boundary matice).
 # Sloupec `contained`: payload NESMÍ prosáknout do visible_text (bezpečnostní
-# invariant zádrže). Výjimka V-PDF-06 (ToUnicode): displej != extrakce, payload
-# ve visible_text ZŮSTÁVÁ a jistí ho jen `visible_instruction_tone` (warn) —
-# hlubší oprava (porovnání glyf↔ToUnicode) je odložená, viz TODO/BOUNDARY-MATRIX.
+# invariant zádrže). V-PDF-06 (ToUnicode) je nově UZAVŘEN glyf↔ToUnicode diffem
+# (`pdf_tounicode_obfuscation`): u neembedovaného simple fontu, který remapuje ASCII
+# kódy na neidentické Unicode, se payload přesune do hidden_text (critical) a NEjde do
+# visible_text → contained=True. Embedované/subset fonty se přeskočí (žádné FP).
 # ---------------------------------------------------------------------------
 def pdf_cases():
     import adversarial_pdf as ap
@@ -165,7 +166,7 @@ def pdf_cases():
         ("V-PDF-02 bílý na bílém", ap.v_white_on_white, "critical:pdf_low_contrast", True),
         ("V-PDF-03 mikropísmo 1 pt", ap.v_tiny_font, "critical:pdf_tiny_font", True),
         ("V-PDF-04 mimo mediabox", ap.v_offpage, "critical:pdf_offpage", True),
-        ("V-PDF-06 ToUnicode obfuskace", ap.v_tounicode_obfuscation, "warn:visible_instruction_tone", False),
+        ("V-PDF-06 ToUnicode obfuskace", ap.v_tounicode_obfuscation, "critical:pdf_tounicode_mismatch", True),
         ("V-PDF-07 XFA formulář", ap.v_xfa, "critical:pdf_xfa", True),
         ("V-PDF-09 Form XObject", ap.v_form_xobject, "critical:pdf_low_contrast", True),
         ("V-PDF-10 nulová alfa (ca 0)", ap.v_transparent_text, "critical:pdf_render_mode_3", True),
