@@ -2,6 +2,17 @@
 
 Append-only. Nejnovější záznam nahoru. Slouží k pokračování z jiného počítače / po pauze.
 
+## 2026-08-04 (s) — kompletní doc sweep: `status.html` + RESPONSE-2 srovnány se současným stavem
+- **`status.html`** (Stav projektu, linkovaný z README) byl zastaralý (~stav 2026-08-02): opraveno
+  regresní sada 14/14 → **24/24** (DOCX 14 + PDF 10), fáze **F1–F3 „plánováno" → 🟢 prototyp v appce**,
+  přidán live edge demonstrátor (hodnoticí appka + demo detektoru) + dvouvětvový model (A edge / B DB),
+  V-PDF-06 uzavření v F0/matici, patička 2026-08-04. **F0 zůstává otevřený gate** (held-out + red-team).
+- **`OPONENTURA-RESPONSE-2.md`** §1: přidán dated banner, že ToUnicode sub-třída (V-PDF-06) je od té doby
+  uzavřená on-prem i edge; „navržená, nepostavená mitigace" se dnes týká už jen plného render→OCR dual-path.
+- **Ověřena CS/EN parita** dotčených dokumentů (README / DETECTOR-V2 / PDF-BOUNDARY-MATRIX `.md↔.en`) — v souladu;
+  oponentura + `status.html` jsou CS-only (bez EN mirroru). Repo-wide: žádný `contained=False` mimo tento deník.
+- Vše commitnuto a **pushnuto na origin/main**.
+
 ## 2026-08-04 (r) — verze-řádky dokumentace bumpnuty na živý commit
 - `OPONENTURA-FULL.md` (ř. 5, `710e201`) a `docs/oponentura/README.md` (ř. 7, `27a110a`) →
   **`2ac3843`** = commit, ve kterém byl obsah dokumentace zmražen (viz (q)). Dořešuje poznámku z (q).

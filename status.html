@@ -50,6 +50,7 @@
   .st{font-size:12px;font-weight:600;padding:4px 10px;border-radius:999px;white-space:nowrap}
   .st.gate{color:var(--amber);background:rgba(240,180,41,.12)}
   .st.plan{color:var(--muted);background:var(--panel2)}
+  .st.live{color:var(--accent);background:rgba(63,214,160,.12)}
 
   .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
   @media(max-width:680px){.grid{grid-template-columns:1fr}}
@@ -82,8 +83,8 @@
       <p class="sub">Hodnocení životopisů pro personalisty — s bezpečnostní vrstvou proti skrytému textu v CV (prompt injection)</p>
     </div>
     <div class="badges">
-      <span class="badge proto">Prototyp</span>
-      <span class="badge live">F0 · Benchmark</span>
+      <span class="badge live">Živě · edge demo</span>
+      <span class="badge proto">F0 · gate otevřený</span>
       <span class="badge risk">AI Act · High-risk</span>
     </div>
   </header>
@@ -92,7 +93,14 @@
     <h2>⚠ Brána projektu: F0 — Benchmark detekce skrytého textu</h2>
     <p>Žádná plná Cloudflare infrastruktura, dokud benchmark na sadě <strong>čistých + „otrávených" CV</strong> nepotvrdí, že detekce funguje.</p>
     <p class="crit">Exit (návrh): recall ≥ 98 % na <strong>held-out</strong> sadě · false-positive ≤ 5–10 % na čisté · přesnost extrakce ≥ 90 %.
-       <br><strong>Hotovo:</strong> detektor v2 (WCAG kontrast, Unicode nosiče, visible/hidden split, lidské popisy nálezů) · regresní sada <strong>14/14</strong> (9 útoků + 5 FP kontrol) · <a href="https://faxx-hr-upload.bass443.workers.dev">živě na Cloudflare</a> — DOCX i PDF (přes Cloudflare Workers AI) · <strong>hraniční PDF vektory změřeny</strong> na obou vrstvách (edge vs. on-prem) → <a href="docs/PDF-BOUNDARY-MATRIX.md">coverage matice</a>. <strong>Zbývá:</strong> held-out sada + externí red-team + kalibrace prahů.</p>
+       <br><strong>Hotovo:</strong> detektor v2 (WCAG kontrast, Unicode nosiče, visible/hidden split, lidské popisy nálezů) · regresní sada <strong>24/24</strong> (DOCX 14: 9 útoků + 5 FP · PDF 10 on-prem) · <a href="https://faxx-hr-upload.bass443.workers.dev">živě na Cloudflare</a> — DOCX i PDF (přes Cloudflare Workers AI) · <strong>hraniční PDF vektory změřeny</strong> na obou vrstvách (edge vs. on-prem) → <a href="docs/PDF-BOUNDARY-MATRIX.md">coverage matice</a>: napříč oběma vrstvami neprojde žádný vektor nezachycen, <strong>V-PDF-06 (ToUnicode fact-swap) uzavřen on-prem i edge</strong> (glyf↔ToUnicode → <code>hidden_text</code>). <strong>Zbývá:</strong> held-out sada + externí red-team + kalibrace prahů + plný render→OCR dual-path.</p>
+  </div>
+
+  <h2 class="section">🌐 Živě na Cloudflare (edge demonstrátor)</h2>
+  <div class="card" style="margin-bottom:16px">
+    <p style="margin:0 0 8px"><strong><a href="https://faxx-hr-app.bass443.workers.dev">hodnoticí appka</a></strong> — nahraj <strong>dávku CV ≤ 10 MB</strong> + inzerát → ranking se skóre, rozpadem po kritériích, kontakty a nálezy skrytého obsahu. Přepínatelný AI backend (výchozí <strong>zdarma</strong> Workers AI, Claude po doplnění klíče), editovatelné váhy i prompt, export PDF/HTML. Plně <strong>CS/EN</strong> + světlý/tmavý motiv.</p>
+    <p style="margin:0 0 8px"><strong><a href="https://faxx-hr-upload.bass443.workers.dev">demo detektoru</a></strong> — nahraj jedno CV a uvidíš skrytý text (detekce běží ve Workeru na raw bytech, funguje i při vyčerpané AI kvótě).</p>
+    <p style="margin:0;color:var(--muted);font-size:14px"><strong>Dvě větve:</strong> <strong>A</strong> = tento edge demonstrátor (bezstavový, veřejný, JEN ukázková data — reálná CV nikdy). <strong>B</strong> = budoucí samostatná modifikace s DB na lokální síti (perzistence, <code>audit_log</code>, GDPR/DPIA) — teprve tam reálná CV.</p>
   </div>
 
   <h2 class="section">Princip: odděl extrakci od hodnocení</h2>
@@ -133,21 +141,21 @@
     <div class="phase active">
       <div class="tag">F0</div>
       <div class="body"><h3>Benchmark detekce (gate, bez infrastruktury)</h3>
-        <p><strong>Detektor v2 hotový</strong> (kontrast, Unicode, visible/hidden split, lidské popisy), regresní sada 14/14, živě na Cloudflare — DOCX i PDF (Workers AI). <strong>Hraniční PDF vektory změřeny</strong> (CID/Identity-H, ToUnicode obfuskace, XFA, JS, render mode 3 …) na edge i on-prem → <a href="docs/PDF-BOUNDARY-MATRIX.md">coverage matice</a>: napříč oběma vrstvami neprojde žádný nezachycen. Zbývá held-out sada + externí red-team + kalibrace prahů.</p></div>
+        <p><strong>Detektor v2 hotový</strong> (kontrast, Unicode, visible/hidden split, lidské popisy), regresní sada <strong>24/24</strong> (DOCX 14 + PDF 10 on-prem), živě na Cloudflare — DOCX i PDF (Workers AI). <strong>Hraniční PDF vektory změřeny</strong> (CID/Identity-H, ToUnicode obfuskace, XFA, JS, render mode 3 …) na edge i on-prem → <a href="docs/PDF-BOUNDARY-MATRIX.md">coverage matice</a>: napříč oběma vrstvami neprojde žádný nezachycen; <strong>V-PDF-06 (ToUnicode) uzavřen on-prem i edge</strong> (glyf↔ToUnicode → hidden_text). Zbývá held-out sada + externí red-team + kalibrace prahů + render→OCR dual-path.</p></div>
       <span class="st gate">GATE · aktivní</span>
     </div>
-    <div class="phase"><div class="tag">F1</div>
-      <div class="body"><h3>Pipeline skeleton</h3>
-        <p>Email Worker → R2/D1 → sanitizace + dual-path → LLM#1 extrakce → validace → uložení (identity/qualification/sensitive odděleně).</p></div>
-      <span class="st plan">plánováno</span></div>
-    <div class="phase"><div class="tag">F2</div>
+    <div class="phase active"><div class="tag">F1</div>
+      <div class="body"><h3>Pipeline extrakce → validace</h3>
+        <p><strong>V edge demu živě:</strong> upload dávky → <code>detect</code> (visible/hidden split + flagy) → <strong>LLM #1</strong> extrakce do pevného schématu (jen viditelný text) → validace kódem. <strong>Zbývá pro produkt (Track B):</strong> e-mail ingest, R2/D1 perzistence dávek.</p></div>
+      <span class="st live">🟢 prototyp v appce</span></div>
+    <div class="phase active"><div class="tag">F2</div>
       <div class="body"><h3>Review UI personalisty</h3>
-        <p>Skóre, důvody, zdrojové pasáže, flagy. Ruční korekce s auditní stopou. Human-in-the-loop.</p></div>
-      <span class="st plan">plánováno</span></div>
-    <div class="phase"><div class="tag">F3</div>
+        <p><strong>V edge demu živě:</strong> ranking se skóre, rozpad po kritériích, kontakty, nálezy skrytého obsahu, evidence kotvy z viditelného textu. <strong>Zbývá:</strong> <code>audit_log</code> / decisions (Track B).</p></div>
+      <span class="st live">🟢 prototyp v appce</span></div>
+    <div class="phase active"><div class="tag">F3</div>
       <div class="body"><h3>Deterministický rubrik + skórování</h3>
-        <p>Kritéria s vahami, must-have gates, breakdown s evidence, tabulka decisions.</p></div>
-      <span class="st plan">plánováno</span></div>
+        <p><strong>V edge demu živě:</strong> <code>rubric.ts</code> — váhy, must-have gates (default vypnuté), breakdown s evidence, požadavky z inzerátu (LLM), přepočet bez AI. <strong>Zbývá:</strong> kalibrace vah proti historickým rozhodnutím personalisty.</p></div>
+      <span class="st live">🟢 prototyp v appce</span></div>
     <div class="phase"><div class="tag">F4</div>
       <div class="body"><h3>AI Act dokumentace + zpevnění na produkt</h3>
         <p>Technická dokumentace (Annex IV), DPIA, návrh lidského dohledu, red-team/pen-test.</p></div>
@@ -175,9 +183,9 @@
 
   <h2 class="section">Vyzkoušej &amp; čti dál</h2>
   <div class="card">
-    <p style="margin:0 0 8px"><strong>🌐 Živě na Cloudflare:</strong> <a href="https://faxx-hr-upload.bass443.workers.dev">faxx-hr-upload.bass443.workers.dev</a> — přetáhni PDF/DOCX v prohlížeči, detekce skrytého textu běží ve Workeru (F0).</p>
+    <p style="margin:0 0 8px"><strong>🌐 Hodnoticí appka (živě):</strong> <a href="https://faxx-hr-app.bass443.workers.dev">faxx-hr-app.bass443.workers.dev</a> — dávka CV → ranking proti inzerátu · <strong>Demo detektoru (živě):</strong> <a href="https://faxx-hr-upload.bass443.workers.dev">faxx-hr-upload.bass443.workers.dev</a> — přetáhni PDF/DOCX a uvidíš skrytý text.</p>
     <p style="margin:0 0 8px"><strong>Demo detektoru (bez závislostí):</strong> <code>python detector/demo.py</code> — vytvoří otrávené CV a odhalí skrytou injection.</p>
-    <p style="margin:0 0 8px"><strong>Regresní sada (14/14):</strong> <code>python detector/test_vectors.py</code> — 9 útoků + 5 false-positive kontrol (grafická CV, benigní Word metadata).</p>
+    <p style="margin:0 0 8px"><strong>Regresní sada (24/24):</strong> <code>python detector/test_vectors.py</code> — DOCX 14 (9 útoků + 5 FP kontrol) + PDF 10 on-prem (vyžaduje PyMuPDF).</p>
     <p style="margin:0 0 8px"><strong>Boundary matice (edge vs. on-prem):</strong> <code>python detector/boundary_matrix.py</code> — prožene 11 hraničních PDF vektorů lokálním detektorem i živým Workerem → <a href="docs/PDF-BOUNDARY-MATRIX.md">docs/PDF-BOUNDARY-MATRIX.md</a>.</p>
     <p style="margin:0 0 8px"><strong>Demo UI personalisty:</strong> otevři <a href="ui/index.html">ui/index.html</a> v prohlížeči — ukázková obrazovka hodnocení se skóre, důvody a bezpečnostním flagem.</p>
     <p style="margin:0"><strong>Plný návrh:</strong> <a href="DESIGN.md">DESIGN.md</a> · <a href="docs/AI-ACT.md">docs/AI-ACT.md</a> · <a href="docs/THREAT-MODEL.md">docs/THREAT-MODEL.md</a> · deník <a href="HANDOFF.md">HANDOFF.md</a></p>
@@ -190,7 +198,7 @@
   </div>
 
   <footer>
-    <span>faxx-hr · návrh v0.2 · detektor v2 · boundary matice · 2026-08-02</span>
+    <span>faxx-hr · edge demo živě · detektor v2 (24/24) · V-PDF-06 uzavřen · 2026-08-04</span>
     <span>Sdílí extraction jádro s <a href="https://github.com/Anamax443/faxx-dox">faxx-dox</a> · cíl: bezpečné HR hodnocení pod AI Act</span>
   </footer>
 

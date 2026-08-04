@@ -41,6 +41,13 @@ a **zastavit** jakýkoli reálný nábor na edge verzi.
 
 ## 1. Bezpečnost: „chráníme verdikt, ne fakta" — ✅ přijato (klíčový reframe)
 
+> **AKTUALIZACE (2026-08-04):** ToUnicode sub-třída tohoto vektoru (**V-PDF-06**) je od té doby
+> **uzavřena on-prem i na edge** glyf↔ToUnicode diffem (payload → `hidden_text`,
+> `critical:pdf_tounicode_mismatch`, stripnut z `visible_text`; embedované/subset fonty se přeskočí
+> → 0 FP; regrese 24/24). Text níže zachovává původní argument oponentury; „navržená, nepostavená
+> mitigace" se dnes týká už jen **plného render→OCR dual-path** pro display-divergenci MIMO ToUnicode
+> (render mode, off-page) — ten zůstává P0 a čeká na OCR engine.
+
 **Námitka (oba posudky):** invariant „injection nemá kam zapsat verdikt" je pravdivý
 doslovně, ale útočník má kam zapsat **vstupní fakta** verdiktu (`skills`, `seniority`).
 Skrytým textem (zejména **ToUnicode obfuskace, V-PDF-06**) lze zobrazit „Junior", ale do
