@@ -2,6 +2,17 @@
 
 Append-only. Nejnovější záznam nahoru. Slouží k pokračování z jiného počítače / po pauze.
 
+## 2026-08-04 (m) — dokumentace pro oponenturu (~100 stran, CZ, docs/oponentura/)
+- Nová složka [`docs/oponentura/`](docs/oponentura/): technicko-regulatorní dokumentace pro
+  kritického oponenta — **README (index) + 17 kapitol, ~48 600 slov ≈ ~101 stran**, česky.
+  Kapitoly: úvod/shrnutí, problém/hrozba, cíle/scope, princip, architektura, detekce, extrakce,
+  rubrik, threat model, regulatorika (AI Act+GDPR), implementace, validace, náklady, omezení,
+  roadmapa, anticipované námitky/diskuse, přílohy.
+- Psáno paralelně 9 subagenty se sdíleným faktickým briefem (kvůli konzistenci); poctivě o limitech
+  (held-out sada chybí, DPIA/Annex IV zbývá, Claude bez klíče, D1 nezapojená). **Bez tajností**
+  (ověřeno: 0× account_id/klíč/heslo/token) — jde do public repa. Registr: „ne právní stanovisko".
+- Navazuje na původní ~60str. oponenturu záměru (ta byla mimo repo); tahle je v repu a k aktuálnímu stavu.
+
 ## 2026-08-04 (l) — per-dokument cache extrakce (reálná úspora tokenů) + 2 opravy chyb
 - **DVĚ CHYBY v už nasazeném kódu opraveny:**
   1. `rankResults` zahazoval `breakdown[].evidence` → evidence kotvy se NEdostávaly ke klientovi
