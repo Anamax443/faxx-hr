@@ -102,7 +102,8 @@ function criterionScore(c: Criterion, q: Qualification): { score: number; detail
   switch (c.type) {
     case "numeric_scale": {
       const raw = getField(q, "years_total_experience");
-      const v = isNum(raw) ? raw : 0;
+      if (!isNum(raw)) return { score: 5, detail: "roky praxe v CV neuvedeny → neutrální 5/10 (nepenalizuje se)" };
+      const v = raw;
       const min = c.min ?? 0, max = c.max ?? 10;
       const s = clamp01(max > min ? (v - min) / (max - min) : 0) * 10;
       return { score: s, detail: `${v} (škála ${min}–${max}) → ${s.toFixed(1)}/10` };
@@ -155,7 +156,8 @@ export function scoreCandidate(q: Qualification, rubric: Rubric): ScoreResult {
   const gates: GateResult[] = rubric.gates.map((g) => {
     const raw = getField(q, g.field);
     const v = isNum(raw) ? raw : null;
-    const passed = v != null && gateEval(v, g.op, g.value);
+    // Neznámý údaj NEDISKVALIFIKUJE (benefit of the doubt) — vyřadí jen když reálně víme, že je pod limitem.
+    const passed = v == null ? true : gateEval(v, g.op, g.value);
     return { key: g.key, passed, reason: g.reason, value: v };
   });
   const disqualified = gates.some((g) => !g.passed);

@@ -57,15 +57,16 @@ function buildRubric(r: Requirements): Rubric {
 const DERIVE_SYS = 'Jsi HR asistent. Z textu pracovního inzerátu vytáhni strukturované požadavky a vrať VÝHRADNĚ JSON: {"jobTitle": string, "minYears": number, "requiredSkills": [string]}. minYears = minimální požadované roky praxe jako číslo (0 když neuvedeno). requiredSkills = klíčové technické dovednosti/technologie malými písmeny, 3 až 8 položek. Bez markdownu, bez komentářů.';
 const DERIVE_SCHEMA = { type: "object", properties: { jobTitle: { type: "string" }, minYears: { type: "number" }, requiredSkills: { type: "array", items: { type: "string" } } }, required: ["jobTitle", "minYears", "requiredSkills"] };
 
-async function deriveRequirements(inzerat: string, ai: AiBinding, model: string): Promise<{ req: Requirements; ok: boolean; ms: number; error?: string }> {
+async function deriveRequirements(inzerat: string, ai: AiBinding, model: string): Promise<{ req: Requirements; requestedYears: number; ok: boolean; ms: number; error?: string }> {
   const r = await aiJson(ai, model, [{ role: "system", content: DERIVE_SYS }, { role: "user", content: inzerat.slice(0, 8000) }], DERIVE_SCHEMA);
   const o = obj(r.obj);
+  const requestedYears = Math.max(0, Math.round(num(o.minYears)));
   const req: Requirements = {
     jobTitle: str(o.jobTitle) || "Pozice",
-    minYears: Math.max(0, Math.round(num(o.minYears))),
+    minYears: 0, // gate (tvrdé vyřazení) defaultně VYPNUTÝ — roky se z CV spolehlivě nevytáhnou, nepenalizovat
     requiredSkills: arr(o.requiredSkills).map((s) => str(s).toLowerCase().trim()).filter(Boolean).slice(0, 12),
   };
-  return { req, ok: r.ok, ms: r.ms, error: r.error };
+  return { req, requestedYears, ok: r.ok, ms: r.ms, error: r.error };
 }
 
 function worstSeverity(flags: { severity: string }[]): string {
@@ -290,7 +291,7 @@ export default {
         if (!inzerat) return json({ error: "chybí text inzerátu" }, 400);
         if (model.startsWith("claude")) return json({ error: "Claude backend vyžaduje API klíč (zatím není nastaven). Zvol free Cloudflare model." }, 400);
         const d = await deriveRequirements(inzerat, env.AI, model);
-        return json({ ...d.req, ok: d.ok, ms: d.ms, error: d.error });
+        return json({ ...d.req, requestedYears: d.requestedYears, ok: d.ok, ms: d.ms, error: d.error });
       } catch (e: unknown) { return json({ error: String((e as { message?: string })?.message || e) }, 500); }
     }
 
@@ -520,7 +521,7 @@ a{color:var(--accent)}
     </div>
     <label>Klíčové dovednosti (oddělené čárkou)</label>
     <input type="text" id="skills" placeholder="python, sql, git, docker, rest api">
-    <div class="hint">Gate = tvrdý požadavek: kdo ho nesplní, je diskvalifikován (nezamítá se automaticky — jen se označí).</div>
+    <div class="hint">Gate (min. roky praxe) = tvrdé vyřazení. <b>Výchozí 0 = vypnuto.</b> Roky se z CV spolehlivě nevytáhnou (málokdo píše „celkem X let"), proto se defaultně nepenalizují — počítají se jen jako jedno z kritérií. Zadej číslo jen když chceš tvrdý limit; kdo má roky neznámé, se ani pak nediskvalifikuje (rozhodne se dle ostatních kritérií).</div>
   </div>
   <div class="card">
     <h3>3 · Životopisy</h3>
@@ -801,7 +802,9 @@ $('#deriveBtn').onclick=async()=>{
   try{
     const r=await fetch('/api/derive',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({inzerat:inz,model:modelDerive()})}).then(r=>r.json());
     if(r.error){$('#deriveMsg').textContent='Chyba: '+r.error}
-    else{$('#jobTitle').value=r.jobTitle||'';$('#minYears').value=r.minYears||0;$('#skills').value=(r.requiredSkills||[]).join(', ');$('#deriveMsg').textContent='Hotovo ('+(r.ms||0)+' ms) — uprav podle sebe.'}
+    else{$('#jobTitle').value=r.jobTitle||'';$('#skills').value=(r.requiredSkills||[]).join(', ');$('#minYears').value=0;
+      const ry=r.requestedYears||0;
+      $('#deriveMsg').textContent='Hotovo ('+(r.ms||0)+' ms). '+(ry?'Inzerát zmiňuje ~'+ry+' let praxe, ale gate (tvrdé vyřazení) nechávám VYPNUTÝ — roky se z CV spolehlivě nečtou, tak se nepenalizují. Chceš tvrdý limit? Zadej ho do „Min. roky praxe".':'Uprav podle sebe.')}
   }catch(e){$('#deriveMsg').textContent='Chyba: '+e}
   $('#deriveBtn').disabled=false;
 };
