@@ -1054,7 +1054,7 @@ var EN={
   hint_weights:"The 0–100 score is computed by a deterministic rubric over the data the AI extracted from the CV. Weights are stored in the browser and applied at the next evaluation (they need not sum to exactly 100 % — the score is normalised). The gate (min. years of experience) is set under Requirements on the Evaluation tab.",
   h_scoreview:"Assessment display", l_scoreview:"How to display results (the score is computed the same — only the display changes)",
   opt_sv_both:"Both — dots and number (default)", opt_sv_view:"At-a-glance — dots ● ◐ ○ —, no numbers", opt_sv_num:"Numeric — score 0–100 and points",
-  hint_scoreview:"At-a-glance = the candidate profile at first sight, without false precision; \"not evidenced\" is not an average. Certainty axis: ◆ stated · ◇ inferred · · unknown. Stored in the browser.",
+  hint_scoreview:"At-a-glance = the candidate profile at first sight, without false precision; 'not evidenced' is not an average. Certainty axis: ◆ stated · ◇ inferred · · unknown. Stored in the browser.",
   h_sysprompt:"AI instructions (CV extraction)",
   l_sysprompt:"System prompt — exactly what the model is told about how to read a CV and what to extract. Edit carefully: <b>keep the schema field list</b> (identity, years_total_experience, skills…), otherwise extraction stops working.",
   sys_saved:"Stored in the browser and used when evaluating.",
