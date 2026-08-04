@@ -10,7 +10,7 @@
  * Deploy: wrangler deploy -c wrangler.app.jsonc
  */
 import { scanDocument, injectionContext, type DetectEnv } from "./detect";
-import { extractQualification, mergeQualifications, mergeIdentity, aiJson, EXTRACT_MODEL_DEFAULT, type AiBinding, type Identity } from "./extract";
+import { extractQualification, mergeQualifications, mergeIdentity, aiJson, EXTRACT_MODEL_DEFAULT, DEFAULT_EXTRACT_SYSTEM, type AiBinding, type Identity } from "./extract";
 import { scoreCandidate, rankCandidates, type Rubric, type Qualification } from "./rubric";
 
 interface Env extends DetectEnv { AI: AiBinding & DetectEnv["AI"] }
@@ -84,17 +84,27 @@ function contactsFromText(t: string): { emails: string[]; phones: string[] } {
 const IMAGE_EXTS = ["jpg", "jpeg", "png", "webp", "gif", "bmp"];
 const isImageName = (n: string) => IMAGE_EXTS.includes((n.split(".").pop() || "").toLowerCase());
 const VISION_MODEL = "@cf/llava-hf/llava-1.5-7b-hf";
+const mimeFromName = (n: string) => { const e = (n.split(".").pop() || "").toLowerCase(); return e === "png" ? "image/png" : e === "webp" ? "image/webp" : e === "gif" ? "image/gif" : e === "bmp" ? "image/bmp" : "image/jpeg"; };
 
-async function visionText(buf: Uint8Array, ai: AiBinding): Promise<string> {
+// OCR obrázku. Primárně Cloudflare toMarkdown (dělá skutečné OCR líp než LLaVA
+// captioning, které text jen hádá); LLaVA je slabý fallback. Vrací {text, via}.
+async function visionText(buf: Uint8Array, name: string, env: Env): Promise<{ text: string; via: string }> {
+  if (env?.AI?.toMarkdown) {
+    try {
+      const res = await env.AI.toMarkdown([{ name: name || "img.png", blob: new Blob([buf], { type: mimeFromName(name || "") }) }]);
+      let md = Array.isArray(res) ? res.map((r) => r?.data || "").join("\n") : "";
+      md = md.replace(/^#[^\n]*\n+/, "").replace(/^##\s*Metadata\s*\n(?:\s*-[^\n]*\n?)*/i, "").trim();
+      if (md.replace(/\s+/g, "").length >= 15) return { text: md, via: "cf-toMarkdown" };
+    } catch { /* zkus llava */ }
+  }
   try {
-    const r = await ai.run(VISION_MODEL, {
+    const r = await env.AI.run(VISION_MODEL, {
       image: [...buf],
-      prompt: "Přepiš do textu VEŠKERÝ text z tohoto obrázku (pracovní inzerát nebo životopis). Vrať jen přepsaný text, bez komentáře.",
+      prompt: "Transcribe ALL text visible in this image exactly as written, line by line. Output only the transcribed text, nothing else.",
       max_tokens: 1200,
     });
-    const t = typeof r === "string" ? r : (obj(r).description ?? obj(r).response ?? "");
-    return String(t || "").trim();
-  } catch { return ""; }
+    return { text: String(typeof r === "string" ? r : (obj(r).description ?? obj(r).response ?? "")).trim(), via: "llava" };
+  } catch { return { text: "", via: "none" }; }
 }
 
 interface ScanLike { visible: string; flags: { type: string; severity: string; location: string; evidence: string }[]; note: string; hiddenChars: number }
@@ -102,12 +112,12 @@ interface ScanLike { visible: string; flags: { type: string; severity: string; l
 // Jednotný sken: obrázky přes vision (OCR), ostatní přes detektor (split + flagy).
 async function scanOrVision(name: string, buf: Uint8Array, env: Env): Promise<ScanLike> {
   if (isImageName(name)) {
-    const text = await visionText(buf, env.AI);
+    const { text, via } = await visionText(buf, name, env);
     const flags: ScanLike["flags"] = [];
-    if (!text) return { visible: "", flags, note: "Obrázek: vision model nepřečetl žádný text (nekvalitní sken / screenshot?).", hiddenChars: 0 };
-    const ctx = injectionContext(text); // vision čte jen viditelné → instrukční tón = mírnější kategorie
+    if (!text) return { visible: "", flags, note: "Obrázek: OCR nepřečetlo žádný text (nekvalitní sken / screenshot?).", hiddenChars: 0 };
+    const ctx = injectionContext(text); // vision čte jen viditelné → hlásíme jen instrukce směřované na AI
     if (ctx) flags.push({ type: "visible_instruction_tone", severity: "warn", location: "obrázek (vision)", evidence: "nalezená pasáž: „" + ctx + "“" });
-    return { visible: text, flags, note: "Text přečten z obrázku přes vision (llava-1.5) — může být nepřesné.", hiddenChars: 0 };
+    return { visible: text, flags, note: `Text přečten z obrázku (OCR: ${via}) — u obrázků může být nepřesné, zkontroluj.`, hiddenChars: 0 };
   }
   const s = await scanDocument(name, buf, env);
   return { visible: s.visible, flags: s.flags, note: s.note, hiddenChars: s.hiddenChars };
@@ -136,7 +146,7 @@ export function groupByPerson(files: { name: string; buf?: Uint8Array; visible?:
 }
 
 // Zpracuje JEDNOHO kandidáta (všechny jeho dokumenty) → výsledek se skóre.
-async function scoreOne(c: CandidateInput, rubric: Rubric, ai: AiBinding, model: string, env: Env) {
+async function scoreOne(c: CandidateInput, rubric: Rubric, ai: AiBinding, model: string, env: Env, system: string) {
   let flags: { type: string; severity: string; location: string; evidence: string; doc?: string }[] = [];
   let hiddenChars = 0, extMs = 0, extOk = false, totalVisible = 0;
   const notes: string[] = [];
@@ -188,10 +198,10 @@ function rankResults(results: OneResult[], req: Requirements, model: string) {
   return { rubric: { jobTitle: req.jobTitle, minYears: req.minYears, requiredSkills: req.requiredSkills }, model, count: ranking.length, ranking };
 }
 
-async function evaluate(cands: CandidateInput[], req: Requirements, ai: AiBinding, model: string, env: Env) {
+async function evaluate(cands: CandidateInput[], req: Requirements, ai: AiBinding, model: string, env: Env, system: string) {
   const rubric = buildRubric(req);
   const results: OneResult[] = [];
-  for (const c of cands) results.push(await scoreOne(c, rubric, ai, model, env));
+  for (const c of cands) results.push(await scoreOne(c, rubric, ai, model, env, system));
   return rankResults(results, req, model);
 }
 
@@ -219,8 +229,8 @@ export default {
           return json({ text: s.visible, source: f.name, note: s.note });
         }
         if (isImageName(f.name)) {
-          const t = await visionText(buf, env.AI);
-          return json({ text: t, source: f.name, note: t ? "Text přečten z obrázku přes vision (llava-1.5) — zkontroluj přesnost." : "Vision model nepřečetl žádný text (nekvalitní screenshot?)." });
+          const { text: t, via } = await visionText(buf, f.name, env);
+          return json({ text: t, source: f.name, note: t ? `Text přečten z obrázku (OCR: ${via}) — u obrázků/screenshotů zkontroluj přesnost; pro jistotu vlož text nebo PDF/DOCX.` : "OCR nepřečetlo žádný text (nekvalitní screenshot?). Zkus text vložit ručně nebo jako PDF." });
         }
         return json({ error: "Podporováno: TXT, PDF, DOCX a obrázky (PNG/JPG přes vision)." }, 400);
       } catch (e: unknown) { return json({ error: String((e as { message?: string })?.message || e) }, 500); }
@@ -258,17 +268,20 @@ export default {
         let req0: Requirements | null = null;
         let inzerat = "";
         let model = EXTRACT_MODEL_DEFAULT;
+        let systemPrompt = "";
 
         if (ctype.includes("application/json")) {
           const b = obj(await req.json());
           model = str(b.model) || model;
           inzerat = str(b.inzerat);
+          systemPrompt = str(b.systemPrompt);
           if (b.requirements) { const r = obj(b.requirements); req0 = { jobTitle: str(r.jobTitle), minYears: Math.max(0, Math.round(num(r.minYears))), requiredSkills: arr(r.requiredSkills).map((s) => str(s).toLowerCase().trim()).filter(Boolean), weights: obj(r.weights) as Record<string, number> }; }
           for (const c of arr(b.candidates)) { const o = obj(c); files.push({ name: str(o.name) || "kandidát", visible: str(o.visible_text) }); }
         } else {
           const form = await req.formData();
           model = str(form.get("model")) || model;
           inzerat = str(form.get("inzerat"));
+          systemPrompt = str(form.get("systemPrompt"));
           const rq = form.get("requirements");
           if (typeof rq === "string" && rq) { const r = obj(JSON.parse(rq)); req0 = { jobTitle: str(r.jobTitle), minYears: Math.max(0, Math.round(num(r.minYears))), requiredSkills: arr(r.requiredSkills).map((s) => str(s).toLowerCase().trim()).filter(Boolean), weights: obj(r.weights) as Record<string, number> }; }
           let total = 0;
@@ -304,7 +317,7 @@ export default {
               await send({ type: "start", total: cands.length, names: cands.map((c) => c.name), model });
               const results: OneResult[] = [];
               for (let i = 0; i < cands.length; i++) {
-                const r = await scoreOne(cands[i], rubric, env.AI, model, env);
+                const r = await scoreOne(cands[i], rubric, env.AI, model, env, systemPrompt || DEFAULT_EXTRACT_SYSTEM);
                 results.push(r);
                 await send({ type: "progress", index: i + 1, total: cands.length, name: r.name, total_score: r.score.total, disqualified: r.score.disqualified, worstSeverity: r.worstSeverity, flagCount: r.flagCount, docs: r.docs.length });
               }
@@ -316,7 +329,7 @@ export default {
           return new Response(readable, { headers: { "content-type": "application/x-ndjson; charset=utf-8", "cache-control": "no-store" } });
         }
 
-        return json(await evaluate(cands, req0, env.AI, model, env));
+        return json(await evaluate(cands, req0, env.AI, model, env, systemPrompt || DEFAULT_EXTRACT_SYSTEM));
       } catch (e: unknown) { return json({ error: String((e as { message?: string })?.message || e) }, 500); }
     }
 
@@ -489,6 +502,12 @@ a{color:var(--accent)}
     <div class="hint" id="wSum">Součet: 100 %</div>
     <button class="ghost" id="wReset" style="margin-top:10px">Obnovit výchozí</button>
     <div class="hint" style="margin-top:8px">Skóre 0–100 počítá deterministický rubrik nad daty, která z CV vytáhla AI. Váhy se ukládají v prohlížeči a použijí se při dalším vyhodnocení (nemusí dát dohromady přesně 100 % — skóre se normalizuje). Gate (min. roky praxe) nastavíš u požadavků na záložce Hodnocení.</div>
+  </div>
+  <div class="card">
+    <h3>Instrukce pro AI (extrakce z CV)</h3>
+    <label>Systémový prompt — přesně to, co se říká modelu, jak číst CV a co vytáhnout. Uprav opatrně: <b>zachovej seznam polí schématu</b> (identity, years_total_experience, skills…), jinak přestane extrakce fungovat.</label>
+    <textarea id="sysPrompt" style="min-height:240px;font-family:ui-monospace,Consolas,monospace;font-size:12px"></textarea>
+    <div style="margin-top:8px"><button class="ghost" id="sysReset">Obnovit výchozí</button> <span class="hint" id="sysMsg">Ukládá se v prohlížeči a použije se při vyhodnocení.</span></div>
   </div>
 </div>
 
@@ -663,6 +682,12 @@ function wSum(){const o=getWeights();$('#wSum').textContent='Součet: '+WKEYS.re
 function saveWeights(){localStorage.setItem('faxx_weights',JSON.stringify(getWeights()));wSum()}
 (function(){const s=JSON.parse(localStorage.getItem('faxx_weights')||'null')||WDEF;WKEYS.forEach(k=>{$('#w_'+k).value=s[k]??WDEF[k];$('#w_'+k).oninput=saveWeights});wSum()})();
 $('#wReset').onclick=()=>{WKEYS.forEach(k=>$('#w_'+k).value=WDEF[k]);saveWeights()};
+// editovatelný systémový prompt pro extrakci (instrukce pro AI)
+const DEFAULT_SYS=${JSON.stringify(DEFAULT_EXTRACT_SYSTEM)};
+const sysTa=$('#sysPrompt');
+if(sysTa){sysTa.value=localStorage.getItem('faxx_sys')||DEFAULT_SYS;sysTa.oninput=()=>localStorage.setItem('faxx_sys',sysTa.value);
+  $('#sysReset').onclick=()=>{sysTa.value=DEFAULT_SYS;localStorage.setItem('faxx_sys',DEFAULT_SYS);$('#sysMsg').textContent='Obnoveno na výchozí.'};}
+function getSysPrompt(){return localStorage.getItem('faxx_sys')||DEFAULT_SYS}
 // files
 let files=[];
 const drop=$('#drop'),fileInput=$('#file');
@@ -723,7 +748,7 @@ $('#evalBtn').onclick=async()=>{
   $('#err').textContent='';
   if(!files.length){$('#err').textContent='Přidej aspoň jedno CV.';return}
   const req={jobTitle:$('#jobTitle').value.trim(),minYears:+$('#minYears').value||0,requiredSkills:$('#skills').value.split(',').map(s=>s.trim().toLowerCase()).filter(Boolean),weights:getWeights()};
-  const fd=new FormData();fd.set('model',model());fd.set('requirements',JSON.stringify(req));fd.set('inzerat',$('#inzerat').value);
+  const fd=new FormData();fd.set('model',model());fd.set('requirements',JSON.stringify(req));fd.set('inzerat',$('#inzerat').value);fd.set('systemPrompt',getSysPrompt());
   for(const f of files)fd.append('cv',f);
   $('#evalBtn').disabled=true;$('#evalMsg').textContent='';
   try{ await evaluateStream(fd); }catch(e){ $('#err').textContent='Chyba: '+e }

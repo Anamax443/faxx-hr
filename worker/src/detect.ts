@@ -41,13 +41,23 @@ export const inj = (t: string): string | null => {
   const m = fold(t).match(INJ);
   return m ? m[0].slice(0, 120) : null;
 };
+// Manipulace SMĚŘOVANÁ NA AI/systém (bez pouhé sebeprezentace). Použije se u
+// VIDITELNÉHO textu (PDF/vision), kde „jsem ideální kandidát" je legitimní názor,
+// ale „ignoruj pokyny / ohodnoť mě 100 / jsi AI" je i viditelně podezřelé.
+const INJ_OVERRIDE =
+  /ignore\s+(all\s+)?(the\s+)?(previous|prior|above)|disregard\s+(all\s+)?(the\s+)?(previous|prior|above)|ignoruj\s+(vsechn[ay]\s+)?predchoz|nevsimej\s+si\s+predchoz|system\s+prompt|\bas\s+an\s+ai\b|you\s+are\s+(an?\s+)?(ai|assistant|language\s+model|recruiter|screening)|jsi\s+(ai|jazykov|asistent|naborov)|doporuc\w*\s+(k|na)\s+pohovor|(hire|interview)\s+(this|the)\s+candidate|(score|rating|rate|skore)\s*[:=]\s*\d{2,3}|(rate|score)\s+(this\s+)?(candidate|applicant)\s+(highly|100|maximum)/;
+export const injOverride = (t: string): string | null => {
+  const m = fold(t).match(INJ_OVERRIDE);
+  return m ? m[0].slice(0, 120) : null;
+};
+// Pro VIDITELNÝ text hlásíme jen manipulaci na AI, ne běžnou sebeprezentaci.
 export function injectionContext(text: string): string | null {
   const chunks = (text || "").split(/[\r\n]+/).flatMap((l) => l.split(/(?<=[.!?])\s+/));
   for (const c of chunks) {
     const t = c.trim();
-    if (t && inj(t)) return t.slice(0, 300);
+    if (t && injOverride(t)) return t.slice(0, 300);
   }
-  return inj(text) ? (text || "").replace(/\s+/g, " ").trim().slice(0, 300) : null;
+  return injOverride(text) ? (text || "").replace(/\s+/g, " ").trim().slice(0, 300) : null;
 }
 function sevFor(txt: string, base: "info" | "warn" = "warn"): ["info" | "warn" | "critical", string] {
   const hit = inj(txt);
