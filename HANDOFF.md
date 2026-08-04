@@ -2,6 +2,18 @@
 
 Append-only. Nejnovější záznam nahoru. Slouží k pokračování z jiného počítače / po pauze.
 
+## 2026-08-04 (w) — pohledové hodnocení napojené do appky (Nastavení + UI + tisk)
+- **Nastavení → „Zobrazení hodnocení"** (`#scoreView`, `faxx_scoreview`, default `both`): Pohledové /
+  Číselné / Obojí; ukládá se v prohlížeči jako jazyk/motiv, přepnutí přerenderuje výsledky (bez AI).
+- **Klientské zrcadlo `view.ts`** v `app.ts` (`cView`/`cCert`/`critCell`/`profileStrip`): rozpad kritérií
+  ukazuje `● silná / ◐ částečná / ○ slabá / — nedoloženo` + osu jistoty `◆ doloženo / ◇ odvozeno / · nevíme`.
+  Režim `view` = glyfy bez čísel, `num` = čísla, `both` = obojí. Headline: `view` = profil (strip glyfů),
+  jinak číslo (+strip u `both`). **Honesty: neznámé se NEtváří jako 5.0/10** (i v číselném režimu → „nedoloženo").
+- **Tiskový doklad `buildReport`** respektuje týž režim (glyfy i v tisku + print CSS pro barvy tónů).
+- Ověřeno izolovaně (klientský JS esbuild NEvaliduje): scratchpad test 3 režimy + EN + XSS escaping **11/11**;
+  worker se kompiluje (200,8 KiB). **Skóre/pořadí nedotčené** — mění se jen zobrazení.
+- Zbývá: CEFR `level_raw` → basis „odvozeno" u jazyka (napojení `reference/cefr.ts`); zarovnaná dávková matice (polish).
+
 ## 2026-08-04 (v) — referenční vrstva: CEFR normalizér (junior HR podle citovaného standardu)
 - Nový adresář [`reference/`](reference/) (README CS+EN): koncept „AI předchroustá podle veřejného
   standardu, senior rozhodne"; princip **deterministická reference, NE dump do promptu LLM** (drží

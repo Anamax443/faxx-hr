@@ -533,6 +533,8 @@ button:disabled{opacity:.5;cursor:not-allowed}
 .badge.info{color:var(--blue);background:rgba(90,169,240,.12)}
 .badge.clean{color:var(--accent);background:rgba(63,214,160,.12)}
 .badge.dq{color:var(--red);background:rgba(240,85,107,.14)}
+.gs{font-weight:700;font-size:14px}.gs.good{color:var(--accent)}.gs.mid{color:var(--amber)}.gs.bad{color:var(--red)}.gs.muted{color:var(--muted)}
+.cert{color:var(--muted);font-size:11px;white-space:nowrap}.prof{letter-spacing:1px}
 .det{background:var(--panel2);border-radius:8px;padding:10px 12px;margin-top:8px;font-size:13px;display:none}
 .det.on{display:block}
 .det .crit{margin:3px 0;color:var(--muted)}.det .crit b{color:var(--txt)}
@@ -691,6 +693,16 @@ a{color:var(--accent)}
     <div class="hint" data-i18n="hint_criton">Odškrtnuté kritérium se do skóre nezapočítá (vyřadíš ho z rubriku). Vypnutí/zapnutí přepočítá výsledky bez AI.</div>
     <button class="ghost" id="wReset" style="margin-top:10px" data-i18n="b_reset">Obnovit výchozí</button>
     <div class="hint" style="margin-top:8px" data-i18n="hint_weights">Skóre 0–100 počítá deterministický rubrik nad daty, která z CV vytáhla AI. Váhy se ukládají v prohlížeči a použijí se při dalším vyhodnocení (nemusí dát dohromady přesně 100 % — skóre se normalizuje). Gate (min. roky praxe) nastavíš u požadavků na záložce Hodnocení.</div>
+  </div>
+  <div class="card">
+    <h3 data-i18n="h_scoreview">Zobrazení hodnocení</h3>
+    <label data-i18n="l_scoreview">Jak zobrazovat výsledky (skóre se počítá stejně — mění se jen zobrazení)</label>
+    <select id="scoreView">
+      <option value="both" data-i18n="opt_sv_both">Obojí — kolečka i číslo (výchozí)</option>
+      <option value="view" data-i18n="opt_sv_view">Pohledové — kolečka ● ◐ ○ —, bez čísel</option>
+      <option value="num" data-i18n="opt_sv_num">Číselné — skóre 0–100 a body</option>
+    </select>
+    <div class="hint" data-i18n="hint_scoreview">Pohledové = profil kandidáta na první pohled, bez falešné přesnosti; „nedoloženo" není průměr. Osa jistoty: ◆ doloženo · ◇ odvozeno · · nevíme. Ukládá se v prohlížeči.</div>
   </div>
   <div class="card">
     <h3 data-i18n="h_sysprompt">Instrukce pro AI (extrakce z CV)</h3>
@@ -996,6 +1008,20 @@ function esc(s){return (s||'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':
 // ===== i18n + motiv =======================================================
 var LANG=document.documentElement.getAttribute('data-lang')||'cs';
 var THEME=document.documentElement.getAttribute('data-theme')||'dark';
+// --- pohledové hodnocení (klientské zrcadlo worker/src/view.ts) ---
+var VIEWMODE=(function(){try{return localStorage.getItem('faxx_scoreview')||'both'}catch(e){return 'both'}})();
+function cView(score,known){var st=!known?'unknown':score>=7.5?'strong':score>=4?'partial':'weak';
+  var M={strong:{g:'●',t:'good',cs:'silná',en:'strong'},partial:{g:'◐',t:'mid',cs:'částečná',en:'partial'},weak:{g:'○',t:'bad',cs:'slabá',en:'weak'},unknown:{g:'—',t:'muted',cs:'nedoloženo',en:'not evidenced'}};
+  var m=M[st];return{state:st,glyph:m.g,tone:m.t,label:tl(m.cs,m.en)}}
+function cCert(basis){var C={stated:{g:'◆',cs:'doloženo',en:'stated'},inferred:{g:'◇',cs:'odvozeno',en:'inferred'},unknown:{g:'·',cs:'nevíme',en:'unknown'}};var m=C[basis]||C.unknown;return{glyph:m.g,label:tl(m.cs,m.en)}}
+function critCell(b){var known=b.known!==false;var v=cView(b.score,known),c=cCert(b.basis||(known?'stated':'unknown'));
+  var g='<span class="gs '+v.tone+'">'+v.glyph+'</span> '+v.label;
+  var num=known?(b.score||0).toFixed(1)+'/10':tl('nedoloženo','not evidenced');
+  var cert=' <span class="cert">'+c.glyph+' '+c.label+'</span>';
+  if(VIEWMODE==='num')return num+cert;
+  if(VIEWMODE==='view')return g+cert;
+  return g+' · '+num+cert}
+function profileStrip(c){return (c.breakdown||[]).map(function(b){var known=b.known!==false;var v=cView(b.score,known);return '<span class="gs '+v.tone+'" title="'+esc(b.label)+': '+v.label+'">'+v.glyph+'</span>'}).join(' ')}
 function tl(cs,en){return LANG==='en'?en:cs} // inline pro JS-generované řetezce
 // anglické překlady statického UI (čeština je SSR default; přepínač se vrací na cache)
 var EN={
@@ -1024,6 +1050,9 @@ var EN={
   h_weights:"Criterion weights", w_roky_praxe:"Years of experience (%)", w_dovednosti:"Skill match (%)", w_vzdelani:"Education (%)",
   w_en:"English (%)", w_stabilita:"Stability (%)", w_certifikace:"Certifications (%)", b_reset:"Reset to default",
   hint_weights:"The 0–100 score is computed by a deterministic rubric over the data the AI extracted from the CV. Weights are stored in the browser and applied at the next evaluation (they need not sum to exactly 100 % — the score is normalised). The gate (min. years of experience) is set under Requirements on the Evaluation tab.",
+  h_scoreview:"Assessment display", l_scoreview:"How to display results (the score is computed the same — only the display changes)",
+  opt_sv_both:"Both — dots and number (default)", opt_sv_view:"At-a-glance — dots ● ◐ ○ —, no numbers", opt_sv_num:"Numeric — score 0–100 and points",
+  hint_scoreview:"At-a-glance = the candidate profile at first sight, without false precision; \"not evidenced\" is not an average. Certainty axis: ◆ stated · ◇ inferred · · unknown. Stored in the browser.",
   h_sysprompt:"AI instructions (CV extraction)",
   l_sysprompt:"System prompt — exactly what the model is told about how to read a CV and what to extract. Edit carefully: <b>keep the schema field list</b> (identity, years_total_experience, skills…), otherwise extraction stops working.",
   sys_saved:"Stored in the browser and used when evaluating.",
@@ -1189,6 +1218,7 @@ function getSysPrompt(){return localStorage.getItem('faxx_sys')||DEFAULT_SYS}
 // filtr ne-uchazečských dokumentů (překreslí bez nového vyhodnocení) + cache pro přepočet bez AI
 const hideNonCand=$('#hideNonCand');
 if(hideNonCand){hideNonCand.checked=localStorage.getItem('faxx_hidenoncand')!=='0';hideNonCand.onchange=()=>{localStorage.setItem('faxx_hidenoncand',hideNonCand.checked?'1':'0');if(lastResult)renderResults(lastResult)}}
+var svSel=$('#scoreView');if(svSel){svSel.value=VIEWMODE;svSel.onchange=function(){VIEWMODE=svSel.value;try{localStorage.setItem('faxx_scoreview',VIEWMODE)}catch(e){}if(lastResult)renderResults(lastResult)}}
 let lastEval=null,curSig='';
 function evalSig(){return files.map(f=>f.name+':'+f.size).join('|')+'::'+model()+'::'+visionMethod()+'::'+getSysPrompt()}
 // per-dokument cache extrakce (šetří tokeny): už extrahované soubory se přeskočí, extrahují se jen nové.
@@ -1330,9 +1360,9 @@ function buildReport(r){
   const rows=list.map((c,idx)=>{
     const id=c.identity||{};
     const contact=[...(id.emails||[]),...(id.phones||[]),id.location].filter(Boolean).map(esc).join(' · ')||'—';
-    const status=c.disqualified?tl('Diskvalifikován','Disqualified'):(c.total+' / 100');
+    const status=c.disqualified?tl('Diskvalifikován','Disqualified'):(VIEWMODE==='view'?'<span class="prof">'+profileStrip(c)+'</span>':(c.total+' / 100'));
     const gate=c.disqualified?'<div class="fl">'+esc((c.gatesFailed||[]).map(g=>g.reason).join('; '))+'</div>':'';
-    const bd=(c.breakdown||[]).map(b=>esc(b.label)+' '+(b.score||0).toFixed(1)+'/10').join(' · ');
+    const bd=(c.breakdown||[]).map(b=>esc(b.label)+' '+critCell(b)).join(' · ');
     const fl=c.flagCount?'<div class="fl">'+tl('Pozor: '+c.flagCount+'× nalezen skrytý/instrukční obsah v dokumentech (detail v aplikaci).','Note: hidden/instruction content found '+c.flagCount+'× in the documents (details in the app).')+'</div>':'';
     const docs=(c.docs||[]).map(x=>esc(x.name)).join(', ');
     return '<tr class="'+(c.disqualified?'dq':'')+'"><td class="rk">'+(idx+1)+'</td><td><div class="nm">'+esc(c.name)+'</div><div class="ct">'+contact+'</div><div class="dc">'+docs+'</div></td><td class="sc">'+status+gate+'</td><td class="bd">'+bd+fl+'</td></tr>';
@@ -1361,6 +1391,7 @@ function buildReport(r){
     +'.zad{margin-bottom:18px}.zad h2{font-size:14px;margin:0 0 8px;padding-bottom:4px;border-bottom:1px solid #ccc}.zad h3{font-size:12px;margin:12px 0 4px;color:#555}'
     +'.zt{width:100%;border-collapse:collapse;margin-bottom:6px}.zt th{width:180px;text-align:left;color:#555;font-weight:600;font-size:12px;padding:3px 8px 3px 0;vertical-align:top;border:none}.zt td{padding:3px 0;border:none;font-size:12px}'
     +'.adtext{white-space:pre-wrap;background:#f7f9fc;border:1px solid #dde3ee;border-radius:6px;padding:10px 12px;font-size:12px;line-height:1.5}.adnote{color:#999;font-size:12px;font-style:italic}'
+    +'.gs{font-weight:700}.gs.good{color:#1a7f5a}.gs.mid{color:#9a6708}.gs.bad{color:#c0392b}.gs.muted{color:#999}.cert{color:#888;font-size:11px}'
     +'</style></head><body><h1>'+tl('Vyhodnocení kandidátů — ','Candidate evaluation — ')+esc(req.jobTitle||tl('pozice','position'))+'</h1>'
     +'<div class="sub">'+tl('Vygenerováno ','Generated ')+esc(now)+' · faxx-hr · '+list.length+tl(' kandidátů · model ',' candidates · model ')+esc((r.model||'').split('/').pop())+'</div>'
     +zad
@@ -1387,12 +1418,12 @@ function renderResults(r){
       +(c.identity&&((c.identity.emails||[]).length||(c.identity.phones||[]).length||c.identity.location)?'<div class="contact">'+[...(c.identity.emails||[]),...(c.identity.phones||[]),c.identity.location].filter(Boolean).map(esc).join(' · ')+'</div>':'')
       +'<div class="docs">'+(c.docs||[]).map(d=>'📄 <a class="doclink" data-fn="'+encodeURIComponent(d.name)+'" title="'+tl('otevřít dokument','open document')+'">'+esc(d.name)+'</a>'+(d.flags?' <span class="dflag">'+d.flags+'⚑</span>':'')+(d.note&&/OCR|obr[aá]zek|vision|image/i.test(d.note)?' <span class="dflag">'+tl('obrázek/vision','image/vision')+'</span>':'')).join('<br>')+'</div>'
       +'<div class="hint">'+((c.docs&&c.docs.length)||1)+tl(' dok. · extrakce ',' docs · extraction ')+c.extract_ms+tl(' ms · text ',' ms · text ')+c.visible_chars+tl(' zn.',' chars')+(c.hidden_chars?tl(' · skrytý ',' · hidden ')+c.hidden_chars+tl(' zn.',' chars'):'')+'</div></td>'
-      +'<td><span class="score">'+c.total+'</span><div class="bar"><i style="width:'+c.total+'%"></i></div></td>'
+      +'<td>'+(VIEWMODE==='view'?'<div class="prof">'+profileStrip(c)+'</div>':'<span class="score">'+c.total+'</span>'+(VIEWMODE==='both'?' <span class="prof">'+profileStrip(c)+'</span>':'')+'<div class="bar"><i style="width:'+c.total+'%"></i></div>')+'</td>'
       +'<td>'+sevB+'</td>'
       +'<td><span class="expand" data-i="'+i+'">'+tl('rozpad ▾','breakdown ▾')+'</span></td></tr>';
     h+='<tr><td colspan="5" style="padding:0"><div class="det" id="det'+i+'">'
       +(c.disqualified?'<div class="crit" style="color:var(--red)">'+tl('Diskvalifikováno: ','Disqualified: ')+esc(c.gatesFailed.map(g=>g.reason).join("; "))+'</div>':'')
-      +c.breakdown.map(b=>'<div class="crit"><b>'+esc(b.label)+':</b> '+b.score.toFixed(1)+'/10 — '+esc(b.detail)
+      +c.breakdown.map(b=>'<div class="crit"><b>'+esc(b.label)+':</b> '+critCell(b)+' — '+esc(b.detail)
         +(b.evidence&&b.evidence.length?'<div class="evd"><span class="evh">'+tl('🔎 doloženo v CV:','🔎 evidence in CV:')+'</span>'+b.evidence.map(e=>'<div class="evi"><span class="evk">'+esc(e.label)+'</span> — <span class="evt">'+esc(e.text)+'</span></div>').join('')+'</div>':'')
         +'</div>').join('')
       +(c.flags.length?'<div style="margin-top:8px;color:var(--muted);font-size:12px">'+tl('Nálezy ve zdrojových dokumentech (do hodnocení NEjdou):','Findings in the source documents (they do NOT enter scoring):')+'</div>'+c.flags.map(f=>'<div class="flg '+f.severity+'">'+(SEV[f.severity]||'')+' '+esc(f.evidence)+' <span class="hint">· '+(f.doc?'📄 '+esc(f.doc)+' · ':'')+esc(f.location)+'</span></div>').join(''):'')
