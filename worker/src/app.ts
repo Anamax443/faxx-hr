@@ -646,7 +646,8 @@ a{color:var(--accent)}
 
   <div class="card doc" id="d-skore">
     <h4>5 · Hodnocení a skóre</h4>
-    <p>Skóre 0–100 je vážený součet šesti kritérií (každé 0–10 bodů), normalizovaný podle vah. <b>Váhy si nastavíš</b> v záložce Nastavení. Před vážením se uplatní <b>gate</b> (tvrdý požadavek) z pole „min. roky praxe“ — kdo ho nesplní, je <b>diskvalifikován</b> (skóre 0, řadí se dolů; nezamítá se automaticky, jen se označí).</p>
+    <p>Skóre 0–100 je vážený součet šesti kritérií (každé 0–10 bodů), normalizovaný podle vah. <b>Váhy si nastavíš</b> v záložce Nastavení.</p>
+    <p><b>Gate (min. roky praxe) je defaultně vypnutý.</b> Roky se z CV spolehlivě nevytáhnou (málokdo píše „celkem X let"), proto se defaultně nepenalizují — neznámé roky dostanou neutrální skóre a nikoho nevyřadí. Chceš-li tvrdé vyřazení, zadej „min. roky praxe" ručně; i tak se diskvalifikuje jen ten, u koho <b>reálně víme</b>, že je pod limitem (kandidát s neznámými roky projde).</p>
     <table>
       <thead><tr><th>Kritérium</th><th>Jak se boduje</th><th>Výchozí váha</th></tr></thead>
       <tbody>
@@ -659,6 +660,7 @@ a{color:var(--accent)}
       </tbody>
     </table>
     <p>U každého kandidáta je <b>rozpad po kritériích s vysvětlením</b> (klikni na „rozpad“) — proč dostal tolik bodů, které dovednosti mu chybí atd. Skóre je tak auditovatelné a reprodukovatelné.</p>
+    <p><b>Přepočet bez AI.</b> Když změníš gate, váhy nebo dovednosti a znovu vyhodnotíš tytéž soubory, skóre se jen <b>přepočítá</b> z už načtených dat — extrakce (drahá AI) se neopakuje, je to okamžité a bez nákladů. Nová extrakce se spustí jen při změně souborů, modelu nebo instrukcí.</p>
   </div>
 
   <div class="card doc" id="d-kand">
@@ -712,6 +714,7 @@ a{color:var(--accent)}
   <div class="card doc" id="d-limit">
     <h4>11 · Omezení a poznámky</h4>
     <ul>
+      <li><b>Denní free kvóta AI.</b> Cloudflare Workers AI má zdarma limit (10 000 neuronů/den, reset o půlnoci UTC). Při vyčerpání AI přestane číst CV a appka to nahlásí (v horní liště „AI nedostupná" i červeným pruhem u výsledků) — skóre pak nejsou platná. Řešení: počkat na reset, nebo přejít na Workers Paid / Claude. Přepočet gate/vah funguje i bez AI.</li>
       <li><b>Kvalita zdarma modelu kolísá.</b> Llama 3.1 8B může u téhož CV dát mírně jiné pořadí. Pro stabilnější výsledky přepni na silnější model (a Claude, až bude klíč).</li>
       <li><b>Vision OCR není dokonalý.</b> U obrázkových CV / screenshotů může chybět či být nepřesné. Doporučeno dodávat CV jako PDF/DOCX s textovou vrstvou.</li>
       <li><b>PDF — hloubka detekce.</b> Přesné určení „proč skrytý“ (barva/render mód/XFA) běží na on-prem runneru; webová verze u PDF zachytí instrukční text v textové vrstvě.</li>

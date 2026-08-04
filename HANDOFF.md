@@ -2,6 +2,27 @@
 
 Append-only. Nejnovější záznam nahoru. Slouží k pokračování z jiného počítače / po pauze.
 
+## 2026-08-04 (e) — přepočet bez AI, filtr ne-uchazečů, gate off default, OCR úklid, kvóta
+- **Přepočet BEZ AI (`/api/rescore`).** Změna gate/vah/dovedností už NEspouští extrakci — klient pošle
+  už extrahovaná data (`rankResults` nese `qualification`) + nové požadavky, server jen znovu spustí
+  deterministický rubrik. ~130 ms, žádné tokeny. Klient přepne na rescore, když se změní JEN požadavky
+  (podpis `evalSig` = soubory + model + visionMethod + systemPrompt); změna souborů/modelu/promptu = plná extrakce.
+- **Rozpoznání druhu dokumentu.** Extrakce klasifikuje `document_type` (cv / cover_letter / job_posting /
+  other). `isCandidate` = CV/dopis NEBO osobní kontakt NEBO pracovní historie. Nastavení „Skrýt ne-uchazečské
+  dokumenty" (default ON) → nahraný inzerát / cizí soubor mezi CV se NEzobrazí (přepnutí překreslí bez
+  re-evaluace). Filtr i v manažerském výstupu. Když nejasné → bere jako CV (neschovávat reálné uchazeče).
+- **Gate defaultně VYPNUTÝ + neznámé roky nepenalizovat (HR zásada).** Roky se z CV spolehlivě nevytáhnou →
+  odvození z inzerátu už gate NEnastaví (`minYears=0`, zmíněné roky jen `requestedYears` v hlášce). rubric:
+  neznámé roky (null) = neutrální 5/10 místo 0; gate NEDISKVALIFIKUJE při neznámých rocích (jen když reálně
+  víme, že je pod limitem).
+- **OCR obrázků — úklidový průchod.** toMarkdown u obrázku vrací anglický POPIS (ne přepis) → `cleanupOcr`
+  z popisu zrekonstruuje čistý text dokumentu v původním jazyce (prompt drží češtinu, nepřekládá termíny).
+  Printscreen inzerátu tak dá čitelný český text. Best-effort — pro přesné znění vložit text / PDF/DOCX.
+- **Kvóta free AI.** Cloudflare Workers AI free = **10 000 neuronů/den** (reset UTC půlnoc). Vyčerpání →
+  `4006 ... daily free allocation` → extrakce/derive/OCR selžou. Appka to teď HLÁSÍ (lišta `/api/health`
+  + červený banner ve výsledcích s `extract_error`) místo tichých prázdných výsledků. Reálný provoz = Workers
+  Paid nebo Claude (klíč). `/api/rescore` kvótu nežere.
+
 ## 2026-08-04 (d) — appka dotažená do použitelného nástroje (velká UX vlna)
 Živě `faxx-hr-app.bass443.workers.dev` (deploy `npm run deploy:app`, otisk verze v horní liště).
 Vše postaveno kolem ověřeného jádra (detect+extract+rubric), skórování dál NIKDY nevidí surový text.
