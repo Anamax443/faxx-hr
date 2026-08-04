@@ -65,11 +65,13 @@ export interface Rubric {
 
 // --- výstup -----------------------------------------------------------------
 export interface GateResult { key: string; passed: boolean; reason: string; value: number | null }
+export interface EvidenceItem { label: string; text: string }
 export interface CriterionResult {
   key: string; label: string; weight: number;
   score: number;          // 0..10
   contribution: number;   // příspěvek do total (0..100), = weight/Σweight * score * 10
   detail: string;         // lidsky čitelná evidence, PROČ tolik bodů
+  evidence?: EvidenceItem[]; // doslovné kotvy z viditelného textu CV (ověřené, ne od modelu)
 }
 export interface ScoreResult {
   total: number;          // 0..100 (0 při diskvalifikaci)
@@ -102,7 +104,7 @@ function gateEval(v: number, op: GateOp, target: number): boolean {
 }
 
 // --- skóre jednoho kritéria (vždy 0..10) ------------------------------------
-function criterionScore(c: Criterion, q: Qualification, lang: Lang): { score: number; detail: string } {
+function criterionScore(c: Criterion, q: Qualification, lang: Lang): { score: number; detail: string; evidence?: EvidenceItem[] } {
   switch (c.type) {
     case "numeric_scale": {
       const raw = getField(q, "years_total_experience");
@@ -114,13 +116,18 @@ function criterionScore(c: Criterion, q: Qualification, lang: Lang): { score: nu
     }
     case "set_overlap": {
       const req = (c.required ?? []).map(norm);
-      const have = new Set((q.skills ?? []).map((s) => norm(s.name)));
+      const skills = q.skills ?? [];
+      const have = new Set(skills.map((s) => norm(s.name)));
       const hit = req.filter((r) => [...have].some((h) => h === r || h.includes(r) || r.includes(h)));
       const s = req.length ? (hit.length / req.length) * 10 : 0;
       const miss = req.filter((r) => !hit.includes(r));
+      // kotvy: dovednosti, které opravdu matchují požadavek A mají doslovný úryvek z CV (ověřený, ne od modelu)
+      const matchesReq = (nm: string) => { const n = norm(nm); return req.some((r) => n === r || n.includes(r) || r.includes(n)); };
+      const evidence = skills.filter((sk) => sk.evidence && matchesReq(sk.name)).map((sk) => ({ label: sk.name, text: sk.evidence as string }));
       return { score: s, detail: L(lang,
         `${hit.length}/${req.length} klíčových dovedností${miss.length ? ` (chybí: ${miss.join(", ")})` : ""}`,
-        `${hit.length}/${req.length} key skills${miss.length ? ` (missing: ${miss.join(", ")})` : ""}`) };
+        `${hit.length}/${req.length} key skills${miss.length ? ` (missing: ${miss.join(", ")})` : ""}`),
+        evidence: evidence.length ? evidence : undefined };
     }
     case "category_map": {
       const levels = (q.education ?? []).map((e) => c.map?.[norm(e.level)] ?? 0);
@@ -170,8 +177,8 @@ export function scoreCandidate(q: Qualification, rubric: Rubric, lang: Lang = "c
 
   const wsum = rubric.criteria.reduce((a, c) => a + c.weight, 0) || 1;
   const breakdown: CriterionResult[] = rubric.criteria.map((c) => {
-    const { score, detail } = criterionScore(c, q, lang);
-    return { key: c.key, label: c.label, weight: c.weight, score, contribution: (c.weight / wsum) * score * 10, detail };
+    const { score, detail, evidence } = criterionScore(c, q, lang);
+    return { key: c.key, label: c.label, weight: c.weight, score, contribution: (c.weight / wsum) * score * 10, detail, evidence };
   });
   const total = disqualified ? 0 : breakdown.reduce((a, b) => a + b.contribution, 0);
   return { total: Math.round(total * 10) / 10, disqualified, gates, breakdown };

@@ -2,6 +2,18 @@
 
 Append-only. Nejnovější záznam nahoru. Slouží k pokračování z jiného počítače / po pauze.
 
+## 2026-08-04 (h) — evidence kotvy v rozpadu (dovednosti), ověřené z textu CV
+- Rozpad kritéria **Shoda dovedností** teď u každé matchnuté dovednosti ukazuje **doslovný
+  úryvek z viditelného textu CV** („🔎 doloženo v CV"). Kotva se bere **deterministicky
+  z textu** (`snippetFor` grepne název dovednosti v `allVisible`), NIKDY od modelu → nedá se
+  halucinovat. Sedí na `qualification.skills[].evidence` → přežije export/import i přepočet bez AI.
+- `rubric.ts`: `CriterionResult.evidence?: {label,text}[]`; `set_overlap` plní z matchnutých
+  dovedností, co mají `evidence`. `extract.ts` `sanitizeQualification` už `skills[].evidence` četl.
+- Ověřeno: esbuild test `scoreCandidate` (2 kotvy Python+SQL, Git bez úryvku vypadl, prázdný→undefined),
+  jsdom render (.evd/.evi/.evk, CS/EN header), dry-run build 175 KiB. NENASAZENO (čeká svolení).
+- Pozn.: v1 jen dovednosti (30% kritérium, nejdůležitější claim). Certy/vzdělání/jazyky = follow-up
+  (certy jsou string[], evidence by chtěla rozšířit typ). Editor rubriku = navazuje (další krok).
+
 ## 2026-08-04 (g) — chudá perzistence bez DB: uložit/načíst dávku (JSON) + přepočet bez AI
 - **Uložit výsledek jako JSON** (`💾 Uložit (JSON)` ve výsledcích) a **načíst** ho zpět
   (`📂 Načíst uložený výsledek` u tlačítka Vyhodnotit) → vrátíš se k dávce **bez databáze**.

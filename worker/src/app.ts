@@ -78,6 +78,18 @@ function worstSeverity(flags: { severity: string }[]): string {
   return "clean";
 }
 
+// Evidence kotva: najde doslovný úryvek z VIDITELNÉHO textu CV kolem výskytu
+// termínu (název dovednosti). Deterministické a ověřené — text bere přímo z CV,
+// nikdy ne od modelu (ten by ho mohl halucinovat). null když se termín nenajde.
+function snippetFor(needle: string, text: string, radius = 45): string | null {
+  if (!needle || !text) return null;
+  const i = text.toLowerCase().indexOf(needle.toLowerCase());
+  if (i < 0) return null;
+  const a = Math.max(0, i - radius), b = Math.min(text.length, i + needle.length + radius);
+  const s = text.slice(a, b).replace(/\s+/g, " ").trim();
+  return (a > 0 ? "…" : "") + s + (b < text.length ? "…" : "");
+}
+
 // kontakty z textu (záloha, když je model nevytáhne) — jen pro zobrazení, ne skórování
 function contactsFromText(t: string): { emails: string[]; phones: string[] } {
   const emails = [...String(t).matchAll(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g)].map((m) => m[0]);
@@ -202,6 +214,9 @@ async function scoreOne(c: CandidateInput, rubric: Rubric, ai: AiBinding, model:
     docsMeta.push({ name: d.name, doc_type: dType, visible_chars: visible.length, hidden_chars: dhidden, flags: dflags.length, note });
   }
   const merged = mergeQualifications(quals);
+  // evidence kotvy dovedností = doslovný úryvek z viditelného textu (ověřený, ne od modelu);
+  // sedí na qualification → přežije export/import i přepočet bez AI
+  for (const sk of merged.skills ?? []) if (!sk.evidence) { const e = snippetFor(sk.name, allVisible); if (e) sk.evidence = e; }
   const identity = mergeIdentity(ids);
   const rx = contactsFromText(allVisible);          // e-maily a telefony JEN z reálného textu (model je jinak halucinuje)
   identity.emails = rx.emails; identity.phones = rx.phones;
@@ -472,6 +487,10 @@ button:disabled{opacity:.5;cursor:not-allowed}
 .det{background:var(--panel2);border-radius:8px;padding:10px 12px;margin-top:8px;font-size:13px;display:none}
 .det.on{display:block}
 .det .crit{margin:3px 0;color:var(--muted)}.det .crit b{color:var(--txt)}
+.evd{margin:4px 0 2px;padding-left:9px;border-left:2px solid var(--line)}
+.evh{color:var(--muted);font-size:11px}
+.evi{font-size:12px;color:var(--muted);margin:2px 0}
+.evk{color:var(--accent);font-weight:600}.evt{font-style:italic}
 .flg{margin-top:8px;padding:8px 10px;border-radius:7px;font-size:12px}
 .flg.critical{background:rgba(240,85,107,.09);border:1px solid #5a2430}
 .flg.warn{background:rgba(240,180,41,.08);border:1px solid #5a4a18}
@@ -699,7 +718,7 @@ a{color:var(--accent)}
         <tr><td>Relevantní certifikace</td><td>počet × body, se stropem</td><td>10 %</td></tr>
       </tbody>
     </table>
-    <p>U každého kandidáta je <b>rozpad po kritériích s vysvětlením</b> (klikni na „rozpad“) — proč dostal tolik bodů, které dovednosti mu chybí atd. Skóre je tak auditovatelné a reprodukovatelné.</p>
+    <p>U každého kandidáta je <b>rozpad po kritériích s vysvětlením</b> (klikni na „rozpad“) — proč dostal tolik bodů, které dovednosti mu chybí atd. U shody dovedností navíc uvidíš <b>doslovné kotvy z CV</b> („🔎 doloženo v CV") — kde přesně se dovednost v textu objevila. Kotvy se berou <b>přímo z viditelného textu</b>, ne od AI (nedají se tedy vymyslet). Skóre je tak auditovatelné a reprodukovatelné.</p>
     <p><b>Přepočet bez AI.</b> Když změníš gate, váhy nebo dovednosti a znovu vyhodnotíš tytéž soubory, skóre se jen <b>přepočítá</b> z už načtených dat — extrakce (drahá AI) se neopakuje, je to okamžité a bez nákladů. Nová extrakce se spustí jen při změně souborů, modelu nebo instrukcí.</p>
   </div>
 
@@ -838,7 +857,7 @@ a{color:var(--accent)}
         <tr><td>Relevant certifications</td><td>count × points, capped</td><td>10 %</td></tr>
       </tbody>
     </table>
-    <p>Each candidate has a <b>per-criterion breakdown with an explanation</b> (click "breakdown") — why they got that many points, which skills are missing, etc. The score is thus auditable and reproducible.</p>
+    <p>Each candidate has a <b>per-criterion breakdown with an explanation</b> (click "breakdown") — why they got that many points, which skills are missing, etc. For the skill match you also see <b>verbatim anchors from the CV</b> ("🔎 evidence in CV") — exactly where the skill appears in the text. The anchors are taken <b>straight from the visible text</b>, not from the AI (so they cannot be fabricated). The score is thus auditable and reproducible.</p>
     <p><b>Recompute without AI.</b> When you change the gate, weights or skills and re-evaluate the same files, the score is merely <b>recomputed</b> from the already-loaded data — extraction (the costly AI) is not repeated, it is instant and free. A new extraction runs only when files, model or instructions change.</p>
   </div>
 
@@ -1223,7 +1242,9 @@ function renderResults(r){
       +'<td><span class="expand" data-i="'+i+'">'+tl('rozpad ▾','breakdown ▾')+'</span></td></tr>';
     h+='<tr><td colspan="5" style="padding:0"><div class="det" id="det'+i+'">'
       +(c.disqualified?'<div class="crit" style="color:var(--red)">'+tl('Diskvalifikováno: ','Disqualified: ')+esc(c.gatesFailed.map(g=>g.reason).join("; "))+'</div>':'')
-      +c.breakdown.map(b=>'<div class="crit"><b>'+esc(b.label)+':</b> '+b.score.toFixed(1)+'/10 — '+esc(b.detail)+'</div>').join('')
+      +c.breakdown.map(b=>'<div class="crit"><b>'+esc(b.label)+':</b> '+b.score.toFixed(1)+'/10 — '+esc(b.detail)
+        +(b.evidence&&b.evidence.length?'<div class="evd"><span class="evh">'+tl('🔎 doloženo v CV:','🔎 evidence in CV:')+'</span>'+b.evidence.map(e=>'<div class="evi"><span class="evk">'+esc(e.label)+'</span> — <span class="evt">'+esc(e.text)+'</span></div>').join('')+'</div>':'')
+        +'</div>').join('')
       +(c.flags.length?'<div style="margin-top:8px;color:var(--muted);font-size:12px">'+tl('Nálezy ve zdrojových dokumentech (do hodnocení NEjdou):','Findings in the source documents (they do NOT enter scoring):')+'</div>'+c.flags.map(f=>'<div class="flg '+f.severity+'">'+(SEV[f.severity]||'')+' '+esc(f.evidence)+' <span class="hint">· '+(f.doc?'📄 '+esc(f.doc)+' · ':'')+esc(f.location)+'</span></div>').join(''):'')
       +(c.note?'<div class="hint" style="margin-top:6px">'+esc(c.note)+'</div>':'')
       +'</div></td></tr>';
