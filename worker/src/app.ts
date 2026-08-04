@@ -10,7 +10,7 @@
  * Deploy: wrangler deploy -c wrangler.app.jsonc
  */
 import { scanDocument, injectionContext, type DetectEnv } from "./detect";
-import { extractQualification, mergeQualifications, aiJson, EXTRACT_MODEL_DEFAULT, type AiBinding } from "./extract";
+import { extractQualification, mergeQualifications, mergeIdentity, aiJson, EXTRACT_MODEL_DEFAULT, type AiBinding, type Identity } from "./extract";
 import { scoreCandidate, rankCandidates, type Rubric, type Qualification } from "./rubric";
 
 interface Env extends DetectEnv { AI: AiBinding & DetectEnv["AI"] }
@@ -71,6 +71,13 @@ async function deriveRequirements(inzerat: string, ai: AiBinding, model: string)
 function worstSeverity(flags: { severity: string }[]): string {
   for (const s of ["critical", "warn", "info"]) if (flags.some((f) => f.severity === s)) return s;
   return "clean";
+}
+
+// kontakty z textu (záloha, když je model nevytáhne) — jen pro zobrazení, ne skórování
+function contactsFromText(t: string): { emails: string[]; phones: string[] } {
+  const emails = [...String(t).matchAll(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g)].map((m) => m[0]);
+  const phones = [...String(t).matchAll(/\+?\d[\d ()\/.\-]{7,}\d/g)].map((m) => m[0].replace(/\s+/g, " ").trim()).filter((p) => p.replace(/\D/g, "").length >= 9 && p.replace(/\D/g, "").length <= 15);
+  return { emails: [...new Set(emails)], phones: [...new Set(phones)] };
 }
 
 // --- obrázky přes vision (OCR z printscreenu / skenu) ----------------------
@@ -137,6 +144,8 @@ async function evaluate(cands: CandidateInput[], req: Requirements, ai: AiBindin
     const notes: string[] = [];
     const docsMeta: { name: string; visible_chars: number; hidden_chars: number; flags: number; note: string }[] = [];
     const quals: Qualification[] = [];
+    const ids: Identity[] = [];
+    let allVisible = "";
     for (const d of c.docs) {
       let visible = d.visible ?? "", dflags = d.flags ?? [], dhidden = d.hidden_chars ?? 0, note = d.note ?? "";
       if (d.buf) {
@@ -144,10 +153,11 @@ async function evaluate(cands: CandidateInput[], req: Requirements, ai: AiBindin
         visible = scan.visible; dflags = scan.flags; dhidden = scan.hiddenChars; note = scan.note;
       }
       totalVisible += visible.length;
+      if (visible.trim()) allVisible += visible + "\n";
       // extrakce PO DOKUMENTECH — CV spolehlivě dá roky, dopisy doplní; pak se sloučí
       if (visible.trim()) {
         const ext = await extractQualification(visible, ai, model);
-        quals.push(ext.qualification); extMs += ext.ms; extOk = extOk || ext.ok;
+        quals.push(ext.qualification); ids.push(ext.identity); extMs += ext.ms; extOk = extOk || ext.ok;
       }
       flags = flags.concat(dflags.map((f) => ({ ...f, doc: d.name })));
       hiddenChars += dhidden;
@@ -155,9 +165,14 @@ async function evaluate(cands: CandidateInput[], req: Requirements, ai: AiBindin
       docsMeta.push({ name: d.name, visible_chars: visible.length, hidden_chars: dhidden, flags: dflags.length, note });
     }
     const merged = mergeQualifications(quals);      // celkové hodnocení = sloučení dat ze všech dokumentů
+    const identity = mergeIdentity(ids);
+    const rx = contactsFromText(allVisible);         // doplň kontakty regexem, kdyby je model minul (jen zobrazení)
+    for (const e of rx.emails) if (!identity.emails.some((x) => x.toLowerCase() === e.toLowerCase())) identity.emails.push(e);
+    for (const p of rx.phones) if (!identity.phones.some((x) => x.replace(/\D/g, "") === p.replace(/\D/g, ""))) identity.phones.push(p);
+    if (!identity.full_name) identity.full_name = c.name;
     const score = scoreCandidate(merged, rubric);
     results.push({
-      name: c.name, score,
+      name: identity.full_name || c.name, identity, score,
       flags, worstSeverity: worstSeverity(flags), flagCount: flags.length,
       qualification: merged, extract_ms: extMs, extract_ok: extOk,
       docs: docsMeta, visible_chars: totalVisible, hidden_chars: hiddenChars, note: notes.join(" · "),
@@ -167,6 +182,7 @@ async function evaluate(cands: CandidateInput[], req: Requirements, ai: AiBindin
     rank: i + 1, name: r.name, total: r.score.total, disqualified: r.score.disqualified,
     gatesFailed: r.score.gates.filter((g) => !g.passed).map((g) => ({ key: g.key, reason: g.reason, value: g.value })),
     breakdown: r.score.breakdown.map((b) => ({ label: b.label, score: b.score, detail: b.detail })),
+    identity: r.identity,
     flags: r.flags, worstSeverity: r.worstSeverity, flagCount: r.flagCount, docs: r.docs,
     extract_ms: r.extract_ms, extract_ok: r.extract_ok, visible_chars: r.visible_chars, hidden_chars: r.hidden_chars, note: r.note,
   }));
@@ -280,6 +296,7 @@ export default {
 const PAGE = `<!DOCTYPE html><html lang="cs"><head><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>faxx-hr — hodnocení kandidátů</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='88'>🛡️</text></svg>">
 <style>
 :root{--bg:#0d1424;--panel:#141d33;--panel2:#1b2740;--line:#26324f;--txt:#e6edf7;
 --muted:#8da2c4;--accent:#3fd6a0;--amber:#f0b429;--red:#f0556b;--blue:#5aa9f0}
@@ -314,8 +331,12 @@ button:disabled{opacity:.5;cursor:not-allowed}
 .rank th{text-align:left;color:var(--muted);font-size:11px;text-transform:uppercase;padding:6px 8px;border-bottom:1px solid var(--line)}
 .rank td{padding:9px 8px;border-bottom:1px solid var(--line);vertical-align:top}
 .rank tr.dq{opacity:.6}
-.docs{font-size:12px;color:var(--muted);margin:3px 0 2px;line-height:1.5}
+.docs{font-size:12px;color:var(--muted);margin:3px 0 2px;line-height:1.6}
 .dflag{color:var(--amber);font-size:11px}
+.doclink{color:var(--accent);cursor:pointer;text-decoration:none;border-bottom:1px dotted}
+.doclink:hover{border-bottom-style:solid}
+.contact{font-size:12px;color:var(--blue);margin:2px 0 1px}
+#inzerat.hot{border-color:var(--accent);background:rgba(63,214,160,.05)}
 .score{font-weight:800;font-size:16px}
 .bar{height:6px;background:var(--panel2);border-radius:4px;margin-top:4px;overflow:hidden}
 .bar>i{display:block;height:100%;background:var(--accent)}
@@ -483,6 +504,12 @@ function renderFiles(){
   const t=$('#total');t.textContent='Celkem '+(tot/1048576).toFixed(2)+' MB / 10 MB · '+files.length+' souborů';
   t.classList.toggle('over',tot>10485760);
 }
+// otevření dokumentu přímo z appky (soubory jsou v prohlížeči po nahrání)
+function openDoc(fn){
+  const f=files.find(x=>x.name===fn);
+  if(!f){$('#err').textContent='Dokument „'+fn+'" už není v této relaci — nahraj ho znovu.';return}
+  const u=URL.createObjectURL(f);window.open(u,'_blank');setTimeout(()=>URL.revokeObjectURL(u),120000);
+}
 // derive requirements
 $('#deriveBtn').onclick=async()=>{
   const inz=$('#inzerat').value.trim(); if(!inz){$('#deriveMsg').textContent='Vlož nejdřív text inzerátu.';return}
@@ -512,6 +539,11 @@ $('#inzerat').addEventListener('paste',ev=>{
   ev.preventDefault();
   const f=img.getAsFile(); if(f)importInzerat(f,'printscreen (vision)');
 });
+// drag&drop souboru přímo do pole inzerátu (TXT/PDF/DOCX/obrázek)
+const inzTa=$('#inzerat');
+['dragenter','dragover'].forEach(e=>inzTa.addEventListener(e,ev=>{ev.preventDefault();ev.dataTransfer.dropEffect='copy';inzTa.classList.add('hot')}));
+['dragleave','dragend'].forEach(e=>inzTa.addEventListener(e,()=>inzTa.classList.remove('hot')));
+inzTa.addEventListener('drop',ev=>{ev.preventDefault();inzTa.classList.remove('hot');const f=ev.dataTransfer.files&&ev.dataTransfer.files[0];if(f)importInzerat(f)});
 // evaluate
 $('#evalBtn').onclick=async()=>{
   $('#err').textContent='';
@@ -528,7 +560,35 @@ $('#evalBtn').onclick=async()=>{
   $('#evalBtn').disabled=false;
 };
 const SEV={critical:'⛔',warn:'⚠️',info:'ℹ️'};
+let lastResult=null;
+// manažerský výstup optimalizovaný pro tisk (samostatný HTML dokument s kontakty)
+function buildReport(r){
+  const now=new Date().toLocaleString('cs-CZ');const req=r.rubric||{};
+  const rows=(r.ranking||[]).map(c=>{
+    const id=c.identity||{};
+    const contact=[...(id.emails||[]),...(id.phones||[]),id.location].filter(Boolean).map(esc).join(' · ')||'—';
+    const status=c.disqualified?'Diskvalifikován':(c.total+' / 100');
+    const gate=c.disqualified?'<div class="fl">'+esc((c.gatesFailed||[]).map(g=>g.reason).join('; '))+'</div>':'';
+    const bd=(c.breakdown||[]).map(b=>esc(b.label)+' '+(b.score||0).toFixed(1)+'/10').join(' · ');
+    const fl=c.flagCount?'<div class="fl">Pozor: '+c.flagCount+'× nalezen skrytý/instrukční obsah v dokumentech (detail v aplikaci).</div>':'';
+    const docs=(c.docs||[]).map(x=>esc(x.name)).join(', ');
+    return '<tr class="'+(c.disqualified?'dq':'')+'"><td class="rk">'+c.rank+'</td><td><div class="nm">'+esc(c.name)+'</div><div class="ct">'+contact+'</div><div class="dc">'+docs+'</div></td><td class="sc">'+status+gate+'</td><td class="bd">'+bd+fl+'</td></tr>';
+  }).join('');
+  return '<!DOCTYPE html><html lang=cs><head><meta charset=utf-8><title>Vyhodnocení kandidátů</title><style>'
+    +'body{font:13px/1.5 Arial,Helvetica,sans-serif;color:#111;margin:26px;background:#fff}h1{font-size:20px;margin:0 0 2px}.sub{color:#555;font-size:12px;margin:0 0 14px}'
+    +'.req{background:#f4f6fa;border:1px solid #dde3ee;border-radius:8px;padding:10px 12px;margin-bottom:16px;font-size:12px}table{width:100%;border-collapse:collapse}'
+    +'th{text-align:left;font-size:11px;color:#555;border-bottom:2px solid #333;padding:6px 8px}td{padding:9px 8px;border-bottom:1px solid #ddd;vertical-align:top}'
+    +'.rk{font-weight:700;width:26px}.nm{font-weight:700;font-size:14px}.ct{color:#0a58ca;font-size:12px}.dc{color:#999;font-size:11px;margin-top:2px}'
+    +'.sc{font-weight:700;white-space:nowrap}.bd{color:#444;font-size:12px}.fl{color:#b23030;font-size:11px;margin-top:3px}tr.dq{color:#999}tr.dq .sc{color:#b23030}'
+    +'.foot{margin-top:18px;color:#777;font-size:11px;border-top:1px solid #ddd;padding-top:8px}@media print{body{margin:12mm}}'
+    +'</style></head><body><h1>Vyhodnocení kandidátů — '+esc(req.jobTitle||'pozice')+'</h1>'
+    +'<div class="sub">Vygenerováno '+esc(now)+' · faxx-hr · '+((r.ranking||[]).length)+' kandidátů · model '+esc((r.model||'').split('/').pop())+'</div>'
+    +'<div class="req"><b>Požadavky:</b> min. '+(req.minYears||0)+' let praxe · klíčové dovednosti: '+esc((req.requiredSkills||[]).join(', '))+'</div>'
+    +'<table><thead><tr><th>#</th><th>Kandidát a kontakt</th><th>Skóre</th><th>Rozpad hodnocení</th></tr></thead><tbody>'+rows+'</tbody></table>'
+    +'<div class="foot">Rating je podpora rozhodnutí, ne automatické zamítnutí — o postupu kandidátů rozhoduje personalista (EU AI Act čl. 14, GDPR čl. 22). Skóre počítá deterministický rubrik nad daty z viditelného textu; skrytý/instrukční obsah je označen a do hodnocení nevstupuje.</div></body></html>';
+}
 function renderResults(r){
+  lastResult=r;
   let h='<div class="card"><h3>Pořadí — '+esc(r.rubric.jobTitle)+' · model '+esc(r.model.split("/").pop())+'</h3>';
   h+='<div class="hint">Gate: min. '+r.rubric.minYears+' let praxe · dovednosti: '+esc((r.rubric.requiredSkills||[]).join(", "))+'</div>';
   h+='<table class="rank"><tr><th>#</th><th>Kandidát</th><th>Skóre</th><th>Nález</th><th></th></tr>';
@@ -536,7 +596,8 @@ function renderResults(r){
     const sevB=c.disqualified?'<span class="badge dq">diskvalifikován</span>':'<span class="badge '+c.worstSeverity+'">'+(c.worstSeverity==='clean'?'čisto':(SEV[c.worstSeverity]||'')+' '+c.flagCount+'×')+'</span>';
     h+='<tr class="'+(c.disqualified?'dq':'')+'"><td>'+c.rank+'</td>'
       +'<td><b>'+esc(c.name)+'</b>'
-      +'<div class="docs">'+(c.docs||[]).map(d=>'📄 '+esc(d.name)+(d.flags?' <span class="dflag">'+d.flags+'⚑</span>':'')+(d.note&&/OCR|obr[aá]zek/i.test(d.note)?' <span class="dflag">obrázek</span>':'')).join('<br>')+'</div>'
+      +(c.identity&&((c.identity.emails||[]).length||(c.identity.phones||[]).length||c.identity.location)?'<div class="contact">'+[...(c.identity.emails||[]),...(c.identity.phones||[]),c.identity.location].filter(Boolean).map(esc).join(' · ')+'</div>':'')
+      +'<div class="docs">'+(c.docs||[]).map(d=>'📄 <a class="doclink" data-fn="'+encodeURIComponent(d.name)+'" title="otevřít dokument">'+esc(d.name)+'</a>'+(d.flags?' <span class="dflag">'+d.flags+'⚑</span>':'')+(d.note&&/OCR|obr[aá]zek|vision/i.test(d.note)?' <span class="dflag">obrázek/vision</span>':'')).join('<br>')+'</div>'
       +'<div class="hint">'+((c.docs&&c.docs.length)||1)+' dok. · extrakce '+c.extract_ms+' ms · text '+c.visible_chars+' zn.'+(c.hidden_chars?' · skrytý '+c.hidden_chars+' zn.':'')+'</div></td>'
       +'<td><span class="score">'+c.total+'</span><div class="bar"><i style="width:'+c.total+'%"></i></div></td>'
       +'<td>'+sevB+'</td>'
@@ -549,10 +610,12 @@ function renderResults(r){
       +'</div></td></tr>';
   });
   h+='</table>';
-  h+='<div style="margin-top:14px"><button class="ghost" onclick="window.print()" title="Vytiskni nebo ulož jako PDF">🖨️ Tisk / PDF</button> <button class="ghost" id="dlHtml">⬇️ Stáhnout HTML</button></div>';
+  h+='<div style="margin-top:14px"><button class="ghost" id="btnPrint" title="Manažerský výstup s kontakty, optimalizovaný pro tisk / uložení do PDF">🖨️ Manažerský výstup (tisk / PDF)</button> <button class="ghost" id="dlHtml" title="Stáhnout manažerský výstup jako HTML soubor">⬇️ Stáhnout HTML</button></div>';
   h+='<div class="hint" style="margin-top:8px">Rating je podpora rozhodnutí. Postup kandidátů dál je na tobě.</div></div>';
   $('#results').innerHTML=h;
   $$('.expand').forEach(x=>x.onclick=()=>$('#det'+x.dataset.i).classList.toggle('on'));
-  $('#dlHtml').onclick=()=>{const blob=new Blob(['<meta charset=utf-8><title>faxx-hr výsledek</title>'+$('#results').innerHTML],{type:'text/html'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='faxx-hr-hodnoceni.html';a.click()};
+  $$('.doclink').forEach(a=>a.onclick=e=>{e.preventDefault();openDoc(decodeURIComponent(a.dataset.fn))});
+  $('#btnPrint').onclick=()=>{const w=window.open('','_blank');if(!w){$('#err').textContent='Povol vyskakovací okno pro tisk.';return}w.document.write(buildReport(lastResult));w.document.close();w.focus();setTimeout(()=>{try{w.print()}catch(e){}},400)};
+  $('#dlHtml').onclick=()=>{const blob=new Blob([buildReport(lastResult)],{type:'text/html;charset=utf-8'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='faxx-hr-vyhodnoceni.html';a.click()};
 }
 </script></body></html>`;
