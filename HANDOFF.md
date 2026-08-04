@@ -2,6 +2,18 @@
 
 Append-only. Nejnovější záznam nahoru. Slouží k pokračování z jiného počítače / po pauze.
 
+## 2026-08-04 (g) — chudá perzistence bez DB: uložit/načíst dávku (JSON) + přepočet bez AI
+- **Uložit výsledek jako JSON** (`💾 Uložit (JSON)` ve výsledcích) a **načíst** ho zpět
+  (`📂 Načíst uložený výsledek` u tlačítka Vyhodnotit) → vrátíš se k dávce **bez databáze**.
+  Formát `{app,kind:'evaluation',version:1,savedAt,lang,model,requirements,result}` = záměrně
+  budoucí D1 záznam (až přijde perzistence, jen se nahradí úložištěm). `exportResult`/`importResult`.
+- **🔄 Přepočítat (bez AI)** ve výsledcích — `rescoreNow()` spustí deterministický rubrik nad už
+  načtenou dávkou podle aktuálních vah/gate/dovedností; funguje i **po importu** (bez nahraných CV).
+  `rescoreForLang` sjednocen na `rescoreNow`; přepnutí jazyka nad importovanou dávkou přepočítá.
+- Dokumentace v appce (CS+EN, sekce Výstupy + Omezení) aktualizována; „bez ukládání" → „ukládání do souboru".
+- **Ověřeno:** dry-run build (173 KiB), syntax-check, jsdom round-trip (import obnoví formulář+ranking,
+  export/rescore/lang-switch bez chyby). NENASAZENO — čeká na svolení (`npm run deploy:app`).
+
 ## 2026-08-04 (f) — dvojjazyčnost CS/EN + světlý/tmavý motiv + aktualizace veškeré dokumentace
 - **Appka plně dvojjazyčná (CS/EN) a s přepínačem světlý/tmavý motiv.** Oboje v horní liště,
   volba se ukládá v prohlížeči (`faxx_lang`, `faxx_theme`); brzký inline skript v `<head>` nastaví

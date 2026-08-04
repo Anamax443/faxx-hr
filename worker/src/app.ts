@@ -562,7 +562,9 @@ a{color:var(--accent)}
       <input type="file" id="file" accept=".pdf,.docx,.jpg,.jpeg,.png" multiple style="display:none"></label>
     <div class="files" id="files"></div>
     <div class="total" id="total"></div>
-    <div style="margin-top:14px"><button id="evalBtn" data-i18n="b_eval">Vyhodnotit kandidáty</button> <span class="hint" id="evalMsg"></span></div>
+    <div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap;align-items:center"><button id="evalBtn" data-i18n="b_eval">Vyhodnotit kandidáty</button>
+      <label class="filebtn" data-i18n-title="t_import" title="Načíst dříve uložené vyhodnocení (JSON) — obnoví ranking i požadavky bez nového nahrávání CV"><span data-i18n="b_import">📂 Načíst uložený výsledek</span><input type="file" id="importFile" accept=".json,application/json" style="display:none"></label>
+      <span class="hint" id="evalMsg"></span></div>
     <div class="err" id="err"></div>
   </div>
   <div id="results"></div>
@@ -729,6 +731,7 @@ a{color:var(--accent)}
       <li><b>Ranking</b> — seřazený seznam kandidátů se skóre, kontakty, seznamem dokumentů (dokumenty jdou <b>otevřít přímo z aplikace</b> klikem na název) a nálezy skrytého obsahu.</li>
       <li><b>Manažerský výstup (tisk / PDF)</b> — samostatný tiskový přehled s pořadím, kontakty, skóre a rozpadem, i s poznámkou o lidském dohledu. Vhodné pro sdílení s hiring manažerem.</li>
       <li><b>Stáhnout HTML</b> — tentýž přehled jako soubor.</li>
+      <li><b>Uložit / načíst výsledek (JSON)</b> — vyhodnocení stáhneš jako soubor a později ho zase <b>načteš</b> (📂 u tlačítka Vyhodnotit) — vrátíš se k dávce i bez databáze. Po načtení lze měnit váhy/gate a <b>🔄 Přepočítat (bez AI)</b>, aniž bys znovu nahrával CV.</li>
     </ul>
   </div>
 
@@ -750,7 +753,7 @@ a{color:var(--accent)}
       <li><b>Kvalita zdarma modelu kolísá.</b> Llama 3.1 8B může u téhož CV dát mírně jiné pořadí. Pro stabilnější výsledky přepni na silnější model (a Claude, až bude klíč).</li>
       <li><b>Vision OCR není dokonalý.</b> U obrázkových CV / screenshotů může chybět či být nepřesné. Doporučeno dodávat CV jako PDF/DOCX s textovou vrstvou.</li>
       <li><b>PDF — hloubka detekce.</b> Přesné určení „proč skrytý“ (barva/render mód/XFA) běží na on-prem runneru; webová verze u PDF zachytí instrukční text v textové vrstvě.</li>
-      <li><b>Zatím bez ukládání.</b> Dokumenty se zpracují v paměti a neukládají; po zavření se dávka ztratí. Perzistence dávek (vrátit se a oslovit dalšího) je na roadmapě.</li>
+      <li><b>Ukládání jen do souboru.</b> Dokumenty se zpracují v paměti a na server se neukládají. Výsledek si můžeš <b>stáhnout jako JSON a později načíst</b> (vrátíš se k dávce bez databáze), ale sdílené úložiště dávek se stavem kandidáta (osloven/postupuje/odmítnut) teprve přijde — perzistence D1/R2 je na roadmapě.</li>
       <li><b>Skóre = podklad.</b> Vždy si projdi rozpad a nálezy; konečné rozhodnutí je tvoje.</li>
     </ul>
     <p style="font-size:12px;color:var(--muted)">Verze aplikace (commit + čas nasazení) je v horní liště.</p>
@@ -868,6 +871,7 @@ a{color:var(--accent)}
       <li><b>Ranking</b> — a sorted list of candidates with scores, contacts, a list of documents (documents can be <b>opened directly from the app</b> by clicking the name) and hidden-content findings.</li>
       <li><b>Manager output (print / PDF)</b> — a standalone printable overview with the ranking, contacts, score and breakdown, including a note about human oversight. Suitable for sharing with the hiring manager.</li>
       <li><b>Download HTML</b> — the same overview as a file.</li>
+      <li><b>Save / load result (JSON)</b> — download the evaluation as a file and <b>load</b> it back later (📂 next to the Evaluate button) — you return to the batch even without a database. After loading you can change weights/gate and <b>🔄 Recompute (no AI)</b> without re-uploading the CVs.</li>
     </ul>
   </div>
 
@@ -889,7 +893,7 @@ a{color:var(--accent)}
       <li><b>Free-model quality varies.</b> Llama 3.1 8B may give a slightly different order for the same CV. For more stable results switch to a stronger model (and Claude, once there is a key).</li>
       <li><b>Vision OCR is not perfect.</b> For image CVs / screenshots it may be missing or inaccurate. Prefer supplying CVs as PDF/DOCX with a text layer.</li>
       <li><b>PDF — detection depth.</b> Determining exactly "why hidden" (colour/render mode/XFA) runs on the on-prem runner; the web version catches instruction text in the PDF text layer.</li>
-      <li><b>No storage yet.</b> Documents are processed in memory and not stored; after closing, the batch is lost. Batch persistence (come back and reach out to the next candidate) is on the roadmap.</li>
+      <li><b>File-only storage.</b> Documents are processed in memory and not stored on the server. You can <b>download the result as JSON and load it back later</b> (return to the batch without a database), but a shared batch store with candidate status (contacted/advancing/rejected) is still to come — D1/R2 persistence is on the roadmap.</li>
       <li><b>The score is a basis.</b> Always review the breakdown and findings; the final decision is yours.</li>
     </ul>
     <p style="font-size:12px;color:var(--muted)">The application version (commit + deploy time) is in the top bar.</p>
@@ -922,6 +926,7 @@ var EN={
   l_minyears:"Min. years of experience (gate)", l_skills:"Key skills (comma-separated)",
   hint_gate:"The gate (min. years of experience) = a hard cut-off. <b>Default 0 = off.</b> Years are not reliably extractable from a CV (few write 'X years total'), so by default they are not penalised — they count only as one of the criteria. Enter a number only if you want a hard limit; someone with unknown years is still not disqualified (decided by the other criteria).",
   h_cv:"3 · CVs", drop_text:"<b>Drag CVs here</b> or click (multiple files) · PDF/DOCX (images only warn) · ≤ 10 MB total", b_eval:"Evaluate candidates",
+  b_import:"📂 Load saved result", t_import:"Load a previously saved evaluation (JSON) — restores the ranking and requirements without re-uploading CVs",
   h_models:"AI models (each task separately)", l_model_extract:"CV data extraction (main, runs on every document)",
   opt_m_8b:"Cloudflare Workers AI · Llama 3.1 8B (free, fast — recommended)",
   opt_m_70b:"Cloudflare Workers AI · Llama 3.3 70B (free, stronger, slower)",
@@ -960,12 +965,41 @@ function setLang(l){LANG=l;document.documentElement.setAttribute('data-lang',l);
 $$('[data-lang-btn]').forEach(b=>b.onclick=()=>setLang(b.getAttribute('data-lang-btn')));
 function afterLangChange(){try{tickClock()}catch(e){}try{wSum()}catch(e){}try{pingAI()}catch(e){}
   if(typeof lastEval!=='undefined'&&lastEval){rescoreForLang()}else if(typeof lastResult!=='undefined'&&lastResult){renderResults(lastResult)}}
-async function rescoreForLang(){
+function reqFromForm(){return {jobTitle:$('#jobTitle').value.trim(),minYears:+$('#minYears').value||0,requiredSkills:$('#skills').value.split(',').map(s=>s.trim().toLowerCase()).filter(Boolean),weights:getWeights()}}
+// Přepočet BEZ AI nad už načtenou dávkou (funguje i po importu, bez nahraných CV).
+async function rescoreNow(){
+  if(typeof lastEval==='undefined'||!lastEval)return null;
   try{
-    const req={jobTitle:$('#jobTitle').value.trim(),minYears:+$('#minYears').value||0,requiredSkills:$('#skills').value.split(',').map(s=>s.trim().toLowerCase()).filter(Boolean),weights:getWeights()};
-    const r=await fetch('/api/rescore',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({requirements:req,model:model(),candidates:lastEval.result.ranking,lang:LANG})}).then(x=>x.json());
-    if(!r.error){renderResults(r);lastEval={sig:curSig,result:r}}
-  }catch(e){}
+    const r=await fetch('/api/rescore',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({requirements:reqFromForm(),model:model(),candidates:lastEval.result.ranking,lang:LANG})}).then(x=>x.json());
+    if(!r.error){renderResults(r);lastEval={sig:(typeof curSig!=='undefined'&&curSig)?curSig:evalSig(),result:r}}
+    return r;
+  }catch(e){return {error:String(e)}}
+}
+function rescoreForLang(){return rescoreNow()}
+// Uložit / načíst dávku jako JSON = chudá perzistence bez DB (formát = budoucí D1 záznam).
+function exportResult(){
+  if(typeof lastEval==='undefined'||!lastEval){$('#err').textContent=tl('Není co uložit — nejdřív vyhodnoť dávku.','Nothing to save — evaluate a batch first.');return}
+  const req=reqFromForm();
+  const data={app:'faxx-hr',kind:'evaluation',version:1,savedAt:new Date().toISOString(),lang:LANG,model:model(),requirements:req,result:lastEval.result};
+  const base=(req.jobTitle||'davka').normalize('NFKD').replace(/[^\\w-]+/g,'_').slice(0,40)||'davka';
+  const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json;charset=utf-8'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='faxx-hr-'+base+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),4000);
+}
+async function importResult(file){
+  $('#err').textContent='';
+  try{
+    const data=JSON.parse(await file.text());
+    if(!data||data.kind!=='evaluation'||!data.result||!Array.isArray(data.result.ranking))throw new Error(tl('Neplatný soubor výsledku.','Invalid result file.'));
+    const req=data.requirements||{};
+    $('#jobTitle').value=req.jobTitle||'';$('#minYears').value=req.minYears||0;$('#skills').value=(req.requiredSkills||[]).join(', ');
+    if(req.weights)WKEYS.forEach(k=>{if(typeof req.weights[k]==='number')$('#w_'+k).value=req.weights[k]});
+    saveWeights();
+    curSig=evalSig();lastEval={sig:curSig,result:data.result};
+    $$('.tab')[0].click();
+    renderResults(data.result);
+    const when=data.savedAt?' ('+new Date(data.savedAt).toLocaleString(LANG==='en'?'en-GB':'cs-CZ')+')':'';
+    $('#evalMsg').textContent=tl('Načteno z uloženého souboru'+when+'. Přepočet vah/gate běží bez AI.','Loaded from a saved file'+when+'. Weight/gate recompute runs without AI.');
+  }catch(e){$('#err').textContent=tl('Chyba načtení: ','Load error: ')+((e&&e.message)||e)}
 }
 
 // tabs
@@ -1100,6 +1134,9 @@ $('#evalBtn').onclick=async()=>{
   }catch(e){ $('#err').textContent=tl('Chyba: ','Error: ')+e }
   $('#evalBtn').disabled=false;
 };
+// načtení uloženého výsledku (JSON) — chudá perzistence bez DB
+const importFileEl=$('#importFile');
+if(importFileEl)importFileEl.onchange=()=>{const f=importFileEl.files[0];if(f)importResult(f);importFileEl.value=''};
 async function evaluateStream(fd){
   const res=await fetch('/api/evaluate?stream=1',{method:'POST',body:fd});
   const ct=res.headers.get('content-type')||'';
@@ -1192,12 +1229,18 @@ function renderResults(r){
       +'</div></td></tr>';
   });
   h+='</table>';
-  h+='<div style="margin-top:14px"><button class="ghost" id="btnPrint" title="'+tl('Manažerský výstup s kontakty, optimalizovaný pro tisk / uložení do PDF','Manager output with contacts, optimised for printing / saving as PDF')+'">'+tl('🖨️ Manažerský výstup (tisk / PDF)','🖨️ Manager output (print / PDF)')+'</button> <button class="ghost" id="dlHtml" title="'+tl('Stáhnout manažerský výstup jako HTML soubor','Download the manager output as an HTML file')+'">'+tl('⬇️ Stáhnout HTML','⬇️ Download HTML')+'</button></div>';
+  h+='<div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap">'
+    +'<button class="ghost" id="btnRescore" title="'+tl('Přepočítat skóre podle aktuálních vah / gate / dovedností — bez AI, okamžitě','Recompute the score with the current weights / gate / skills — no AI, instantly')+'">'+tl('🔄 Přepočítat (bez AI)','🔄 Recompute (no AI)')+'</button>'
+    +'<button class="ghost" id="btnSave" title="'+tl('Uložit toto vyhodnocení jako soubor JSON — později ho načteš a vrátíš se k dávce (bez databáze)','Save this evaluation as a JSON file — load it later to return to the batch (no database)')+'">'+tl('💾 Uložit (JSON)','💾 Save (JSON)')+'</button>'
+    +'<button class="ghost" id="btnPrint" title="'+tl('Manažerský výstup s kontakty, optimalizovaný pro tisk / uložení do PDF','Manager output with contacts, optimised for printing / saving as PDF')+'">'+tl('🖨️ Manažerský výstup (tisk / PDF)','🖨️ Manager output (print / PDF)')+'</button>'
+    +'<button class="ghost" id="dlHtml" title="'+tl('Stáhnout manažerský výstup jako HTML soubor','Download the manager output as an HTML file')+'">'+tl('⬇️ Stáhnout HTML','⬇️ Download HTML')+'</button></div>';
   h+='<div class="hint" style="margin-top:8px">'+tl('Rating je podpora rozhodnutí. Postup kandidátů dál je na tobě.','The rating is decision support. Advancing candidates is up to you.')+'</div></div>';
   $('#results').innerHTML=h;
   $$('.expand').forEach(x=>x.onclick=()=>$('#det'+x.dataset.i).classList.toggle('on'));
   $$('.doclink').forEach(a=>a.onclick=e=>{e.preventDefault();openDoc(decodeURIComponent(a.dataset.fn))});
   $('#btnPrint').onclick=()=>{const w=window.open('','_blank');if(!w){$('#err').textContent=tl('Povol vyskakovací okno pro tisk.','Allow the pop-up window for printing.');return}w.document.write(buildReport(lastResult));w.document.close();w.focus();setTimeout(()=>{try{w.print()}catch(e){}},400)};
   $('#dlHtml').onclick=()=>{const blob=new Blob([buildReport(lastResult)],{type:'text/html;charset=utf-8'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=tl('faxx-hr-vyhodnoceni.html','faxx-hr-evaluation.html');a.click()};
+  $('#btnSave').onclick=exportResult;
+  $('#btnRescore').onclick=async()=>{const b=$('#btnRescore');b.disabled=true;const old=b.textContent;b.textContent=tl('Přepočítávám…','Recomputing…');const r=await rescoreNow();if(r&&r.error)$('#err').textContent=tl('Chyba přepočtu: ','Recompute error: ')+r.error;const nb=$('#btnRescore');if(nb){nb.disabled=false;nb.textContent=old}};
 }
 </script></body></html>`;
