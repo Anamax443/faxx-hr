@@ -2,6 +2,20 @@
 
 Append-only. Nejnovější záznam nahoru. Slouží k pokračování z jiného počítače / po pauze.
 
+## 2026-08-04 (v) — referenční vrstva: CEFR normalizér (junior HR podle citovaného standardu)
+- Nový adresář [`reference/`](reference/) (README CS+EN): koncept „AI předchroustá podle veřejného
+  standardu, senior rozhodne"; princip **deterministická reference, NE dump do promptu LLM** (drží
+  invariant „kód mapuje, ne model" + AI-Act). Zdroje ověřené webem: CEFR (coe.int/Europass), **ESCO
+  v1.2.1** (zdarma, 28 jazyků vč. CZ, CSV/RDF), EQF/NSK/NSP, O*NET, EEOC; ISO/SHRM placené (necopy).
+- **Prototyp CEFR (jazyky):** [`worker/src/reference/cefr.ts`](worker/src/reference/cefr.ts) —
+  `normalizeLanguageLevel()` mapuje volný text („umožňující profesionální práci" → C1) na CEFR
+  s **evidencí (`matched`) + příznakem `stated`/`inferred` + `source`**; deterministické, bez AI,
+  mapa z citovaného ILR/LinkedIn↔CEFR crosswalku (u rozsahů konzervativně nižší = nepřecenit).
+  Regrese [`cefr.test.mjs`](worker/src/reference/cefr.test.mjs) **23/23** (CS+EN, diakritika, ranges).
+- **NENAPOJENO** do skórování (záměr) — další krok: schéma `languages[].level_raw` → volat normalizér
+  v kódu → v rozpadu i tiskovém dokladu ukázat „úroveň + úsek z CV + odvozeno". Bez nasazení
+  (cefr.ts se zatím nikam neimportuje → worker bundle beze změny).
+
 ## 2026-08-04 (u) — tiskový výstup = doklad výběrového řízení (zadání + vyhodnocení)
 - **`buildReport` v `worker/src/app.ts`**: manažerský tiskový výstup (🖨️ / ⬇️ HTML) nově začíná sekcí
   **„Zadání výběrového řízení"** — pozice, min. roky (gate), klíčové dovednosti, **váhy kritérií**
