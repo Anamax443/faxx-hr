@@ -104,7 +104,24 @@ export default {
     const json = (o: unknown, status = 200) => Response.json(o, { status });
 
     if (req.method === "GET" && (url.pathname === "/" || url.pathname === "/index.html")) {
-      return new Response(PAGE, { headers: { "content-type": "text/html; charset=utf-8" } });
+      return new Response(PAGE, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } });
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/extract-text") {
+      try {
+        const form = await req.formData();
+        const f = form.get("file");
+        if (!(f instanceof File)) return json({ error: "chybí soubor" }, 400);
+        if (f.size > MAX_FILE_BYTES) return json({ error: "Soubor je větší než 8 MB." }, 413);
+        const ext = (f.name.split(".").pop() || "").toLowerCase();
+        const buf = new Uint8Array(await f.arrayBuffer());
+        if (ext === "txt" || ext === "md") return json({ text: new TextDecoder().decode(buf), source: f.name });
+        if (ext === "pdf" || ext === "docx") {
+          const s = await scanDocument(f.name, buf, env);
+          return json({ text: s.visible, source: f.name, note: s.note });
+        }
+        return json({ error: "Podporováno: TXT, PDF, DOCX. Screenshot/obrázek (vision) přijde později." }, 400);
+      } catch (e: unknown) { return json({ error: String((e as { message?: string })?.message || e) }, 500); }
     }
 
     if (req.method === "POST" && url.pathname === "/api/derive") {
@@ -189,6 +206,8 @@ textarea{min-height:120px;resize:vertical}
 button{background:var(--accent);color:#06281c;border:0;border-radius:8px;padding:10px 16px;font-weight:700;cursor:pointer;font-size:14px}
 button.ghost{background:var(--panel2);color:var(--txt);border:1px solid var(--line)}
 button:disabled{opacity:.5;cursor:not-allowed}
+.filebtn{display:inline-block;background:var(--panel2);color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:10px 16px;font-weight:700;cursor:pointer;font-size:14px}
+.filebtn:hover{border-color:var(--accent)}
 .hint{color:var(--muted);font-size:12px;margin-top:6px}
 .drop{border:2px dashed var(--line);border-radius:12px;padding:26px 18px;text-align:center;background:var(--panel2);cursor:pointer}
 .drop.hot{border-color:var(--accent)}
@@ -235,8 +254,12 @@ a{color:var(--accent)}
 <div class="view on" id="hod">
   <div class="card" id="inzeratCard">
     <h3>1 · Inzerát</h3>
-    <textarea id="inzerat" placeholder="Vlož text inzerátu (nebo rovnou vyplň požadavky níže)…"></textarea>
-    <div style="margin-top:10px"><button class="ghost" id="deriveBtn" title="AI z inzerátu navrhne požadavky, které pak můžeš upravit">✨ Odvodit požadavky z inzerátu</button> <span class="hint" id="deriveMsg"></span></div>
+    <textarea id="inzerat" placeholder="Vlož text inzerátu, nebo ho nahraj ze souboru (📎), nebo rovnou vyplň požadavky níže…"></textarea>
+    <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <label class="filebtn" title="Nahraj inzerát jako TXT, PDF nebo DOCX — text se vloží do pole výše">📎 Vložit ze souboru<input type="file" id="inzFile" accept=".txt,.md,.pdf,.docx" style="display:none"></label>
+      <button class="ghost" id="deriveBtn" title="AI z inzerátu navrhne požadavky, které pak můžeš upravit">✨ Odvodit požadavky z inzerátu</button>
+      <span class="hint" id="deriveMsg"></span>
+    </div>
   </div>
   <div class="card" id="reqCard">
     <h3>2 · Požadavky (uprav podle sebe)</h3>
@@ -329,6 +352,18 @@ $('#deriveBtn').onclick=async()=>{
     else{$('#jobTitle').value=r.jobTitle||'';$('#minYears').value=r.minYears||0;$('#skills').value=(r.requiredSkills||[]).join(', ');$('#deriveMsg').textContent='Hotovo ('+(r.ms||0)+' ms) — uprav podle sebe.'}
   }catch(e){$('#deriveMsg').textContent='Chyba: '+e}
   $('#deriveBtn').disabled=false;
+};
+// import inzerátu ze souboru
+$('#inzFile').onchange=async()=>{
+  const f=$('#inzFile').files[0]; if(!f)return;
+  $('#deriveMsg').textContent='Načítám '+f.name+'…';
+  const fd=new FormData();fd.set('file',f);
+  try{
+    const r=await fetch('/api/extract-text',{method:'POST',body:fd}).then(r=>r.json());
+    if(r.error){$('#deriveMsg').textContent='Chyba: '+r.error}
+    else{$('#inzerat').value=r.text||'';$('#deriveMsg').textContent='Načteno z '+esc(r.source||f.name)+' ('+((r.text||'').length)+' zn.). Zkontroluj text a odvoď požadavky.'}
+  }catch(e){$('#deriveMsg').textContent='Chyba: '+e}
+  $('#inzFile').value='';
 };
 // evaluate
 $('#evalBtn').onclick=async()=>{
