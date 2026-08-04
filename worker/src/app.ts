@@ -118,6 +118,18 @@ async function visionText(buf: Uint8Array, name: string, env: Env, method = "toM
   return { text: "", via: "none" };
 }
 
+// toMarkdown u obrázků vrací POPIS obrázku (anglicky), ne čistý přepis. Tenhle
+// průchod z popisu zrekonstruuje čistý text původního dokumentu v jeho jazyce.
+async function cleanupOcr(desc: string, model: string, env: Env): Promise<string> {
+  try {
+    const r = await aiJson(env.AI, model, [
+      { role: "system", content: "Dostaneš strojový POPIS obrázku dokumentu (pracovní inzerát nebo životopis, popis bývá anglicky). Zrekonstruuj z něj ČISTÝ souvislý text původního dokumentu v jeho původním jazyce (nejspíš čeština). Vrať POUZE text dokumentu — bez popisných vět, bez meta-nadpisů typu 'Header', 'Textual Content', 'Visual Style', bez uvozovek a komentářů. Zachovej fakta: název pozice, roky praxe, dovednosti, jazyky, vzdělání, kontakty." },
+      { role: "user", content: String(desc).slice(0, 6000) },
+    ]);
+    return String(r.raw || "").trim();
+  } catch { return ""; }
+}
+
 interface ScanLike { visible: string; flags: { type: string; severity: string; location: string; evidence: string }[]; note: string; hiddenChars: number }
 
 // Jednotný sken: obrázky přes vision (OCR), ostatní přes detektor (split + flagy).
@@ -240,8 +252,14 @@ export default {
           return json({ text: s.visible, source: f.name, note: s.note });
         }
         if (isImageName(f.name)) {
-          const { text: t, via } = await visionText(buf, f.name, env, str(form.get("visionMethod")) || "toMarkdown");
-          return json({ text: t, source: f.name, note: t ? `Text přečten z obrázku (OCR: ${via}) — u obrázků/screenshotů zkontroluj přesnost; pro jistotu vlož text nebo PDF/DOCX.` : "OCR nepřečetlo žádný text (nekvalitní screenshot?). Zkus text vložit ručně nebo jako PDF." });
+          const vm = str(form.get("visionMethod")) || "toMarkdown";
+          const { text: raw, via } = await visionText(buf, f.name, env, vm);
+          let t = raw, cleaned = false;
+          if (raw && via.indexOf("cf-toMarkdown") === 0) {          // toMarkdown = popis → uklidit na čistý text
+            const c = await cleanupOcr(raw, str(form.get("model")) || EXTRACT_MODEL_DEFAULT, env);
+            if (c && c.length > 30) { t = c; cleaned = true; }
+          }
+          return json({ text: t, source: f.name, note: t ? `Text přečten z obrázku (OCR: ${via}${cleaned ? "+úprava" : ""}) — u screenshotů zkontroluj přesnost; pro jistotu vlož text nebo PDF/DOCX.` : "OCR nepřečetlo žádný text (nekvalitní screenshot?). Zkus text vložit ručně nebo jako PDF." });
         }
         return json({ error: "Podporováno: TXT, PDF, DOCX a obrázky (PNG/JPG přes vision)." }, 400);
       } catch (e: unknown) { return json({ error: String((e as { message?: string })?.message || e) }, 500); }
@@ -752,7 +770,7 @@ $('#deriveBtn').onclick=async()=>{
 // import inzerátu ze souboru NEBO printscreenu (Ctrl+V)
 async function importInzerat(f,label){
   $('#deriveMsg').textContent='Načítám '+(label||f.name)+'…';
-  const fd=new FormData();fd.set('file',f,f.name||'printscreen.png');
+  const fd=new FormData();fd.set('file',f,f.name||'printscreen.png');fd.set('visionMethod',visionMethod());fd.set('model',modelDerive());
   try{
     const r=await fetch('/api/extract-text',{method:'POST',body:fd}).then(r=>r.json());
     if(r.error){$('#deriveMsg').textContent='Chyba: '+r.error}
