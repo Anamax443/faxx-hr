@@ -36,10 +36,13 @@ Kolem ověřeného jádra (`detect` → `extract` → `rubric`) stojí **zálož
 [`faxx-hr-app`](https://faxx-hr-app.bass443.workers.dev) (`worker/src/app.ts`):
 
 - **Hodnocení** — vlož inzerát (text / soubor / printscreen přes vision) → „✨ Odvodit
-  požadavky", nahraj **dávku CV ≤ 10 MB**, „Vyhodnotit" → ranking se skóre, rozpadem po
-  kritériích, kontakty a nálezy skrytého obsahu. Přepočet po změně vah/gate **bez AI**.
+  požadavky", nahraj **dávku CV ≤ 10 MB**, „Vyhodnotit" → ranking s **pohledovým hodnocením**
+  (stavy `● ◐ ○ —` + osa jistoty ◆ doloženo / ◇ odvozeno) **nebo číselně** (přepínatelné), rozpad
+  po kritériích, kontakty a nálezy skrytého obsahu. Neznámý údaj = **nedoloženo**, ne falešný
+  průměr. Přepočet po změně vah/gate **bez AI**.
 - **Nastavení** — přepínatelný AI backend (výchozí **zdarma** Cloudflare Workers AI,
-  Claude po doplnění klíče), editovatelné váhy kritérií i systémový prompt extrakce.
+  Claude po doplnění klíče), **přepínač zobrazení hodnocení** (pohledové / číselné / obojí),
+  editovatelné váhy kritérií i systémový prompt extrakce.
 - **Dokumentace** — princip, bezpečnost, skóre, regulatorika (in-app, plně CS + EN).
 - **CS / EN přepínač** i **světlý / tmavý motiv** (v horní liště, ukládá se v prohlížeči).
 - Výstup: ranking + **manažerský tiskový výstup (PDF/HTML)**. Žádné „hromadně zamítnout".

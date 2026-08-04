@@ -35,10 +35,10 @@ vždy s doložením a možností přepisu.** Posudek musí být *job-related* a 
 
 ## Stav
 
-- ✅ **CEFR — jazyky** (prototyp): [`worker/src/reference/cefr.ts`](../worker/src/reference/cefr.ts) —
+- ✅ **CEFR — jazyky** (NAPOJENO): [`worker/src/reference/cefr.ts`](../worker/src/reference/cefr.ts) —
   deterministický `normalizeLanguageLevel()`; regrese [`cefr.test.mjs`](../worker/src/reference/cefr.test.mjs)
-  **23/23** (`node worker/src/reference/cefr.test.mjs`). Zatím **není napojen** do skórovací
-  cesty — to je další krok (viz níže).
+  **23/23**. **Napojeno do skórování** (`rubric.ts` → `cefr_map`): extrakce dává `languages[].level_raw`
+  (doslovná fráze), mapu na CEFR dělá kód → `stated`/`inferred` + evidence v rozpadu i tisku.
 - ⚪ **ESCO — dovednosti / seniorita** (roadmap): taxonomie + fuzzy match `skills.name`.
 - ⚪ **EQF / NSK — vzdělání** (roadmap): mapa `education.level` a českých oborů.
 
@@ -77,12 +77,12 @@ Hranice jsou konzervativní (u rozsahu bereme nižší, ať se **nepřecení**) 
 v `cefr.ts` (`RULES`) — snadno se ladí. Každý výstup nese `matched` (evidence) a `source`
 (které pravidlo/standard rozhodlo) → **doložitelné do tiskového dokladu výběrového řízení.**
 
-## Další krok (napojení)
+## Napojeno (hotovo, commit 8028398)
 
-Prototyp je připravený k zapojení: rozšířit extrakční schéma o **surovou formulaci** úrovně
-(`level_raw`), tu prohnat `normalizeLanguageLevel()` v kódu (ne v modelu) a v rozpadu i tisku
-ukázat *úroveň + úsek z CV + „odvozeno"*. Tím se z LLM stane jen extraktor a **mapa bude
-podle citovaného standardu, ne podle názoru modelu**.
+Extrakční schéma nese **surovou formulaci** úrovně (`level_raw`); `rubric.ts` ji v `cefr_map`
+prožene `normalizeLanguageLevel()` **v kódu, ne v modelu**, a v rozpadu i tisku ukáže
+*úroveň + úsek z CV + „odvozeno"* (osa jistoty pohledového hodnocení). LLM je tak jen extraktor
+a **mapa je podle citovaného standardu, ne podle názoru modelu**. Další v řadě: ESCO (dovednosti).
 
 ## Licence / provenience
 

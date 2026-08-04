@@ -102,6 +102,8 @@ Jádro hodnoty pro personalistu, zatím nejméně rozpracované.
 - [ ] Editor požadavků — personalista musí umět váhy a gates upravit ručně (inzerát bývá marketingový)
 - [~] Deterministický rubrik nad `qualification_json`: vážený součet po gates — **prototyp hotový** `worker/src/rubric.ts` (gates + 6 typů kritérií, total 0..100), /selftest 6/6, ověřeno spikem 2026-08-04 (b); zbývá editor rubriku + parser inzerátu
 - [~] `breakdown_json` s odkazem na evidence — rozpad po kritériích s `detail` hotový v `rubric.ts`; dopojit evidence kotvy z extrakce
+- [x] **Pohledové hodnocení** (živě `8028398`): přepínač Nastavení Pohledové/Číselné/Obojí (`worker/src/view.ts`, `faxx_scoreview`) — stavy `● ◐ ○ —` + osa jistoty `◆ doloženo / ◇ odvozeno / · nevíme`; **honesty fix** (neznámé ≠ 5/10; additivní `known`/`basis` v rubriku, skóre/pořadí nezměněno). Zbývá polish: **zarovnaná dávková matice** (kandidáti × kritéria) — vědomě odloženo, řádkový profil ji zatím supluje.
+- [x] **Referenční vrstva CEFR** (živě `8028398`): `reference/` + `worker/src/reference/cefr.ts` `normalizeLanguageLevel()`; **napojeno** do `rubric.ts` cefr_map (extrakce `languages[].level_raw` → mapa CEFR v kódu → `stated`/`inferred` + evidence). Roadmap: ESCO dovednosti, EQF/NSK vzdělání.
 - [ ] **Validace rubriku proti historickým rozhodnutím** personalisty (reprodukovatelné ≠ správné)
 - [ ] Rozhodnout, kdo rubrik píše: personalista se šablonou vs. správce
 - [ ] Chráněné atributy: `meta.sensitive_attributes_detected` hlásí přítomnost, **hodnoty se neextrahují**

@@ -10,6 +10,16 @@
 Zdrojový soubor: [`worker/src/rubric.ts`](../../worker/src/rubric.ts), spotřeba a
 editor v [`worker/src/app.ts`](../../worker/src/app.ts).
 
+> **AKTUALIZACE (2026-08-04):** k tvrzení „skóre počítá kód, ne model" přibyly dvě věci, které tuto
+> kapitolu posilují. (1) **Pohledové hodnocení** — výsledek lze číst jako stavy `● silná / ◐ částečná /
+> ○ slabá / — nedoloženo` + osu jistoty `◆ doloženo / ◇ odvozeno / · nevíme` místo (jen) čísla;
+> přepínač v Nastavení, **skóre ani pořadí se nemění**. Sundává to falešnou přesnost a **chybějící údaj
+> se ukáže jako „nedoloženo", ne jako průměr** (dřív nekonzistentní: neuvedené roky/tenure=5, vzdělání/
+> jazyk=0). Rubrik nese additivně `known`/`basis`. (2) **CEFR referenční vrstva** — jazyková úroveň se
+> mapuje z volné formulace v CV (`level_raw`) **deterministicky podle citovaného standardu**
+> ([`reference/`](../../reference/README.md), `worker/src/reference/cefr.ts`), ne odhadem modelu;
+> „odvozeno" nese úryvek z CV. Text §8.x níže zůstává v platnosti.
+
 ---
 
 ## 8.1 Proč deterministický rubrik (jádro F3)

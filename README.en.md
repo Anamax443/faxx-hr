@@ -36,10 +36,13 @@ Around the verified core (`detect` → `extract` → `rubric`) sits a **tabbed w
 [`faxx-hr-app`](https://faxx-hr-app.bass443.workers.dev) (`worker/src/app.ts`):
 
 - **Evaluation** — paste the job ad (text / file / screenshot via vision) → "✨ Derive
-  requirements", upload a **batch of CVs ≤ 10 MB**, "Evaluate" → ranking with scores, a breakdown by
-  criteria, contacts and hidden-content findings. Recomputation after changing weights/gate **without AI**.
+  requirements", upload a **batch of CVs ≤ 10 MB**, "Evaluate" → ranking with an **at-a-glance
+  assessment** (states `● ◐ ○ —` + certainty axis ◆ stated / ◇ inferred) **or numeric** (toggleable),
+  a breakdown by criteria, contacts and hidden-content findings. An unknown value shows as **not
+  evidenced**, not a false average. Recomputation after changing weights/gate **without AI**.
 - **Settings** — switchable AI backend (default **free** Cloudflare Workers AI,
-  Claude once a key is added), editable criteria weights and the extraction system prompt.
+  Claude once a key is added), an **assessment-display toggle** (at-a-glance / numeric / both),
+  editable criteria weights and the extraction system prompt.
 - **Documentation** — principle, security, scoring, regulatory (in-app, fully CS + EN).
 - **CS / EN switch** and **light / dark theme** (in the top bar, saved in the browser).
 - Output: ranking + **managerial print output (PDF/HTML)**. No "bulk reject".

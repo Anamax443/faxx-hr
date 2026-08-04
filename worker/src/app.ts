@@ -785,6 +785,7 @@ a{color:var(--accent)}
   <div class="card doc" id="d-skore">
     <h4>5 · Hodnocení a skóre</h4>
     <p>Skóre 0–100 je vážený součet šesti kritérií (každé 0–10 bodů), normalizovaný podle vah. <b>Váhy si nastavíš</b> v záložce Nastavení a jednotlivá kritéria tam lze <b>vypnout</b> (nezapočítají se do rubriku). Celé nastavení pozice (požadavky + váhy + zapnutá kritéria) uložíš jako <b>šablonu pozice</b> (záložka Hodnocení) a příště jen načteš.</p>
+    <p><b>Zobrazení výsledku</b> — přepínač v Nastavení: <b>pohledové</b> (● silná / ◐ částečná / ○ slabá / — nedoloženo, k tomu osa jistoty ◆ doloženo / ◇ odvozeno / · nevíme), <b>číselné</b> (0–100), nebo obojí. Skóre se počítá stejně — mění se jen zobrazení. Chybějící údaj se ukáže jako <b>nedoloženo</b>, ne jako falešný průměr. Jazykovou úroveň mapuje <b>deterministicky podle CEFR</b> sám kód (volná formulace z CV → úroveň, ne od modelu; „odvozeno" nese úryvek z CV).</p>
     <p><b>Gate (min. roky praxe) je defaultně vypnutý.</b> Roky se z CV spolehlivě nevytáhnou (málokdo píše „celkem X let"), proto se defaultně nepenalizují — neznámé roky dostanou neutrální skóre a nikoho nevyřadí. Chceš-li tvrdé vyřazení, zadej „min. roky praxe" ručně; i tak se diskvalifikuje jen ten, u koho <b>reálně víme</b>, že je pod limitem (kandidát s neznámými roky projde).</p>
     <table>
       <thead><tr><th>Kritérium</th><th>Jak se boduje</th><th>Výchozí váha</th></tr></thead>
@@ -924,6 +925,7 @@ a{color:var(--accent)}
   <div class="card doc" id="en-skore">
     <h4>5 · Scoring</h4>
     <p>The 0–100 score is a weighted sum of six criteria (each 0–10 points), normalised by the weights. <b>You set the weights</b> under Settings, where you can also <b>disable</b> individual criteria (excluded from the rubric). The whole position setup (requirements + weights + enabled criteria) can be saved as a <b>position template</b> (Evaluation tab) and loaded next time.</p>
+    <p><b>Result display</b> — a toggle under Settings: <b>at-a-glance</b> (● strong / ◐ partial / ○ weak / — not evidenced, plus a certainty axis ◆ stated / ◇ inferred / · unknown), <b>numeric</b> (0–100), or both. The score is computed the same — only the display changes. A missing value shows as <b>not evidenced</b>, not a false average. Language level is mapped <b>deterministically per CEFR</b> by the code itself (free phrasing from the CV → level, not by the model; "inferred" carries a CV snippet).</p>
     <p><b>The gate (minimum years of experience) is off by default.</b> Years are not reliably extractable from a CV (few people write "X years total"), so by default they are not penalised — unknown years get a neutral score and disqualify no one. If you want a hard cut-off, set "minimum years of experience" manually; even then, only someone we <b>actually know</b> is below the limit is disqualified (a candidate with unknown years passes).</p>
     <table>
       <thead><tr><th>Criterion</th><th>How it is scored</th><th>Default weight</th></tr></thead>

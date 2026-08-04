@@ -87,6 +87,8 @@ přítomnost (antidiskriminace). Každý skill/role nese `evidence` kotvu + **ko
 Viz [`schema/rubric.example.json`](schema/rubric.example.json). Kritéria s vahami
 (nastaví personalista) + must-have gates. `total_score` = vážený součet po gates;
 `breakdown_json` s evidence-ref. Deterministické → reprodukovatelné.
+**Zobrazení je oddělené od výpočtu:** výsledek lze číst pohledově (stavy shody ● ◐ ○ — + osa jistoty ◆ doloženo / ◇ odvozeno / · nevíme) nebo číselně (přepínač v appce); skóre se nemění. Chybějící údaj = „nedoloženo", ne falešný průměr. Jazyková úroveň se mapuje deterministicky podle **CEFR** ([`reference/`](reference/README.md)) — volnou formulaci z CV překládá kód, ne model.
+
 **Pozor: reprodukovatelné ≠ správné** — rubrik se validuje proti historickým rozhodnutím personalisty (shoda / kalibrace vah), ne jen „vypadá rozumně". Kdo rubrik píše (personalista se šablonou vs. správce) a jak se aktualizuje ze zpětné vazby pilotu = součást F3.
 
 ## 10. Nasazení / on-prem

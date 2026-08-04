@@ -35,10 +35,10 @@ non-discriminatory (EU AI Act Art. 14, GDPR Art. 22; US EEOC Uniform Guidelines)
 
 ## Status
 
-- ✅ **CEFR — languages** (prototype): [`worker/src/reference/cefr.ts`](../worker/src/reference/cefr.ts) —
+- ✅ **CEFR — languages** (WIRED): [`worker/src/reference/cefr.ts`](../worker/src/reference/cefr.ts) —
   deterministic `normalizeLanguageLevel()`; regression [`cefr.test.mjs`](../worker/src/reference/cefr.test.mjs)
-  **23/23** (`node worker/src/reference/cefr.test.mjs`). Not yet wired into the scoring path —
-  that's the next step (below).
+  **23/23**. **Wired into scoring** (`rubric.ts` → `cefr_map`): extraction emits `languages[].level_raw`
+  (the verbatim phrase), the code maps it to CEFR → `stated`/`inferred` + evidence in breakdown and print.
 - ⚪ **ESCO — skills / seniority** (roadmap): taxonomy + fuzzy match of `skills.name`.
 - ⚪ **EQF / NSK — education** (roadmap): map `education.level` and Czech fields.
 
@@ -77,12 +77,13 @@ Boundaries are conservative (ranges take the lower level, to avoid **over-credit
 one place in `cefr.ts` (`RULES`) — easy to tune. Every output carries `matched` (evidence) and
 `source` (which rule/standard decided) → **documentable in the printed selection-procedure record.**
 
-## Next step (wiring)
+## Wired (done, commit 8028398)
 
-The prototype is ready to wire in: extend the extraction schema with the **raw phrasing** of the
-level (`level_raw`), run it through `normalizeLanguageLevel()` in code (not in the model), and show
-*level + CV snippet + "inferred"* in the breakdown and print. That turns the LLM into a mere
-extractor and makes the **map follow a cited standard, not the model's opinion.**
+The extraction schema carries the **raw phrasing** of the level (`level_raw`); `rubric.ts` runs it
+through `normalizeLanguageLevel()` in `cefr_map` **in code, not in the model**, and shows
+*level + CV snippet + "inferred"* in the breakdown and print (the certainty axis of the at-a-glance
+view). The LLM is thus a mere extractor and the **map follows a cited standard, not the model's
+opinion.** Next up: ESCO (skills).
 
 ## Licence / provenance
 

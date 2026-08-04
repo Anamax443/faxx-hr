@@ -87,6 +87,9 @@ their presence (anti-discrimination). Each skill/role carries an `evidence` anch
 See [`schema/rubric.example.json`](schema/rubric.example.json). Criteria with weights
 (set by the recruiter) + must-have gates. `total_score` = weighted sum after gates;
 `breakdown_json` with evidence-ref. Deterministic → reproducible.
+
+**Display is separate from computation:** the result can be read at a glance (match states ● ◐ ○ — + certainty axis ◆ stated / ◇ inferred / · unknown) or numerically (a toggle in the app); the score does not change. A missing value = "not evidenced", not a false average. Language level is mapped deterministically per **CEFR** ([`reference/`](reference/README.md)) — the code translates the free phrasing from the CV, not the model.
+
 **Caution: reproducible ≠ correct** — the rubric is validated against the recruiter's historical decisions (agreement / weight calibration), not just "looks reasonable". Who writes the rubric (recruiter with a template vs. an administrator) and how it is updated from pilot feedback = part of F3.
 
 ## 10. Deployment / on-prem
