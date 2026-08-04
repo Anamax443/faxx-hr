@@ -30,7 +30,13 @@ Doporučené pořadí čtení pro oponenta: kapitoly 1–4 (rámec a princip) �
 
 ---
 
-## Obsah
+## Celý dokument v jednom souboru
+
+📄 **[OPONENTURA-FULL.md](OPONENTURA-FULL.md)** — všech 17 kapitol v jednom souvislém dokumentu
+(~100 stran) s obsahem a page-break pro tisk do PDF (otevři → Tisk → Uložit jako PDF).
+Níže je rozpad po jednotlivých kapitolách.
+
+## Obsah (po kapitolách)
 
 | # | Kapitola | Soubor |
 |---|----------|--------|
