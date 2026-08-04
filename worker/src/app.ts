@@ -77,7 +77,8 @@ async function evaluate(cands: CandidateInput[], req: Requirements, ai: AiBindin
       hiddenChars = scan.hiddenChars;
       note = scan.note;
     }
-    const ext = await extractQualification(visible, ai, model);
+    // prázdný viditelný text (obrázek/sken bez OCR, nečitelné PDF) → neplýtvej AI voláním
+    const ext = visible.trim() ? await extractQualification(visible, ai, model) : { qualification: {} as Qualification, ok: false, error: "prázdný viditelný text", ms: 0 };
     const score = scoreCandidate(ext.qualification, rubric);
     results.push({
       name: c.name, score,
@@ -273,8 +274,8 @@ a{color:var(--accent)}
   </div>
   <div class="card">
     <h3>3 · Životopisy</h3>
-    <label class="drop" id="drop"><b>Přetáhni sem CV</b> nebo klikni (víc souborů) · PDF/DOCX · ≤ 10 MB celkem
-      <input type="file" id="file" accept=".pdf,.docx" multiple style="display:none"></label>
+    <label class="drop" id="drop"><b>Přetáhni sem CV</b> nebo klikni (víc souborů) · PDF/DOCX (obrázky jen upozorní) · ≤ 10 MB celkem
+      <input type="file" id="file" accept=".pdf,.docx,.jpg,.jpeg,.png" multiple style="display:none"></label>
     <div class="files" id="files"></div>
     <div class="total" id="total"></div>
     <div style="margin-top:14px"><button id="evalBtn">Vyhodnotit kandidáty</button> <span class="hint" id="evalMsg"></span></div>
@@ -334,7 +335,7 @@ const drop=$('#drop'),fileInput=$('#file');
 ['dragleave','drop'].forEach(e=>drop.addEventListener(e,ev=>{ev.preventDefault();drop.classList.remove('hot')}));
 drop.addEventListener('drop',ev=>addFiles(ev.dataTransfer.files));
 fileInput.addEventListener('change',()=>addFiles(fileInput.files));
-function addFiles(fl){for(const f of fl){if(/\\.(pdf|docx)$/i.test(f.name))files.push(f)}renderFiles()}
+function addFiles(fl){for(const f of fl){if(/\\.(pdf|docx|jpg|jpeg|png|webp|gif|bmp|tiff)$/i.test(f.name))files.push(f)}renderFiles()}
 function renderFiles(){
   const tot=files.reduce((a,f)=>a+f.size,0);
   $('#files').innerHTML=files.map((f,i)=>'<div class="fi"><b>'+esc(f.name)+'</b><span>'+(f.size/1024|0)+' kB <span class="x" data-i="'+i+'">✕</span></span></div>').join('');

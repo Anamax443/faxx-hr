@@ -345,8 +345,11 @@ export async function scanDocument(fname: string, buf: Uint8Array, env: DetectEn
         ? "PDF: přečtena textová vrstva, nic instrukčního nenalezeno. Detekci skrytí podle barvy doplní on-prem."
         : "PDF: textovou vrstvu se nepodařilo přečíst (naskenované CV / chyba parseru) → OCR/vision na on-prem runneru.";
       res.note = `${base} [extrakce: ${via}${err ? " · chyba: " + err : ""}]`;
+    } else if (["jpg", "jpeg", "png", "webp", "gif", "bmp", "tiff"].includes(ext)) {
+      res.note = "Obrázek/sken — čtení textu (OCR/vision) zatím není dostupné. Kandidát se nevyhodnotí; převeď CV do PDF/DOCX s textovou vrstvou.";
+      res.flags.push({ type: "needs_ocr", severity: "info", location: "soubor (obrázek)", evidence: res.note, method: "n/a" });
     } else {
-      res.note = "Podporováno: .docx (plná v2 detekce), .pdf (dekomprese + injection sken).";
+      res.note = "Podporováno: .docx (plná v2 detekce), .pdf (dekomprese + injection sken), obrázky jen upozornění (OCR přijde).";
     }
   } catch (e: unknown) {
     res.note = "chyba při čtení souboru: " + ((e as { message?: string })?.message || String(e));
