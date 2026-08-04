@@ -18,6 +18,14 @@ interface Env extends DetectEnv { AI: AiBinding & DetectEnv["AI"] }
 const MAX_TOTAL_BYTES = 10 * 1024 * 1024; // ≤10 MB celkem
 const MAX_FILE_BYTES = 8 * 1024 * 1024;
 
+// otisk verze — injektuje se přes wrangler --define při deployi (scripts/deploy-app.mjs)
+declare const __COMMIT__: string;
+declare const __COMMIT_FULL__: string;
+declare const __BUILT__: string;
+const COMMIT = typeof __COMMIT__ !== "undefined" ? __COMMIT__ : "dev";
+const COMMIT_FULL = typeof __COMMIT_FULL__ !== "undefined" ? __COMMIT_FULL__ : "";
+const BUILT = typeof __BUILT__ !== "undefined" ? __BUILT__ : "local";
+
 // --- pomůcky ----------------------------------------------------------------
 const obj = (x: unknown): Record<string, unknown> => (x && typeof x === "object" ? (x as Record<string, unknown>) : {});
 const str = (x: unknown): string => (typeof x === "string" ? x : x == null ? "" : String(x));
@@ -123,6 +131,19 @@ export default {
         }
         return json({ error: "Podporováno: TXT, PDF, DOCX. Screenshot/obrázek (vision) přijde později." }, 400);
       } catch (e: unknown) { return json({ error: String((e as { message?: string })?.message || e) }, 500); }
+    }
+
+    if (req.method === "GET" && url.pathname === "/api/health") {
+      const model = url.searchParams.get("model") || EXTRACT_MODEL_DEFAULT;
+      const info = { model, commit: COMMIT, built: BUILT };
+      if (model.startsWith("claude")) return json({ ok: false, ...info, reason: "Claude vyžaduje API klíč (zatím není nastaven)" });
+      const t0 = Date.now();
+      try {
+        await env.AI.run(model, { messages: [{ role: "user", content: "ping" }], max_tokens: 1, temperature: 0 });
+        return json({ ok: true, ...info, ms: Date.now() - t0 });
+      } catch (e: unknown) {
+        return json({ ok: false, ...info, ms: Date.now() - t0, reason: String((e as { message?: string })?.message || e).slice(0, 160) });
+      }
     }
 
     if (req.method === "POST" && url.pathname === "/api/derive") {
@@ -241,8 +262,22 @@ button:disabled{opacity:.5;cursor:not-allowed}
 .doc p{margin:8px 0}.doc code{background:var(--panel2);padding:1px 6px;border-radius:5px;font-size:13px}
 .foot{color:var(--muted);font-size:11px;text-align:center;margin-top:24px;opacity:.6}
 a{color:var(--accent)}
-@media print{.tabs,.drop,.files,button,#inzeratCard,#reqCard,.foot{display:none!important}.view{display:block!important}}
-</style></head><body><div class="wrap">
+.statusbar{position:sticky;top:0;z-index:30;background:#0a1120;border-bottom:1px solid var(--line)}
+.sbinner{max-width:960px;margin:0 auto;padding:7px 22px;display:flex;gap:6px 16px;flex-wrap:wrap;align-items:center;font-size:12px;color:var(--muted);font-family:ui-monospace,Consolas,monospace}
+.sbbrand{font-weight:700;color:var(--txt)}
+.sbitem b{color:var(--txt)}.sbitem b#sbModel{color:var(--accent)}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--muted);margin-right:5px;vertical-align:middle}
+.dot.ok{background:var(--accent)}.dot.bad{background:var(--red)}.dot.wait{background:var(--amber)}
+.sbre{cursor:pointer;color:var(--accent);margin-left:5px;text-decoration:none}
+@media print{.statusbar,.tabs,.drop,.files,button,#inzeratCard,#reqCard,.foot{display:none!important}.view{display:block!important}}
+</style></head><body>
+<div class="statusbar"><div class="sbinner">
+  <span class="sbbrand">🛡️ faxx-hr</span>
+  <span class="sbitem" title="verze nasazení (commit · čas buildu)">⎇ <b title="${COMMIT_FULL}">${COMMIT}</b> · ${BUILT}</span>
+  <span class="sbitem" title="AI model použitý na extrakci z CV">🧠 <b id="sbModel">—</b></span>
+  <span class="sbitem" title="dostupnost komunikace s AI"><i id="sbDot" class="dot wait"></i><span id="sbAI">ověřuji…</span><a class="sbre" id="sbPing" title="ověřit znovu">↻</a></span>
+</div></div>
+<div class="wrap">
 <h1>🛡️ faxx-hr</h1>
 <p class="lead">Hodnocení kandidátů proti inzerátu s obranou proti skrytým instrukcím v CV. Skóre počítá pevný rubrik nad extrahovanými daty — rozhoduješ ty.</p>
 <div class="tabs">
@@ -325,9 +360,22 @@ const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 function esc(s){return (s||'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]))}
 // tabs
 $$('.tab').forEach(t=>t.onclick=()=>{$$('.tab').forEach(x=>x.classList.remove('on'));$$('.view').forEach(x=>x.classList.remove('on'));t.classList.add('on');$('#'+t.dataset.v).classList.add('on')});
-// model persist
-const modelSel=$('#model'); modelSel.value=localStorage.getItem('faxx_model')||modelSel.value; modelSel.onchange=()=>localStorage.setItem('faxx_model',modelSel.value);
+// model persist + stavová lišta
+const modelSel=$('#model'); modelSel.value=localStorage.getItem('faxx_model')||modelSel.value;
 const model=()=>modelSel.value;
+const shortModel=m=>m.split('/').pop();
+function updSb(){$('#sbModel').textContent=shortModel(model())}
+function pingAI(){
+  const dot=$('#sbDot'),lbl=$('#sbAI');
+  dot.className='dot wait';lbl.textContent='ověřuji…';
+  fetch('/api/health?model='+encodeURIComponent(model())).then(r=>r.json()).then(h=>{
+    if(h.ok){dot.className='dot ok';lbl.textContent='AI dostupná · '+h.ms+' ms'}
+    else{dot.className='dot bad';lbl.textContent='AI nedostupná'+(h.reason?' · '+h.reason:'')}
+  }).catch(e=>{dot.className='dot bad';lbl.textContent='AI nedostupná · '+e});
+}
+modelSel.onchange=()=>{localStorage.setItem('faxx_model',modelSel.value);updSb();pingAI()};
+$('#sbPing').onclick=pingAI;
+updSb();pingAI();
 // files
 let files=[];
 const drop=$('#drop'),fileInput=$('#file');

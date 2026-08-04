@@ -8,6 +8,7 @@
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
     "deploy:upload": "node scripts/deploy-upload.mjs",
+    "deploy:app": "node scripts/deploy-app.mjs",
     "db:init": "wrangler d1 execute faxx-hr --file=migrations/0001_init.sql"
   },
   "dependencies": {

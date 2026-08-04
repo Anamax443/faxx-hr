@@ -292,25 +292,27 @@ function pdfText(buf: Uint8Array): string {
   }
   return out + " " + contentText(raw);
 }
-export async function extractPdfText(buf: Uint8Array, fname: string, env: DetectEnv): Promise<{ text: string; via: string; err?: string }> {
-  const parts: string[] = [];
+export async function extractPdfText(buf: Uint8Array, fname: string, env: DetectEnv): Promise<{ text: string; raw: string; via: string; err?: string }> {
   const via: string[] = [];
   let err: string | undefined;
+  let md = "";
   if (env?.AI?.toMarkdown) {
     try {
       const res = await env.AI.toMarkdown([{ name: fname || "cv.pdf", blob: new Blob([buf], { type: "application/pdf" }) }]);
-      const md = Array.isArray(res) ? res.map((r) => r?.data || "").join("\n") : "";
-      if (md.trim()) { parts.push(md); via.push("cf-toMarkdown"); } else via.push("cf-md:0");
+      md = Array.isArray(res) ? res.map((r) => r?.data || "").join("\n") : "";
+      via.push(md.trim() ? "cf-toMarkdown" : "cf-md:0");
     } catch (e: unknown) {
       err = String((e as { message?: string })?.message || e).slice(0, 180);
       via.push("cf-md:ERR");
     }
   }
-  try {
-    const raw = pdfText(buf);
-    if (raw.trim()) { parts.push(raw); via.push("raw"); }
-  } catch { /* nic */ }
-  return { text: parts.join("\n"), via: via.join("+") || "none", err };
+  // raw fflate extraktor slouží k injection skenu; jako VIDITELNÝ text jen když
+  // toMarkdown nic nevrátí — u PDF s vloženými fonty (Word/reportlab) dává glyf-smetí.
+  let raw = "";
+  try { raw = pdfText(buf); } catch { /* nic */ }
+  let text = md.trim();
+  if (!text) { text = raw.trim(); if (text) via.push("raw"); }
+  return { text, raw, via: via.join("+") || "none", err };
 }
 
 // --- veřejné API: jeden dokument → split + flagy ---------------------------
@@ -335,9 +337,10 @@ export async function scanDocument(fname: string, buf: Uint8Array, env: DetectEn
       res.visible = out.visible.trim();
       res.hidden = out.hidden.trim();
     } else if (ext === "pdf") {
-      const { text, via, err } = await extractPdfText(buf, fname, env);
+      const { text, raw, via, err } = await extractPdfText(buf, fname, env);
       res.visible = text.trim();
-      const ctx = injectionContext(text);
+      // injection hledáme ve viditelném textu I v raw extrakci (union) — ale raw už do visible NEjde
+      const ctx = injectionContext(text) || (raw && raw !== text ? injectionContext(raw) : null);
       if (ctx) res.flags.push({ type: "pdf_injection_text", severity: "warn", location: `PDF (textová vrstva, ${via})`, evidence: "nalezená pasáž: „" + ctx + "“", method: "classifier" });
       const base = ctx
         ? "Nalezen text instrukčního charakteru (čte se i neviditelné bílé písmo s textovou vrstvou). Hloubkovou detekci skrytí podle barvy doplní on-prem runner."
