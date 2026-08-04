@@ -32,19 +32,24 @@ const str = (x: unknown): string => (typeof x === "string" ? x : x == null ? "" 
 const num = (x: unknown): number => (typeof x === "number" && Number.isFinite(x) ? x : Number(x) || 0);
 const arr = (x: unknown): unknown[] => (Array.isArray(x) ? x : []);
 
-interface Requirements { jobTitle: string; minYears: number; requiredSkills: string[] }
+interface Requirements { jobTitle: string; minYears: number; requiredSkills: string[]; weights?: Record<string, number> }
+
+// výchozí váhy (v %); rubric.ts je stejně normalizuje podle součtu, takže stačí kladná čísla
+export const DEFAULT_WEIGHTS: Record<string, number> = { roky_praxe: 25, dovednosti: 30, vzdelani: 15, en: 10, stabilita: 10, certifikace: 10 };
 
 function buildRubric(r: Requirements): Rubric {
+  const w = r.weights || {};
+  const wv = (k: string) => (typeof w[k] === "number" && w[k] >= 0 ? w[k] : DEFAULT_WEIGHTS[k]);
   return {
     jobTitle: r.jobTitle || "Pozice",
     gates: r.minYears > 0 ? [{ key: "min_praxe", field: "years_total_experience", op: ">=", value: r.minYears, reason: `Méně než ${r.minYears} let praxe = diskvalifikace.` }] : [],
     criteria: [
-      { key: "roky_praxe", label: "Roky praxe", type: "numeric_scale", weight: 0.25, min: 0, max: Math.max(8, r.minYears + 3) },
-      { key: "dovednosti", label: "Shoda klíčových dovedností", type: "set_overlap", weight: 0.30, required: r.requiredSkills },
-      { key: "vzdelani", label: "Vzdělání", type: "category_map", weight: 0.15, aggregate: "max", map: { secondary: 5, bachelor: 7, master: 10, phd: 10, course: 4, other: 2 } },
-      { key: "en", label: "Angličtina", type: "cefr_map", weight: 0.10, language: "EN", map: { A1: 0, A2: 0, B1: 4, B2: 7, C1: 9, C2: 10, native: 10 } },
-      { key: "stabilita", label: "Stabilita zaměstnání", type: "tenure", weight: 0.10, penaltyBelowMonths: 6 },
-      { key: "certifikace", label: "Relevantní certifikace", type: "bonus", weight: 0.10, pointsEach: 2, cap: 10 },
+      { key: "roky_praxe", label: "Roky praxe", type: "numeric_scale", weight: wv("roky_praxe"), min: 0, max: Math.max(8, r.minYears + 3) },
+      { key: "dovednosti", label: "Shoda klíčových dovedností", type: "set_overlap", weight: wv("dovednosti"), required: r.requiredSkills },
+      { key: "vzdelani", label: "Vzdělání", type: "category_map", weight: wv("vzdelani"), aggregate: "max", map: { secondary: 5, bachelor: 7, master: 10, phd: 10, course: 4, other: 2 } },
+      { key: "en", label: "Angličtina", type: "cefr_map", weight: wv("en"), language: "EN", map: { A1: 0, A2: 0, B1: 4, B2: 7, C1: 9, C2: 10, native: 10 } },
+      { key: "stabilita", label: "Stabilita zaměstnání", type: "tenure", weight: wv("stabilita"), penaltyBelowMonths: 6 },
+      { key: "certifikace", label: "Relevantní certifikace", type: "bonus", weight: wv("certifikace"), pointsEach: 2, cap: 10 },
     ],
   };
 }
@@ -68,39 +73,65 @@ function worstSeverity(flags: { severity: string }[]): string {
   return "clean";
 }
 
-interface CandidateInput { name: string; visible?: string; flags?: { type: string; severity: string; location: string; evidence: string }[]; hidden_chars?: number; note?: string; buf?: Uint8Array; ext?: string }
+interface DocInput { name: string; buf?: Uint8Array; visible?: string; flags?: { type: string; severity: string; location: string; evidence: string }[]; hidden_chars?: number; note?: string }
+interface CandidateInput { name: string; docs: DocInput[] }
+
+// Odvodí jméno osoby z názvu souboru → seskupí dokumenty téhož kandidáta.
+// "CV_Anna_Novakova.pdf" i "Motivacni_dopis_Anna_Novakova.pdf" → klíč "anna novakova".
+const DOC_WORDS = /\b(cv|zivotopis|resume|curriculum|vitae|motivacn\w*|dopis|cover|letter|priloh\w*|dokument|final\w*|verze|v\d+|\d{4})\b/gi;
+export function personKey(filename: string): { key: string; display: string } {
+  let n = filename.replace(/\.[^.]+$/, "").replace(/[_\-]+/g, " ");
+  n = n.replace(DOC_WORDS, " ").replace(/\s+/g, " ").trim();
+  const key = n.normalize("NFKD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
+  return key ? { key, display: n } : { key: filename.toLowerCase(), display: filename };
+}
+export function groupByPerson(files: { name: string; buf?: Uint8Array; visible?: string }[]): CandidateInput[] {
+  const m = new Map<string, CandidateInput>();
+  for (const f of files) {
+    const { key, display } = personKey(f.name);
+    if (!m.has(key)) m.set(key, { name: display, docs: [] });
+    m.get(key)!.docs.push({ name: f.name, buf: f.buf, visible: f.visible });
+  }
+  return [...m.values()];
+}
 
 async function evaluate(cands: CandidateInput[], req: Requirements, ai: AiBinding, model: string, env: Env) {
   const rubric = buildRubric(req);
   const results = [];
   for (const c of cands) {
-    let visible = c.visible ?? "";
-    let flags = c.flags ?? [];
-    let hiddenChars = c.hidden_chars ?? 0;
-    let note = c.note ?? "";
-    if (c.buf) {
-      const scan = await scanDocument(c.name, c.buf, env);
-      visible = scan.visible;
-      flags = scan.flags;
-      hiddenChars = scan.hiddenChars;
-      note = scan.note;
+    const parts: string[] = [];
+    let flags: { type: string; severity: string; location: string; evidence: string; doc?: string }[] = [];
+    let hiddenChars = 0;
+    const notes: string[] = [];
+    const docsMeta: { name: string; visible_chars: number; hidden_chars: number; flags: number; note: string }[] = [];
+    for (const d of c.docs) {
+      let visible = d.visible ?? "", dflags = d.flags ?? [], dhidden = d.hidden_chars ?? 0, note = d.note ?? "";
+      if (d.buf) {
+        const scan = await scanDocument(d.name, d.buf, env);
+        visible = scan.visible; dflags = scan.flags; dhidden = scan.hiddenChars; note = scan.note;
+      }
+      if (visible.trim()) parts.push(visible);
+      flags = flags.concat(dflags.map((f) => ({ ...f, doc: d.name })));
+      hiddenChars += dhidden;
+      if (note) notes.push(note);
+      docsMeta.push({ name: d.name, visible_chars: visible.length, hidden_chars: dhidden, flags: dflags.length, note });
     }
-    // prázdný viditelný text (obrázek/sken bez OCR, nečitelné PDF) → neplýtvej AI voláním
-    const ext = visible.trim() ? await extractQualification(visible, ai, model) : { qualification: {} as Qualification, ok: false, error: "prázdný viditelný text", ms: 0 };
+    // hodnocení z CELKU: spojený viditelný text VŠECH dokumentů kandidáta
+    const combined = parts.join("\n\n").slice(0, 16000);
+    const ext = combined.trim() ? await extractQualification(combined, ai, model) : { qualification: {} as Qualification, ok: false, error: "prázdný viditelný text", ms: 0 };
     const score = scoreCandidate(ext.qualification, rubric);
     results.push({
       name: c.name, score,
       flags, worstSeverity: worstSeverity(flags), flagCount: flags.length,
-      qualification: ext.qualification,
-      extract_ms: ext.ms, extract_ok: ext.ok, extract_error: ext.error,
-      visible_chars: visible.length, hidden_chars: hiddenChars, note,
+      qualification: ext.qualification, extract_ms: ext.ms, extract_ok: ext.ok,
+      docs: docsMeta, visible_chars: combined.length, hidden_chars: hiddenChars, note: notes.join(" · "),
     });
   }
   const ranking = rankCandidates(results).map((r, i) => ({
     rank: i + 1, name: r.name, total: r.score.total, disqualified: r.score.disqualified,
     gatesFailed: r.score.gates.filter((g) => !g.passed).map((g) => ({ key: g.key, reason: g.reason, value: g.value })),
     breakdown: r.score.breakdown.map((b) => ({ label: b.label, score: b.score, detail: b.detail })),
-    flags: r.flags, worstSeverity: r.worstSeverity, flagCount: r.flagCount,
+    flags: r.flags, worstSeverity: r.worstSeverity, flagCount: r.flagCount, docs: r.docs,
     extract_ms: r.extract_ms, extract_ok: r.extract_ok, visible_chars: r.visible_chars, hidden_chars: r.hidden_chars, note: r.note,
   }));
   return { rubric: { jobTitle: req.jobTitle, minYears: req.minYears, requiredSkills: req.requiredSkills }, model, count: ranking.length, ranking };
@@ -161,7 +192,7 @@ export default {
     if (req.method === "POST" && url.pathname === "/api/evaluate") {
       try {
         const ctype = req.headers.get("content-type") || "";
-        let cands: CandidateInput[] = [];
+        const files: { name: string; buf?: Uint8Array; visible?: string }[] = [];
         let req0: Requirements | null = null;
         let inzerat = "";
         let model = EXTRACT_MODEL_DEFAULT;
@@ -170,14 +201,14 @@ export default {
           const b = obj(await req.json());
           model = str(b.model) || model;
           inzerat = str(b.inzerat);
-          if (b.requirements) { const r = obj(b.requirements); req0 = { jobTitle: str(r.jobTitle), minYears: Math.max(0, Math.round(num(r.minYears))), requiredSkills: arr(r.requiredSkills).map((s) => str(s).toLowerCase().trim()).filter(Boolean) }; }
-          cands = arr(b.candidates).map((c) => { const o = obj(c); return { name: str(o.name) || "kandidát", visible: str(o.visible_text) }; });
+          if (b.requirements) { const r = obj(b.requirements); req0 = { jobTitle: str(r.jobTitle), minYears: Math.max(0, Math.round(num(r.minYears))), requiredSkills: arr(r.requiredSkills).map((s) => str(s).toLowerCase().trim()).filter(Boolean), weights: obj(r.weights) as Record<string, number> }; }
+          for (const c of arr(b.candidates)) { const o = obj(c); files.push({ name: str(o.name) || "kandidát", visible: str(o.visible_text) }); }
         } else {
           const form = await req.formData();
           model = str(form.get("model")) || model;
           inzerat = str(form.get("inzerat"));
           const rq = form.get("requirements");
-          if (typeof rq === "string" && rq) { const r = obj(JSON.parse(rq)); req0 = { jobTitle: str(r.jobTitle), minYears: Math.max(0, Math.round(num(r.minYears))), requiredSkills: arr(r.requiredSkills).map((s) => str(s).toLowerCase().trim()).filter(Boolean) }; }
+          if (typeof rq === "string" && rq) { const r = obj(JSON.parse(rq)); req0 = { jobTitle: str(r.jobTitle), minYears: Math.max(0, Math.round(num(r.minYears))), requiredSkills: arr(r.requiredSkills).map((s) => str(s).toLowerCase().trim()).filter(Boolean), weights: obj(r.weights) as Record<string, number> }; }
           let total = 0;
           for (const f of form.getAll("cv")) {
             if (typeof f === "string") continue;
@@ -185,10 +216,12 @@ export default {
             if (file.size > MAX_FILE_BYTES) return json({ error: `Soubor ${file.name} je větší než 8 MB.` }, 413);
             total += file.size;
             if (total > MAX_TOTAL_BYTES) return json({ error: "Součet souborů přesahuje 10 MB." }, 413);
-            cands.push({ name: file.name, buf: new Uint8Array(await file.arrayBuffer()) });
+            files.push({ name: file.name, buf: new Uint8Array(await file.arrayBuffer()) });
           }
         }
 
+        // seskup dokumenty podle jména osoby → kandidát = osoba (víc dokumentů)
+        const cands = groupByPerson(files);
         if (model.startsWith("claude")) return json({ error: "Claude backend vyžaduje API klíč (zatím není nastaven). Zvol free Cloudflare model." }, 400);
         if (!cands.length) return json({ error: "žádná CV k vyhodnocení" }, 400);
         if (!req0) {
@@ -241,6 +274,8 @@ button:disabled{opacity:.5;cursor:not-allowed}
 .rank th{text-align:left;color:var(--muted);font-size:11px;text-transform:uppercase;padding:6px 8px;border-bottom:1px solid var(--line)}
 .rank td{padding:9px 8px;border-bottom:1px solid var(--line);vertical-align:top}
 .rank tr.dq{opacity:.6}
+.docs{font-size:12px;color:var(--muted);margin:3px 0 2px;line-height:1.5}
+.dflag{color:var(--amber);font-size:11px}
 .score{font-weight:800;font-size:16px}
 .bar{height:6px;background:var(--panel2);border-radius:4px;margin-top:4px;overflow:hidden}
 .bar>i{display:block;height:100%;background:var(--accent)}
@@ -333,11 +368,20 @@ a{color:var(--accent)}
     <div class="hint">Primárně běží <b>zdarma</b> na Cloudflare Workers AI. Claude se zapne, až bude nastaven API klíč (max kvalita/spolehlivost). Nastavení se ukládá v prohlížeči.</div>
   </div>
   <div class="card">
-    <h3>Jak se skóruje</h3>
-    <div class="doc">
-      <p>Váhy kritérií (v této verzi pevné): roky praxe 25 %, shoda dovedností 30 %, vzdělání 15 %, angličtina 10 %, stabilita 10 %, certifikace 10 %.</p>
-      <p>Skóre 0–100 počítá deterministický rubrik nad daty, která z CV vytáhla AI. Editovatelné váhy a šablony rubriků přijdou v další verzi.</p>
+    <h3>Váhy kritérií</h3>
+    <div class="row">
+      <div><label>Roky praxe (%)</label><input type="number" min="0" id="w_roky_praxe" value="25"></div>
+      <div><label>Shoda dovedností (%)</label><input type="number" min="0" id="w_dovednosti" value="30"></div>
+      <div><label>Vzdělání (%)</label><input type="number" min="0" id="w_vzdelani" value="15"></div>
     </div>
+    <div class="row">
+      <div><label>Angličtina (%)</label><input type="number" min="0" id="w_en" value="10"></div>
+      <div><label>Stabilita (%)</label><input type="number" min="0" id="w_stabilita" value="10"></div>
+      <div><label>Certifikace (%)</label><input type="number" min="0" id="w_certifikace" value="10"></div>
+    </div>
+    <div class="hint" id="wSum">Součet: 100 %</div>
+    <button class="ghost" id="wReset" style="margin-top:10px">Obnovit výchozí</button>
+    <div class="hint" style="margin-top:8px">Skóre 0–100 počítá deterministický rubrik nad daty, která z CV vytáhla AI. Váhy se ukládají v prohlížeči a použijí se při dalším vyhodnocení (nemusí dát dohromady přesně 100 % — skóre se normalizuje). Gate (min. roky praxe) nastavíš u požadavků na záložce Hodnocení.</div>
   </div>
 </div>
 
@@ -376,6 +420,14 @@ function pingAI(){
 modelSel.onchange=()=>{localStorage.setItem('faxx_model',modelSel.value);updSb();pingAI()};
 $('#sbPing').onclick=pingAI;
 updSb();pingAI();
+// váhy kritérií (nastavitelné, ukládané v prohlížeči)
+const WKEYS=['roky_praxe','dovednosti','vzdelani','en','stabilita','certifikace'];
+const WDEF={roky_praxe:25,dovednosti:30,vzdelani:15,en:10,stabilita:10,certifikace:10};
+function getWeights(){const o={};WKEYS.forEach(k=>o[k]=Math.max(0,+$('#w_'+k).value||0));return o}
+function wSum(){const o=getWeights();$('#wSum').textContent='Součet: '+WKEYS.reduce((a,k)=>a+o[k],0)+' %'}
+function saveWeights(){localStorage.setItem('faxx_weights',JSON.stringify(getWeights()));wSum()}
+(function(){const s=JSON.parse(localStorage.getItem('faxx_weights')||'null')||WDEF;WKEYS.forEach(k=>{$('#w_'+k).value=s[k]??WDEF[k];$('#w_'+k).oninput=saveWeights});wSum()})();
+$('#wReset').onclick=()=>{WKEYS.forEach(k=>$('#w_'+k).value=WDEF[k]);saveWeights()};
 // files
 let files=[];
 const drop=$('#drop'),fileInput=$('#file');
@@ -418,7 +470,7 @@ $('#inzFile').onchange=async()=>{
 $('#evalBtn').onclick=async()=>{
   $('#err').textContent='';
   if(!files.length){$('#err').textContent='Přidej aspoň jedno CV.';return}
-  const req={jobTitle:$('#jobTitle').value.trim(),minYears:+$('#minYears').value||0,requiredSkills:$('#skills').value.split(',').map(s=>s.trim().toLowerCase()).filter(Boolean)};
+  const req={jobTitle:$('#jobTitle').value.trim(),minYears:+$('#minYears').value||0,requiredSkills:$('#skills').value.split(',').map(s=>s.trim().toLowerCase()).filter(Boolean),weights:getWeights()};
   const fd=new FormData();fd.set('model',model());fd.set('requirements',JSON.stringify(req));fd.set('inzerat',$('#inzerat').value);
   for(const f of files)fd.append('cv',f);
   $('#evalBtn').disabled=true;$('#evalMsg').textContent='Vyhodnocuji '+files.length+' CV…';
@@ -437,14 +489,16 @@ function renderResults(r){
   r.ranking.forEach((c,i)=>{
     const sevB=c.disqualified?'<span class="badge dq">diskvalifikován</span>':'<span class="badge '+c.worstSeverity+'">'+(c.worstSeverity==='clean'?'čisto':(SEV[c.worstSeverity]||'')+' '+c.flagCount+'×')+'</span>';
     h+='<tr class="'+(c.disqualified?'dq':'')+'"><td>'+c.rank+'</td>'
-      +'<td><b>'+esc(c.name)+'</b><div class="hint">extrakce '+c.extract_ms+' ms · viditelný '+c.visible_chars+' zn.'+(c.hidden_chars?' · skrytý '+c.hidden_chars+' zn.':'')+'</div></td>'
+      +'<td><b>'+esc(c.name)+'</b>'
+      +'<div class="docs">'+(c.docs||[]).map(d=>'📄 '+esc(d.name)+(d.flags?' <span class="dflag">'+d.flags+'⚑</span>':'')+(d.note&&/OCR|obr[aá]zek/i.test(d.note)?' <span class="dflag">obrázek</span>':'')).join('<br>')+'</div>'
+      +'<div class="hint">'+((c.docs&&c.docs.length)||1)+' dok. · extrakce '+c.extract_ms+' ms · text '+c.visible_chars+' zn.'+(c.hidden_chars?' · skrytý '+c.hidden_chars+' zn.':'')+'</div></td>'
       +'<td><span class="score">'+c.total+'</span><div class="bar"><i style="width:'+c.total+'%"></i></div></td>'
       +'<td>'+sevB+'</td>'
       +'<td><span class="expand" data-i="'+i+'">rozpad ▾</span></td></tr>';
     h+='<tr><td colspan="5" style="padding:0"><div class="det" id="det'+i+'">'
       +(c.disqualified?'<div class="crit" style="color:var(--red)">Diskvalifikováno: '+esc(c.gatesFailed.map(g=>g.reason).join("; "))+'</div>':'')
       +c.breakdown.map(b=>'<div class="crit"><b>'+esc(b.label)+':</b> '+b.score.toFixed(1)+'/10 — '+esc(b.detail)+'</div>').join('')
-      +(c.flags.length?'<div style="margin-top:8px;color:var(--muted);font-size:12px">Nálezy ve zdroji (do hodnocení NEjdou):</div>'+c.flags.map(f=>'<div class="flg '+f.severity+'">'+(SEV[f.severity]||'')+' '+esc(f.evidence)+' <span class="hint">· '+esc(f.location)+'</span></div>').join(''):'')
+      +(c.flags.length?'<div style="margin-top:8px;color:var(--muted);font-size:12px">Nálezy ve zdrojových dokumentech (do hodnocení NEjdou):</div>'+c.flags.map(f=>'<div class="flg '+f.severity+'">'+(SEV[f.severity]||'')+' '+esc(f.evidence)+' <span class="hint">· '+(f.doc?'📄 '+esc(f.doc)+' · ':'')+esc(f.location)+'</span></div>').join(''):'')
       +(c.note?'<div class="hint" style="margin-top:6px">'+esc(c.note)+'</div>':'')
       +'</div></td></tr>';
   });
