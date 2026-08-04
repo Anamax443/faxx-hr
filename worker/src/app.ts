@@ -290,7 +290,7 @@ a{color:var(--accent)}
     <p><b>2. Extrakce.</b> AI přečte jen viditelný text a vytáhne strukturovaná fakta do pevného schématu (roky praxe, dovednosti, vzdělání, jazyky…). Schéma <b>nemá pole „skóre"</b>, takže instrukce typu „ohodnoť mě 100/100" nemá kam zapsat.</p>
     <p><b>3. Skórování.</b> Pořadí počítá <b>deterministický rubrik v kódu</b> nad těmi daty — reprodukovatelně a vysvětlitelně. Skórovací cesta <b>nikdy nevidí surový text CV</b>, takže injection nemá jak skóre ovlivnit.</p>
     <p><b>4. Rozhoduješ ty.</b> Rating je podpora rozhodnutí, ne automat. Není tu „hromadné zamítnutí“ — postup kandidáta dál dělá vždy člověk (EU AI Act čl. 14, GDPR čl. 22).</p>
-    <p>Detekci skrytého textu si můžeš vyzkoušet na <a href="/scan" onclick="return false" title="samostatné demo detektoru">upload demu detektoru</a>.</p>
+    <p>Detekci skrytého textu si můžeš vyzkoušet na samostatném <a href="https://faxx-hr-upload.bass443.workers.dev" target="_blank" rel="noopener" title="otevře se v novém panelu">demu detektoru</a> (nahraješ jedno CV a uvidíš, co je skryté).</p>
   </div>
 </div>
 
