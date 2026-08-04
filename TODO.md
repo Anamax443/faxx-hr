@@ -67,11 +67,13 @@ dual-path diff se měří odděleně (diff ještě neexistuje, viz F1).
 - [ ] Kaskáda: Workers AI (klasifikace, Llama Guard) → Haiku 4.5 → Sonnet 5 + vision; logovat `model`, tokeny, `cost_czk`
 - [ ] Denní práh nákladů + alert
 - [ ] **Doportovat detekci do Workeru** (kontrast/Unicode) NEBO edge jen triáž + full on-prem
-- [ ] **Hardening on-prem z boundary matice** (viz [`docs/PDF-BOUNDARY-MATRIX.md`](docs/PDF-BOUNDARY-MATRIX.md)):
-  - [ ] render mode 3 zadržet do `hidden_text` (teď se jen coarse-flagne a text proteče do `visible_text`)
-  - [ ] pokrýt ToUnicode/cmap ↔ glyph mismatch (injection nad `visible_text` nebo porovnání glyf↔ToUnicode)
-  - [ ] číst XFA/AcroForm XML (nebo aspoň flag „dokument obsahuje XFA")
-  - [ ] edge: viditelný instrukční tón hlásit jako mírnější kategorii odděleně od skrytého injection (méně FP)
+- [~] **Hardening on-prem z boundary matice** (viz [`docs/PDF-BOUNDARY-MATRIX.md`](docs/PDF-BOUNDARY-MATRIX.md)) — 2026-08-04, PDF regrese 10/10:
+  - [x] render mode 3 (+ nulová alfa `ca 0`) zadržet do `hidden_text` — přes `get_texttrace` (`type`/`opacity`), ne jen coarse `3 Tr`
+  - [x] offpage: text mimo mediabox, který `get_text` zahazuje, hlásit `pdf_offpage` (z `get_texttrace`) do `hidden_text`
+  - [~] ToUnicode/cmap ↔ glyph mismatch — injection nad `visible_text` = `visible_instruction_tone` (warn); **payload ve `visible_text` zatím zůstává**, plná zádrž chce porovnat glyf↔ToUnicode (odloženo)
+  - [x] číst XFA/AcroForm XML (`catalog→AcroForm→XFA`, stream i pole) → `pdf_xfa` warn/critical + obsah do `hidden_text`
+  - [x] viditelný instrukční tón jako mírnější kategorie `visible_instruction_tone` (warn) odděleně od skrytého injection (méně FP)
+  - [ ] JS/OpenAction na on-prem: dnes jen zadržen (neextrahuje se), jistí jen edge → volitelně flag „dokument obsahuje JavaScript"
 
 ---
 

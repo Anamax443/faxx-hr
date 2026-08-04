@@ -20,8 +20,10 @@ z viditelných znaků**. Skrytý text není „vyčištěn a zapomenut" — je o
 stranou a předložen člověku jako informace o uchazeči.
 
 Invariant, který hlídá regresní sada: žádný řetězec, který skončil ve flagu
-typu `*_vanish`, `*_low_contrast` nebo `*_tiny_font`, se nesmí objevit ve
-`visible_text`.
+typu `*_vanish`, `*_low_contrast`, `*_tiny_font`, `pdf_render_mode_3`,
+`pdf_offpage` ani `pdf_xfa`, se nesmí objevit ve `visible_text`. (Výjimka je
+`visible_instruction_tone` — instrukční tón v textu, který člověk VIDÍ; ten ve
+`visible_text` z definice zůstává, viz níže.)
 
 ## Sedm oprav proti v1
 
@@ -46,19 +48,38 @@ Zároveň se opravila i opačná chyba: **textboxy a barevné sidebary se neflag
 Jsou mimo hlavní tok, ale člověk je normálně vidí. Flagují se jen části, které
 sighted čtenář na papíře nevidí: `docProps`, komentáře, poznámky, alt-texty.
 
-### K bodu 6 — přiznaná hranice
+### K bodu 6 — od hrubé sondy k přesné zádrži (2026-08-04)
 
-`3 Tr` v content streamu je **hrubá detekce** (`method="deterministic-coarse"`):
-řekne „na této straně je neviditelný render mode", ale ne který text. Přesné
-zaměření vyžaduje PyMuPDF na on-prem runneru.
+Původní `3 Tr` regex v content streamu byla **hrubá detekce**
+(`method="deterministic-coarse"`) — řekla „na této straně je neviditelný render
+mode", ale ne který text, takže PyMuPDF ho stejně vytáhl do `visible_text`.
+Nahrazeno **přesným routováním přes `get_texttrace`**:
 
-Tyhle hraniční vektory jsou teď **změřené** na obou vrstvách (on-prem + živý
-Worker) → [`PDF-BOUNDARY-MATRIX.md`](PDF-BOUNDARY-MATRIX.md), reprodukce
+- **render mode Tr 3/7 a nulová alfa (`ca 0`)** — `get_texttrace` u každého spanu
+  vrací `type` (= PDF text render mode) a `opacity`. Spany kreslené neviditelně
+  se namapují na spany z `get_text("dict")` (překryv bboxů > 50 %) a jejich text
+  jde do `hidden_text`, **ne do `visible_text`** (V-PDF-01, V-PDF-10). Hrubá
+  `3 Tr` sonda zůstává jen jako fallback pro starší PyMuPDF bez `get_texttrace`.
+- **text mimo mediabox** — `get_text` ho tiše zahodí (nikdo o něm neví); `get_texttrace`
+  ho vidí → `pdf_offpage` + do `hidden_text` (V-PDF-04).
+- **XFA/AcroForm** — payload žije mimo content stream (nevidí ho člověk ANI se
+  nedostane do `visible_text`). Čte se přes `catalog → AcroForm → XFA` (stream i
+  pole `[name ref …]`): přítomnost = `pdf_xfa` (warn), injection uvnitř = critical,
+  obsah do `hidden_text` (V-PDF-07).
+- **instrukční tón ve viditelném textu** — `visible_instruction_tone` (**vždy jen
+  warn**, oddělená mírnější kategorie od skryté injection). Chytí i útok, kde
+  extrakce ≠ displej (ToUnicode/cmap obfuskace, V-PDF-06: člověk vidí gibberish,
+  extraktor přes ToUnicode přečte payload). **Přiznaná hranice:** payload u V-PDF-06
+  ve `visible_text` zůstává (dosáhne modelu), jen se warnuje; plná zádrž chce
+  porovnat vyrenderované glyfy s ToUnicode (odloženo). Riziko tlumí architektura:
+  extrakce (LLM #1) plní jen pevné schéma bez skóre.
+
+Hraniční vektory jsou **změřené** na obou vrstvách (on-prem + živý Worker) →
+[`PDF-BOUNDARY-MATRIX.md`](PDF-BOUNDARY-MATRIX.md), reprodukce
 `python detector/boundary_matrix.py`. Shrnutí: **napříč oběma vrstvami neprojde
-k modelu žádný z nich nezachycen** (defense-in-depth). Zbývající on-prem mezery
-(render-mode-3 protéká do `visible_text`; ToUnicode/cmap obfuskace; XFA nikdo
-nehlásí; edge FP na viditelné sebeprezentaci) jsou v matici i v [`TODO.md`](../TODO.md)
-jako hardening položky. EPS/PS zvlášť nepostaveno (subsumováno Form XObjectem).
+k modelu žádný vektor nezachycen** (defense-in-depth). Zbývá: V-PDF-06 do
+`hidden_text` (glyf↔ToUnicode) a volitelně flag JS/OpenAction na on-prem (dnes
+jistí jen edge). EPS/PS zvlášť nepostaveno (subsumováno Form XObjectem).
 
 ## Prahy
 
@@ -76,13 +97,20 @@ autor detektorů — jinak se prahy přeučí na známé vektory.
 ## Regresní sada
 
 ```bash
-python detector/test_vectors.py    # 12 vektorů, bez závislostí, bez sítě
+python detector/test_vectors.py    # DOCX bez závislostí/sítě; PDF část chce PyMuPDF
 ```
 
-Osm útočných vektorů (V01–V08) a čtyři **false-positive kontroly** (N01–N04).
-FP kontroly jsou stejně důležité jako útoky: exit kritérium F0 je recall
-≥ 98 % **při** FP ≤ 5–10 %, a grafická CV s bílým textem na tmavém pozadí
-jsou přesně to, na čem naivní detektor FP rate rozbije. Aktuálně **14/14** (9 útoků + 5 FP kontrol; N05 = benigní Word metadata → čisto, V09 = injekce v metadatech → critical).
+**DOCX (stdlib, bez sítě): 14/14** — 9 útočných vektorů + 5 **false-positive
+kontrol**. FP kontroly jsou stejně důležité jako útoky: exit kritérium F0 je
+recall ≥ 98 % **při** FP ≤ 5–10 %, a grafická CV s bílým textem na tmavém pozadí
+jsou přesně to, na čem naivní detektor FP rate rozbije. (N05 = benigní Word
+metadata → čisto, V09 = injekce v metadatech → critical.)
+
+**PDF (on-prem, vyžaduje PyMuPDF): 10/10** — tytéž vektory jako boundary matice,
+ale offline a s **invariantem zádrže** (payload nesmí do `visible_text`). Pokrývá
+render mode 3, alfu 0, offpage, XFA, ToUnicode i FP sondy; V-PDF-06 je vědomě
+označen `contained=False` (payload ve `visible_text` zůstává, jistí ho warn).
+Bez PyMuPDF se PDF část přeskočí, DOCX 14/14 jede dál. **Celkem 24/24.**
 
 Sada je **ladicí**, ne held-out. Neslouží k prohlášení o splnění gate F0 —
 slouží k tomu, aby změna kódu nerozbila to, co už fungovalo.

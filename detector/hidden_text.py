@@ -504,6 +504,114 @@ def pdf_background_at(drawings, bbox) -> tuple[int, int, int]:
     return tuple(max(0, min(255, int(round(c * 255)))) for c in best[:3])
 
 
+def pdf_texttrace_hidden(page, page_rect) -> tuple[list, list, bool | None]:
+    """Z `get_texttrace` vytáhne spany neviditelné pro člověka ve dvou skupinách:
+
+      regions = bboxy IN-PAGE spanů kreslených neviditelně (render mode Tr 3/7 =
+                nic se nemaluje, nebo nulová průhlednost ca 0) → v hlavní smyčce
+                routují text do `hidden_text` (přesná náhrada hrubé '3 Tr' sondy).
+      offpage = [text] spanů ZCELA mimo stránku — `get_text` je zahodí, ale
+                `get_texttrace` je vidí; jinak by o nich nevěděl nikdo.
+
+    Fallback (starší PyMuPDF bez `get_texttrace`): ([], [], coarse_tr3).
+    """
+    import fitz
+    regions, offpage = [], []
+    try:
+        trace = page.get_texttrace()
+    except Exception:
+        try:
+            raw = page.read_contents() or b""
+            return [], [], bool(re.search(rb"(?<![0-9.])3\s+Tr\b", raw))
+        except Exception:
+            return [], [], None
+    for sp in trace:
+        r = fitz.Rect(sp.get("bbox"))
+        if (r & page_rect).is_empty:  # celý span mimo mediabox
+            txt = strip_invisible("".join(chr(c[0]) for c in sp.get("chars", []))).strip()
+            if txt:
+                offpage.append(txt)
+            continue
+        op = sp.get("opacity", 1.0)
+        op = 1.0 if op is None else op        # pozor: 0.0 je falsy, `or` by ho zabil
+        # type == PDF text render mode; 3 = neviditelný, 7 = jen ořez (taky neviditelný)
+        if sp.get("type") in (3, 7) or op <= 0.05:
+            regions.append(r)
+    return regions, offpage, None
+
+
+def bbox_in_regions(bbox, regions) -> bool:
+    """Span je 'neviditelný', překrývá-li se z >50 % své plochy s neviditelným regionem."""
+    import fitz
+    r = fitz.Rect(bbox)
+    area = abs(r.get_area())
+    if area <= 0:
+        return False
+    for inv in regions:
+        inter = r & inv
+        if not inter.is_empty and abs(inter.get_area()) / area > 0.5:
+            return True
+    return False
+
+
+def pdf_report_xfa(doc, res: ScanResult) -> None:
+    """XFA formulář: payload žije mimo content stream — nevidí ho člověk ANI se
+    nedostane do `visible_text`. Dřív ho nenahlásila žádná vrstva (transparency
+    gap V-PDF-07). Teď: přítomnost = flag, injection uvnitř = kritické, obsah do
+    `hidden_text` (jen pro review, ne do AI). Zvládne stream i pole [name ref …]."""
+    try:
+        cat = doc.pdf_catalog()
+        af = doc.xref_get_key(cat, "AcroForm")
+    except Exception:
+        return
+    if not af:
+        return
+    afx, inline = None, ""
+    if af[0] == "xref":
+        afx = int(af[1].split()[0])
+    elif af[0] == "dict":
+        inline = af[1] or ""
+    else:
+        return
+
+    xfa = None
+    if afx is not None:
+        try:
+            xfa = doc.xref_get_key(afx, "XFA")
+        except Exception:
+            xfa = None
+    has_xfa = bool(xfa and xfa[0] in ("xref", "array")) or ("/XFA" in inline)
+    if not has_xfa:
+        return
+
+    refs: list[int] = []
+    if xfa and xfa[0] == "xref":
+        refs = [int(xfa[1].split()[0])]
+    elif xfa and xfa[0] == "array":
+        refs = [int(m) for m in re.findall(r"(\d+)\s+0\s+R", xfa[1])]
+
+    chunks = []
+    for ref in refs:
+        try:
+            if doc.xref_is_stream(ref):
+                chunks.append(doc.xref_stream(ref) or b"")
+        except Exception:
+            pass
+    xml = b" ".join(chunks).decode("utf-8", "replace")
+    text = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", xml)).strip()
+
+    hit = injection_hit(text)
+    if hit:
+        res.flags.append(Flag(res.doc, "pdf_xfa", "critical", "AcroForm/XFA",
+                              f"[shoda: {hit}] {text[:180]}"))
+    else:
+        res.flags.append(Flag(res.doc, "pdf_xfa", "warn", "AcroForm/XFA",
+                              text[:180] or "dokument obsahuje XFA formulář — jeho obsah "
+                              "nevidí člověk ani nejde do hodnocení"))
+    if len(text) >= MIN_TEXT_LEN:
+        res.hidden_text += text + "\n"
+
+
 def scan_pdf(path: str, res: ScanResult) -> None:
     try:
         import fitz  # PyMuPDF
@@ -514,6 +622,7 @@ def scan_pdf(path: str, res: ScanResult) -> None:
         return
 
     doc = fitz.open(path)
+    pdf_report_xfa(doc, res)  # XFA žije mimo stránky → jednou za dokument
     for pno, page in enumerate(doc, start=1):
         page_rect = page.rect
         try:
@@ -521,17 +630,21 @@ def scan_pdf(path: str, res: ScanResult) -> None:
         except Exception:
             drawings = []
 
-        # render mode 3 = neviditelný text — hrubá kontrola v content streamu
-        try:
-            raw = page.read_contents() or b""
-            if re.search(rb"(?<![0-9.])3\s+Tr\b", raw):
-                res.flags.append(Flag(
-                    res.doc, "pdf_render_mode_3", "warn", f"strana {pno}",
-                    "content stream obsahuje '3 Tr' (neviditelný render mode) — "
-                    "hrubá detekce, přesné zaměření až on-prem runnerem",
-                    method="deterministic-coarse"))
-        except Exception:
-            pass
+        # neviditelné spany (render mode Tr 3/7, alfa 0, mimo stránku) — přes get_texttrace
+        invisible_regions, offpage_texts, coarse_tr3 = pdf_texttrace_hidden(page, page_rect)
+        for txt in offpage_texts:
+            if len(txt) < MIN_TEXT_LEN:
+                continue
+            sev, ev = sev_for(txt)
+            res.flags.append(Flag(res.doc, "pdf_offpage", sev,
+                                  f"strana {pno} (mimo mediabox — vidí jen extraktor)", ev))
+            res.hidden_text += txt + "\n"
+        if coarse_tr3:  # jen fallback pro starší PyMuPDF bez get_texttrace
+            res.flags.append(Flag(
+                res.doc, "pdf_render_mode_3", "warn", f"strana {pno}",
+                "content stream obsahuje '3 Tr' (neviditelný render mode) — "
+                "hrubá detekce (get_texttrace nedostupný)",
+                method="deterministic-coarse"))
 
         for block in page.get_text("dict").get("blocks", []):
             for line in block.get("lines", []):
@@ -558,6 +671,14 @@ def scan_pdf(path: str, res: ScanResult) -> None:
                     fg = ((color >> 16) & 255, (color >> 8) & 255, color & 255)
                     bg = pdf_background_at(drawings, bbox)
                     ratio = contrast_ratio(fg, bg)
+
+                    # neviditelný render mode / nulová alfa → NIKDY do visible_text
+                    if bbox_in_regions(bbox, invisible_regions):
+                        sev, ev = sev_for(txt)
+                        res.flags.append(Flag(res.doc, "pdf_render_mode_3", sev,
+                                              f"strana {pno} (neviditelný render mode Tr 3 / alfa 0)", ev))
+                        res.hidden_text += txt + "\n"
+                        continue
 
                     if (bbox[2] < page_rect.x0 - 1 or bbox[0] > page_rect.x1 + 1
                             or bbox[3] < page_rect.y0 - 1 or bbox[1] > page_rect.y1 + 1):
@@ -614,6 +735,19 @@ def scan(path: str) -> ScanResult:
 
     res.visible_text = res.visible_text.strip()
     res.hidden_text = res.hidden_text.strip()
+
+    # Instrukční / sebeprezentační tón ve VIDITELNÉM textu = mírnější kategorie
+    # než skrytá injection. Chytí i útok, kde extrakce != displej (ToUnicode
+    # obfuskace, V-PDF-06: člověk vidí gibberish, extraktor přečte payload).
+    # VŽDY jen `warn`: text je pro člověka viditelný, tak o něm rozhoduje člověk
+    # (vědomý trade-off proti únavě z FP u legitimní sebeprezentace).
+    vis_hit = injection_hit(res.visible_text)
+    if vis_hit:
+        res.flags.append(Flag(
+            res.doc, "visible_instruction_tone", "warn", "viditelný text",
+            f"[shoda: {vis_hit}] instrukční/sebeprezentační tón ve viditelném textu — "
+            f"člověk ho vidí; pozor na obfuskaci displej≠extrakce, posuď kontext"))
+
     res.stats.update({
         "visible_chars": len(res.visible_text),
         "hidden_chars": len(res.hidden_text),

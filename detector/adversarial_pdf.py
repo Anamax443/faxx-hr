@@ -231,6 +231,24 @@ def v_form_xobject() -> bytes:
     return build_pdf(objs, root=1)
 
 
+def v_transparent_text() -> bytes:
+    """V-PDF-10: text s nulovou průhledností (ExtGState /ca 0) — vykreslí se
+    neviditelně, ale barva i pozice jsou 'normální', takže kontrastní ani
+    render-mode-3 sonda ho samy nechytí. Musí ho zachytit alfa větev."""
+    c = (b"BT /F1 12 Tf 72 780 Td (" + _esc(BENIGN) + b") Tj ET\n"
+         b"q /GS0 gs BT /F1 12 Tf 72 740 Td (" + _esc(PAYLOAD) + b") Tj ET Q\n")
+    objs = {
+        1: b"<< /Type /Catalog /Pages 2 0 R >>",
+        2: b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        3: (b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] "
+            b"/Resources << /Font << /F1 4 0 R >> "
+            b"/ExtGState << /GS0 << /ca 0 /CA 0 >> >> >> /Contents 5 0 R >>"),
+        4: b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+        5: _stream("", c),
+    }
+    return build_pdf(objs, root=1)
+
+
 def n_clean() -> bytes:
     """N-PDF-01: čisté viditelné CV (FP kontrola — musí být čisto)."""
     c = (b"BT /F1 14 Tf 72 780 Td (" + _esc("Jan Novak") + b") Tj ET\n"
@@ -284,6 +302,7 @@ VECTORS = [
     ("V-PDF-07_xfa", "payload v XFA formuláři (mimo content stream)", v_xfa),
     ("V-PDF-08_javascript", "payload v PDF JavaScriptu (/OpenAction)", v_javascript),
     ("V-PDF-09_form_xobject", "bílý payload ve Form XObjectu", v_form_xobject),
+    ("V-PDF-10_transparent", "text s nulovou alfou (ExtGState ca 0)", v_transparent_text),
     ("N-PDF-01_clean", "čisté viditelné CV (FP kontrola)", n_clean),
     ("N-PDF-02_self_promo", "viditelná legitimní sebeprezentace (FP sonda edge)", n_self_promo),
 ]

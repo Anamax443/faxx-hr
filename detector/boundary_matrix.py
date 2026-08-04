@@ -150,14 +150,18 @@ def to_markdown(rows: list[dict], remote: bool) -> str:
              f"{('žádný ✅' if not reaches_ai else ', '.join('`'+x+'`' for x in reaches_ai))} "
              f"— defense-in-depth (on-prem split + edge klasifikátor).")
     L.append(f"- **on-prem protéká do `visible_text` (dostalo by se k AI):** "
-             f"{('žádný' if not leaks else ', '.join('`'+x+'`' for x in leaks))} "
-             f"→ hardening on-prem (zadržet i render-mode-3 a ToUnicode-mismatch).")
+             f"{('žádný ✅' if not leaks else ', '.join('`'+x+'`' for x in leaks))} "
+             f"→ render-mode-3 / alfa 0 / offpage už zadrženy do `hidden_text`; zbývá jen "
+             f"ToUnicode/cmap mismatch (V-PDF-06), kde displej≠extrakce — payload ve `visible_text` "
+             f"jistí `visible_instruction_tone` (warn), hlubší glyf↔ToUnicode porovnání je odložené.")
     L.append(f"- **Nenahlásí ani jedna vrstva (transparency gap):** "
-             f"{('žádný' if not both_silent else ', '.join('`'+x+'`' for x in both_silent))} "
-             f"→ přidat XFA/AcroForm XML parser (payload se sice neextrahuje, ale člověk se to nedozví).")
+             f"{('žádný ✅' if not both_silent else ', '.join('`'+x+'`' for x in both_silent))} "
+             f"→ XFA/AcroForm (V-PDF-07) i offpage teď na on-prem hlásí. JS/OpenAction (V-PDF-08) "
+             f"jistí jen edge; na on-prem je zatím jen zadržen (payload se neextrahuje).")
     L.append(f"- **edge FP (viditelný legit text označen):** "
              f"{('žádný' if not edge_fp else ', '.join('`'+x+'`' for x in edge_fp))} "
-             f"→ vědomý trade-off, proto edge = _warn_ a rozhoduje člověk.")
+             f"→ vědomý trade-off; on-prem i edge to teď hlásí jako mírnější `visible_instruction_tone` "
+             f"(_warn_), oddělenou kategorii od skryté injection — rozhoduje člověk.")
     L.append("")
 
     # útoky
@@ -193,13 +197,14 @@ def to_markdown(rows: list[dict], remote: bool) -> str:
         if r["attack"] or r.get("skipped"):
             continue
         lo = r["local"]
-        clean_o = _mark(not lo["detected"])
+        onprem_types = ", ".join(sorted({f["type"] for f in lo["flags"]}))
+        onprem_cell = "✅ clean" if not lo["detected"] else onprem_types
         if remote and r["remote"]:
             fp_e = ("🚩 FP" if r["remote"]["detected"] else "✅ čisto") if r["remote"]["ok"] else "⚠️err"
             note = (r["remote"].get("note", "") or "").replace("\n", " ")[:70]
         else:
             fp_e, note = "—", "—"
-        L.append(f"| `{r['id']}` | {r['desc']} | {clean_o} clean | {fp_e} | {note} |")
+        L.append(f"| `{r['id']}` | {r['desc']} | {onprem_cell} | {fp_e} | {note} |")
 
     L.append("")
     L.append("## Poznámky k interpretaci")
@@ -209,26 +214,39 @@ def to_markdown(rows: list[dict], remote: bool) -> str:
     L.append("- **edge** nemá u PDF visible/hidden split (na hraně chybí barva/pozice) → "
              "může jen DETEKOVAT injection v textu. Skrytí podle barvy/render-mode je proto "
              "delegováno na on-prem runner (viz DESIGN, DETECTOR-V2 §6).")
-    L.append("- **edge FP na N-PDF-02**: injection klasifikátor běží i na VIDITELNÉM textu, "
-             "takže legitimní sebeprezentaci („jsem ideální kandidát“) označí. To je vědomý "
-             "trade-off (raději warn než průnik), ale je to důvod, proč edge flag = _warn_, "
-             "ne _critical_, a proč rozhoduje člověk.")
+    L.append("- **N-PDF-02 (viditelná sebeprezentace)**: injection klasifikátor běží i na "
+             "VIDITELNÉM textu, takže legitimní „jsem ideální kandidát“ označí. on-prem i edge to "
+             "teď hlásí jako `visible_instruction_tone` (_warn_) — samostatnou, MÍRNĚJŠÍ kategorii "
+             "oddělenou od skryté injection. Vědomý trade-off (raději warn než průnik), rozhoduje "
+             "člověk. Skutečná FP kontrola „čisto“ je N-PDF-01.")
     L.append("")
-    L.append("## Doporučené opravy (z nálezů)")
+    L.append("## Stav oprav (hardening z nálezů)")
     L.append("")
-    L.append("1. **on-prem: render mode 3 zadržet do `hidden_text`.** Teď se `3 Tr` jen "
-             "coarse-flagne, ale PyMuPDF text vytáhne s výchozí barvou → proteče do "
-             "`visible_text` (V-PDF-01). Řešení: text ze spanů s render mode 3 řadit do "
-             "`hidden_text` (na úrovni content streamu / span flags), ne jen flagovat stranu.")
-    L.append("2. **on-prem: pokrýt ToUnicode/cmap ↔ glyph mismatch** (V-PDF-06). Buď spustit "
-             "injection klasifikátor i nad `visible_text` (jako edge), nebo porovnat "
-             "vyrenderované glyfy s ToUnicode a nesoulad flagovat. Zatím to jistí jen edge.")
-    L.append("3. **obě vrstvy: XFA/AcroForm.** Payload v XFA (V-PDF-07) se neextrahuje "
-             "(nedosáhne modelu), ale ani se nenahlásí. Přidat čtení XFA XML na on-prem, "
-             "nebo aspoň flag „dokument obsahuje XFA formulář“.")
-    L.append("4. **edge FP:** zvážit, zda injection nad viditelným textem hlásit jako "
-             "samostatnou, mírnější kategorii („sebeprezentace / instrukční tón“) odděleně "
-             "od skrytého injection — sníží to únavu z falešných poplachů (N-PDF-02).")
+    L.append("1. ✅ **on-prem: render mode 3 zadržen do `hidden_text`.** `get_texttrace` označí "
+             "spany s render mode Tr 3/7 (a nulovou alfou `ca 0`); jejich text jde do "
+             "`hidden_text`, ne do `visible_text` (V-PDF-01, V-PDF-10). Hrubá `3 Tr` sonda "
+             "zůstává jen jako fallback pro starší PyMuPDF bez `get_texttrace`.")
+    L.append("2. 🟡 **on-prem: ToUnicode/cmap ↔ glyph mismatch** (V-PDF-06). Injection nad "
+             "`visible_text` teď flagne payload jako `visible_instruction_tone` (warn) — jistí, "
+             "že se člověk dozví. Payload ale ve `visible_text` **zůstává** (dosáhne modelu); "
+             "hlubší oprava = porovnat vyrenderované glyfy s ToUnicode a nesoulad routovat do "
+             "`hidden_text`. Zmírněno tím, že extrakce (LLM #1) plní jen pevné schéma bez skóre.")
+    L.append("3. ✅ **on-prem: XFA/AcroForm + offpage.** XFA XML se čte přes catalog→AcroForm→XFA "
+             "(stream i pole), přítomnost = `pdf_xfa` (warn), injection uvnitř = critical, obsah "
+             "do `hidden_text` (V-PDF-07). Text zcela mimo mediabox, který `get_text` zahazuje, "
+             "hlásí `pdf_offpage` z `get_texttrace` (V-PDF-04).")
+    L.append("4. ✅ **edge FP → mírnější kategorie.** Instrukční tón ve viditelném textu je "
+             "`visible_instruction_tone` (_warn_), oddělený od skryté injection (_critical_) — "
+             "sníží únavu z falešných poplachů (N-PDF-02).")
+    L.append("")
+    L.append("## Zbývá")
+    L.append("")
+    L.append("- **V-PDF-06 do `hidden_text`**: glyf↔ToUnicode porovnání (payload teď ve "
+             "`visible_text` zůstává, jen se warnuje).")
+    L.append("- **V-PDF-08 JS/OpenAction na on-prem**: dnes jen zadržen (neextrahuje se), hlásí "
+             "jen edge. Volitelně přidat flag „dokument obsahuje JavaScript“ (CV ho mít nemá).")
+    L.append("- **Kalibrace prahů** (`CONTRAST_HIDDEN`, `MIN_FONT_PT`) na held-out sadě — jiná "
+             "položka F0.")
     return "\n".join(L) + "\n"
 
 

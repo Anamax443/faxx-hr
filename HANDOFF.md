@@ -2,6 +2,34 @@
 
 Append-only. Nejnovější záznam nahoru. Slouží k pokračování z jiného počítače / po pauze.
 
+## 2026-08-04 — on-prem PDF hardening: 3 díry z boundary matice zavřeny (+2 bonus), PDF regrese 10/10
+- **Zdroj úkolu:** boundary matice z 2026-08-02 našla konkrétní on-prem mezery. Zavřeno v
+  [`detector/hidden_text.py`](detector/hidden_text.py), ověřeno empiricky přes reálné vektory
+  (PyMuPDF 1.28 lokálně). **Nic se nedeployovalo** — detektor je on-prem (F1), Worker beze změny.
+- **Render mode 3 → `hidden_text` (V-PDF-01).** Dřív se `3 Tr` jen coarse-flagnul a PyMuPDF text
+  vytáhl do `visible_text` (PRŮNIK). Teď `get_texttrace` dává per-span `type` (= PDF render mode)
+  a `opacity`; neviditelné spany (Tr 3/7, alfa 0) se překryvem bboxů > 50 % namapují na spany z
+  `get_text("dict")` a jejich text jde do `hidden_text`. Coarse `3 Tr` zůstal jako fallback pro
+  starší PyMuPDF. **Bonus V-PDF-10** (nulová alfa `ca 0`) — pozor na bug `(0.0 or 1.0)`: nula je
+  falsy, `or` ji zabil; opraveno explicitním `1.0 if op is None else op`.
+- **XFA/AcroForm (V-PDF-07).** `catalog → AcroForm → XFA` (zvládá stream i pole `[name ref …]`),
+  přítomnost = `pdf_xfa` warn, injection uvnitř = critical, obsah do `hidden_text`. Payload žije
+  mimo content stream → dřív ho nenahlásila žádná vrstva (transparency gap), teď on-prem hlásí.
+- **Offpage (V-PDF-04, bonus).** Text zcela mimo mediabox `get_text` tiše zahodí (nikdo neví);
+  `get_texttrace` ho vidí → `pdf_offpage` + `hidden_text`.
+- **ToUnicode obfuskace + edge FP (V-PDF-06, N-PDF-02).** `visible_instruction_tone` (**vždy jen
+  warn**, oddělená mírnější kategorie od skryté injection) nad `visible_text` — chytí i útok, kde
+  extrakce≠displej. **Přiznaná hranice:** payload u V-PDF-06 ve `visible_text` ZŮSTÁVÁ (dosáhne
+  modelu), jen se warnuje; plná zádrž chce porovnat glyf↔ToUnicode (odloženo). Riziko tlumí to, že
+  extrakce (LLM #1) plní jen pevné schéma bez skóre. on-prem se tím u N-PDF-02 srovnal s edge (warn).
+- **Regresní sada** [`detector/test_vectors.py`](detector/test_vectors.py) rozšířena: DOCX **14/14**
+  (beze změny) + **PDF 10/10 on-prem** (offline, s invariantem zádrže) = **24/24**. PDF část se bez
+  PyMuPDF přeskočí. Nový vektor `V-PDF-10_transparent` (ca 0) v [`detector/adversarial_pdf.py`](detector/adversarial_pdf.py).
+- **Matice přegenerována naživo** (edge Worker dostupný, 200) → [`docs/PDF-BOUNDARY-MATRIX.md`](docs/PDF-BOUNDARY-MATRIX.md);
+  generátor `boundary_matrix.py` narativ (doporučené opravy → „stav oprav" + „zbývá"). Napříč oběma
+  vrstvami **neprojde k modelu žádný vektor nezachycen**. Zbývá: V-PDF-06 do `hidden_text`
+  (glyf↔ToUnicode) + volitelně JS/OpenAction flag na on-prem.
+
 ## 2026-08-02 (b) — hraniční PDF vektory: coverage matice edge vs. on-prem
 - **Nová položka F0 hotová: hraniční PDF vektory změřeny na OBOU vrstvách.** Generátor
   [`detector/adversarial_pdf.py`](detector/adversarial_pdf.py) staví 11 laboratorních PDF

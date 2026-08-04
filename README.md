@@ -58,12 +58,14 @@ tím ztrácí attack surface.
 python detector/demo.py
 #    → vytvoří "otrávené" CV se 4 nosiči injection a všechny detekuje
 
-# 1b) Regresní sada — 9 útoků + 5 false-positive kontrol (14/14)
+# 1b) Regresní sada — DOCX 14/14 (stdlib, bez sítě) + PDF 10/10 on-prem
+#     (s PyMuPDF; invariant zádrže: skrytý text nesmí do visible_text) = 24/24
 python detector/test_vectors.py
 
-# 1c) Boundary matice — 11 hraničních PDF vektorů (CID/Identity-H, ToUnicode
-#     obfuskace, XFA, JS, render mode 3 …) proti lokálnímu detektoru I živému
-#     Workeru → docs/PDF-BOUNDARY-MATRIX.md  (vyžaduje pip install -r detector/requirements.txt)
+# 1c) Boundary matice — 12 hraničních PDF vektorů (CID/Identity-H, ToUnicode
+#     obfuskace, XFA, JS, render mode 3, nulová alfa, offpage …) proti lokálnímu
+#     detektoru I živému Workeru → docs/PDF-BOUNDARY-MATRIX.md
+#     (vyžaduje pip install -r detector/requirements.txt)
 python detector/boundary_matrix.py
 
 # 2) Lokální web upload — přetáhni reálné PDF/DOCX a uvidíš detekci
@@ -102,7 +104,7 @@ zpracovávají on-prem v ČR. `docs/THREAT-MODEL.md` popisuje model hrozeb.
 ```
 detector/       spustitelný detektor skrytého textu (Python, stdlib) + demo
                 ├ hidden_text.py       detektor v2 (DOCX/PDF, visible/hidden split)
-                ├ test_vectors.py      regresní sada (14/14)
+                ├ test_vectors.py      regresní sada (DOCX 14/14 + PDF 10/10 = 24/24)
                 ├ adversarial_pdf.py   generátor hraničních PDF vektorů (F0)
                 ├ boundary_matrix.py   runner: edge (Worker) vs. on-prem → matice
                 └ requirements.txt     defusedxml + PyMuPDF (volitelné)
