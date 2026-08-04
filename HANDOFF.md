@@ -2,6 +2,18 @@
 
 Append-only. Nejnovější záznam nahoru. Slouží k pokračování z jiného počítače / po pauze.
 
+## 2026-08-04 (k) — token trimy (bezpečné) + zjištění o reálné úspoře
+- **Ping AI se při přepnutí jazyka už nevolá.** `pingAI` teď ukládá `aiState` a `renderAiStatus()`
+  jen překreslí stav (dostupnost se přepnutím CS/EN nemění) → 0 zbytečných neuronů. Ruční ↻ + změna
+  modelu pingují dál. Ověřeno jsdom (0 health volání na 3 přepnutí, label se přesto lokalizuje).
+- `aiJson` má `maxTokens` (default 1500 = extrakce beze změny); **derive → 500** (výstup je drobný).
+- **DŮLEŽITÉ zjištění:** účtování je na VYGENEROVANÝCH tokenech, takže max_tokens/ping jsou spíš kosmetika.
+  Appka už neplýtvá: identické spuštění i změna vah/gate/jazyka jedou přes rescore BEZ AI. **Jediná reálná
+  úspora = per-dokument cache extrakce** (přidáš CV → dnes se re-extrahují všechna). Návrh: klient cachuje
+  per-doc extrakci (klíč jméno+velikost+model+prompt+vision), server ji přijme a přeskočí detect+extract;
+  contacts refaktorovat na per-doc (evidence už je v qualification). = zásah do skórovacího jádra → vlastní
+  pečlivý krok, ne bundlovat s trimy.
+
 ## 2026-08-04 (j) — autosave kompletní relace → přežije obnovu prohlížeče (bez DB)
 - Rozpracovaná relace (inzerát + jobTitle/roky/dovednosti + **poslední výsledek** s rankingem/
   rozpadem/evidencí) se **automaticky ukládá** do `localStorage` (`faxx_session`) při změně

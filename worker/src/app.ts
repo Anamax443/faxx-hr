@@ -65,7 +65,7 @@ const DERIVE_SYS = 'Jsi HR asistent. Z textu pracovního inzerátu vytáhni stru
 const DERIVE_SCHEMA = { type: "object", properties: { jobTitle: { type: "string" }, minYears: { type: "number" }, requiredSkills: { type: "array", items: { type: "string" } } }, required: ["jobTitle", "minYears", "requiredSkills"] };
 
 async function deriveRequirements(inzerat: string, ai: AiBinding, model: string): Promise<{ req: Requirements; requestedYears: number; ok: boolean; ms: number; error?: string }> {
-  const r = await aiJson(ai, model, [{ role: "system", content: DERIVE_SYS }, { role: "user", content: inzerat.slice(0, 8000) }], DERIVE_SCHEMA);
+  const r = await aiJson(ai, model, [{ role: "system", content: DERIVE_SYS }, { role: "user", content: inzerat.slice(0, 8000) }], DERIVE_SCHEMA, 500);
   const o = obj(r.obj);
   const requestedYears = Math.max(0, Math.round(num(o.minYears)));
   const req: Requirements = {
@@ -1007,7 +1007,7 @@ $('#sbTheme').onclick=()=>setTheme(THEME==='light'?'dark':'light');
 function syncLangBtns(){$$('[data-lang-btn]').forEach(b=>b.classList.toggle('on',b.getAttribute('data-lang-btn')===LANG))}
 function setLang(l){LANG=l;document.documentElement.setAttribute('data-lang',l);document.documentElement.setAttribute('lang',l);try{localStorage.setItem('faxx_lang',l)}catch(e){}applyI18n();syncLangBtns();afterLangChange();}
 $$('[data-lang-btn]').forEach(b=>b.onclick=()=>setLang(b.getAttribute('data-lang-btn')));
-function afterLangChange(){try{tickClock()}catch(e){}try{wSum()}catch(e){}try{pingAI()}catch(e){}try{refreshTplSel()}catch(e){}
+function afterLangChange(){try{tickClock()}catch(e){}try{wSum()}catch(e){}try{renderAiStatus()}catch(e){}try{refreshTplSel()}catch(e){}
   if(typeof lastEval!=='undefined'&&lastEval){rescoreForLang()}else if(typeof lastResult!=='undefined'&&lastResult){renderResults(lastResult)}}
 function reqFromForm(){return {jobTitle:$('#jobTitle').value.trim(),minYears:+$('#minYears').value||0,requiredSkills:$('#skills').value.split(',').map(s=>s.trim().toLowerCase()).filter(Boolean),weights:getWeights(),disabled:getDisabled()}}
 // Přepočet BEZ AI nad už načtenou dávkou (funguje i po importu, bez nahraných CV).
@@ -1088,13 +1088,20 @@ if(visSel){visSel.value=localStorage.getItem('faxx_vision')||'toMarkdown';visSel
 const visionMethod=()=>visSel?visSel.value:'toMarkdown';
 const shortModel=m=>m.split('/').pop();
 function updSb(){$('#sbModel').textContent=shortModel(model())}
+// Stav dostupnosti AI se uloží, aby ho šlo překreslit v jiném jazyce BEZ nového
+// volání modelu (přepnutí CS/EN nemění dostupnost → zbytečné neurony).
+var aiState={s:'wait'};
+function renderAiStatus(){
+  const dot=$('#sbDot'),lbl=$('#sbAI');if(!dot||!lbl)return;
+  if(aiState.s==='ok'){dot.className='dot ok';lbl.textContent=tl('AI dostupná · ','AI available · ')+aiState.ms+' ms'}
+  else if(aiState.s==='bad'){dot.className='dot bad';lbl.textContent=tl('AI nedostupná','AI unavailable')+(aiState.reason?' · '+aiState.reason:'')}
+  else{dot.className='dot wait';lbl.textContent=tl('ověřuji…','checking…')}
+}
 function pingAI(){
-  const dot=$('#sbDot'),lbl=$('#sbAI');
-  dot.className='dot wait';lbl.textContent=tl('ověřuji…','checking…');
+  aiState={s:'wait'};renderAiStatus();
   fetch('/api/health?model='+encodeURIComponent(model())+'&lang='+LANG).then(r=>r.json()).then(h=>{
-    if(h.ok){dot.className='dot ok';lbl.textContent=tl('AI dostupná · ','AI available · ')+h.ms+' ms'}
-    else{dot.className='dot bad';lbl.textContent=tl('AI nedostupná','AI unavailable')+(h.reason?' · '+h.reason:'')}
-  }).catch(e=>{dot.className='dot bad';lbl.textContent=tl('AI nedostupná · ','AI unavailable · ')+e});
+    aiState=h.ok?{s:'ok',ms:h.ms}:{s:'bad',reason:h.reason||''};renderAiStatus();
+  }).catch(e=>{aiState={s:'bad',reason:String(e)};renderAiStatus()});
 }
 modelSel.onchange=()=>{localStorage.setItem('faxx_model',modelSel.value);updSb();pingAI()};
 $('#sbPing').onclick=pingAI;

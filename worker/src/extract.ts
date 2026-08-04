@@ -59,17 +59,17 @@ function parseJson(raw: string): unknown {
 export interface AiJsonResult { obj: unknown; raw: string; ok: boolean; error?: string; ms: number; usedResponseFormat: boolean }
 
 /** Generický JSON-call: zavolá model, vytáhne text napříč tvary odpovědí, naparsuje JSON. Nikdy nehodí. */
-export async function aiJson(ai: AiBinding, model: string, messages: AiMessage[], responseSchema?: object): Promise<AiJsonResult> {
+export async function aiJson(ai: AiBinding, model: string, messages: AiMessage[], responseSchema?: object, maxTokens = 1500): Promise<AiJsonResult> {
   const t0 = Date.now();
   let raw = "", error: string | undefined, usedResponseFormat = !!responseSchema;
   try {
-    const opts: Record<string, unknown> = { messages, max_tokens: 1500, temperature: 0 };
+    const opts: Record<string, unknown> = { messages, max_tokens: maxTokens, temperature: 0 };
     if (responseSchema) opts.response_format = { type: "json_schema", json_schema: responseSchema };
     raw = pullText(await ai.run(model, opts));
   } catch {
     usedResponseFormat = false; // model nemusí response_format podporovat → prostý JSON prompt
     try {
-      raw = pullText(await ai.run(model, { messages, max_tokens: 1500, temperature: 0 }));
+      raw = pullText(await ai.run(model, { messages, max_tokens: maxTokens, temperature: 0 }));
     } catch (e2: unknown) {
       error = String((e2 as { message?: string })?.message || e2).slice(0, 200);
     }
