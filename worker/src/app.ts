@@ -165,10 +165,10 @@ async function evaluate(cands: CandidateInput[], req: Requirements, ai: AiBindin
       docsMeta.push({ name: d.name, visible_chars: visible.length, hidden_chars: dhidden, flags: dflags.length, note });
     }
     const merged = mergeQualifications(quals);      // celkové hodnocení = sloučení dat ze všech dokumentů
-    const identity = mergeIdentity(ids);
-    const rx = contactsFromText(allVisible);         // doplň kontakty regexem, kdyby je model minul (jen zobrazení)
-    for (const e of rx.emails) if (!identity.emails.some((x) => x.toLowerCase() === e.toLowerCase())) identity.emails.push(e);
-    for (const p of rx.phones) if (!identity.phones.some((x) => x.replace(/\D/g, "") === p.replace(/\D/g, ""))) identity.phones.push(p);
+    const identity = mergeIdentity(ids);             // full_name / location / links z modelu
+    const rx = contactsFromText(allVisible);         // e-maily a telefony JEN z reálného textu (model je jinak halucinuje)
+    identity.emails = rx.emails;
+    identity.phones = rx.phones;
     if (!identity.full_name) identity.full_name = c.name;
     const score = scoreCandidate(merged, rubric);
     results.push({
