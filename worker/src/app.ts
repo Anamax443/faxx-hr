@@ -815,7 +815,7 @@ a{color:var(--accent)}
     <h4>9 · Výstupy</h4>
     <ul>
       <li><b>Ranking</b> — seřazený seznam kandidátů se skóre, kontakty, seznamem dokumentů (dokumenty jdou <b>otevřít přímo z aplikace</b> klikem na název) a nálezy skrytého obsahu.</li>
-      <li><b>Manažerský výstup (tisk / PDF)</b> — samostatný tiskový přehled s pořadím, kontakty, skóre a rozpadem, i s poznámkou o lidském dohledu. Vhodné pro sdílení s hiring manažerem.</li>
+      <li><b>Manažerský výstup (tisk / PDF)</b> — samostatný tiskový přehled se <b>zadáním (původní text inzerátu + požadavky a váhy kritérií)</b> a následným pořadím, kontakty, skóre a rozpadem, i s poznámkou o lidském dohledu. Zadání i vyhodnocení na jednom místě = <b>doklad výběrového řízení</b> pro archiv i sdílení s hiring manažerem.</li>
       <li><b>Stáhnout HTML</b> — tentýž přehled jako soubor.</li>
       <li><b>Uložit / načíst výsledek (JSON)</b> — vyhodnocení stáhneš jako soubor a později ho zase <b>načteš</b> (📂 u tlačítka Vyhodnotit) — vrátíš se k dávce i bez databáze. Po načtení lze měnit váhy/gate a <b>🔄 Přepočítat (bez AI)</b>, aniž bys znovu nahrával CV.</li>
     </ul>
@@ -955,7 +955,7 @@ a{color:var(--accent)}
     <h4>9 · Outputs</h4>
     <ul>
       <li><b>Ranking</b> — a sorted list of candidates with scores, contacts, a list of documents (documents can be <b>opened directly from the app</b> by clicking the name) and hidden-content findings.</li>
-      <li><b>Manager output (print / PDF)</b> — a standalone printable overview with the ranking, contacts, score and breakdown, including a note about human oversight. Suitable for sharing with the hiring manager.</li>
+      <li><b>Manager output (print / PDF)</b> — a standalone printable overview with the <b>assignment (original job-ad text + requirements and criterion weights)</b> followed by the ranking, contacts, score and breakdown, including a note about human oversight. Assignment and evaluation in one place = <b>documentation of the selection procedure</b> for the archive and for sharing with the hiring manager.</li>
       <li><b>Download HTML</b> — the same overview as a file.</li>
       <li><b>Save / load result (JSON)</b> — download the evaluation as a file and <b>load</b> it back later (📂 next to the Evaluate button) — you return to the batch even without a database. After loading you can change weights/gate and <b>🔄 Recompute (no AI)</b> without re-uploading the CVs.</li>
     </ul>
@@ -1082,6 +1082,7 @@ async function importResult(file){
     if(!data||data.kind!=='evaluation'||!data.result||!Array.isArray(data.result.ranking))throw new Error(tl('Neplatný soubor výsledku.','Invalid result file.'));
     const req=data.requirements||{};
     $('#jobTitle').value=req.jobTitle||'';$('#minYears').value=req.minYears||0;$('#skills').value=(req.requiredSkills||[]).join(', ');
+    if(data.result&&data.result.inzerat!=null)$('#inzerat').value=data.result.inzerat;
     if(req.weights)WKEYS.forEach(k=>{if(typeof req.weights[k]==='number')$('#w_'+k).value=req.weights[k]});
     if(req.disabled)WKEYS.forEach(k=>{const c=$('#on_'+k);if(c)c.checked=(req.disabled||[]).indexOf(k)<0});
     saveWeights();
@@ -1336,6 +1337,20 @@ function buildReport(r){
     const docs=(c.docs||[]).map(x=>esc(x.name)).join(', ');
     return '<tr class="'+(c.disqualified?'dq':'')+'"><td class="rk">'+(idx+1)+'</td><td><div class="nm">'+esc(c.name)+'</div><div class="ct">'+contact+'</div><div class="dc">'+docs+'</div></td><td class="sc">'+status+gate+'</td><td class="bd">'+bd+fl+'</td></tr>';
   }).join('');
+  const rf=r.requirementsFull||req; const inz=(r.inzerat||'').trim();
+  const WL={roky_praxe:tl('Roky praxe','Years of experience'),dovednosti:tl('Dovednosti','Skills'),vzdelani:tl('Vzdělání','Education'),en:tl('Angličtina','English'),stabilita:tl('Stabilita','Stability'),certifikace:tl('Certifikace','Certifications')};
+  const wg=rf.weights||{},dis=rf.disabled||[];
+  const wtxt=Object.keys(WL).filter(k=>dis.indexOf(k)<0&&wg[k]!=null).map(k=>esc(WL[k])+' '+(wg[k]||0)+'%').join(' · ')||'—';
+  const zad='<div class="zad"><h2>'+tl('Zadání výběrového řízení','Selection criteria')+'</h2>'
+    +'<table class="zt"><tbody>'
+    +'<tr><th>'+tl('Pozice','Position')+'</th><td>'+(esc(rf.jobTitle||req.jobTitle||'')||'—')+'</td></tr>'
+    +'<tr><th>'+tl('Min. roky praxe (gate)','Min. years (gate)')+'</th><td>'+(rf.minYears||0)+'</td></tr>'
+    +'<tr><th>'+tl('Klíčové dovednosti','Key skills')+'</th><td>'+(esc((rf.requiredSkills||[]).join(', '))||'—')+'</td></tr>'
+    +'<tr><th>'+tl('Váhy kritérií','Criterion weights')+'</th><td>'+wtxt+'</td></tr>'
+    +'</tbody></table>'
+    +'<h3>'+tl('Původní text inzerátu','Original job ad')+'</h3>'
+    +(inz?'<div class="adtext">'+esc(inz)+'</div>':'<div class="adnote">'+tl('Inzerát nebyl vložen jako text (požadavky zadány ručně nebo z obrázku/šablony).','The job ad was not provided as text (requirements entered manually or from an image/template).')+'</div>')
+    +'</div>';
   return '<!DOCTYPE html><html lang='+LANG+'><head><meta charset=utf-8><title>'+tl('Vyhodnocení kandidátů','Candidate evaluation')+'</title><style>'
     +'body{font:13px/1.5 Arial,Helvetica,sans-serif;color:#111;margin:26px;background:#fff}h1{font-size:20px;margin:0 0 2px}.sub{color:#555;font-size:12px;margin:0 0 14px}'
     +'.req{background:#f4f6fa;border:1px solid #dde3ee;border-radius:8px;padding:10px 12px;margin-bottom:16px;font-size:12px}table{width:100%;border-collapse:collapse}'
@@ -1343,14 +1358,18 @@ function buildReport(r){
     +'.rk{font-weight:700;width:26px}.nm{font-weight:700;font-size:14px}.ct{color:#0a58ca;font-size:12px}.dc{color:#999;font-size:11px;margin-top:2px}'
     +'.sc{font-weight:700;white-space:nowrap}.bd{color:#444;font-size:12px}.fl{color:#b23030;font-size:11px;margin-top:3px}tr.dq{color:#999}tr.dq .sc{color:#b23030}'
     +'.foot{margin-top:18px;color:#777;font-size:11px;border-top:1px solid #ddd;padding-top:8px}@media print{body{margin:12mm}}'
+    +'.zad{margin-bottom:18px}.zad h2{font-size:14px;margin:0 0 8px;padding-bottom:4px;border-bottom:1px solid #ccc}.zad h3{font-size:12px;margin:12px 0 4px;color:#555}'
+    +'.zt{width:100%;border-collapse:collapse;margin-bottom:6px}.zt th{width:180px;text-align:left;color:#555;font-weight:600;font-size:12px;padding:3px 8px 3px 0;vertical-align:top;border:none}.zt td{padding:3px 0;border:none;font-size:12px}'
+    +'.adtext{white-space:pre-wrap;background:#f7f9fc;border:1px solid #dde3ee;border-radius:6px;padding:10px 12px;font-size:12px;line-height:1.5}.adnote{color:#999;font-size:12px;font-style:italic}'
     +'</style></head><body><h1>'+tl('Vyhodnocení kandidátů — ','Candidate evaluation — ')+esc(req.jobTitle||tl('pozice','position'))+'</h1>'
     +'<div class="sub">'+tl('Vygenerováno ','Generated ')+esc(now)+' · faxx-hr · '+list.length+tl(' kandidátů · model ',' candidates · model ')+esc((r.model||'').split('/').pop())+'</div>'
-    +'<div class="req"><b>'+tl('Požadavky:','Requirements:')+'</b> '+tl('min. '+(req.minYears||0)+' let praxe · klíčové dovednosti: ','min. '+(req.minYears||0)+' years · key skills: ')+esc((req.requiredSkills||[]).join(', '))+'</div>'
+    +zad
     +'<table><thead><tr><th>#</th><th>'+tl('Kandidát a kontakt','Candidate and contact')+'</th><th>'+tl('Skóre','Score')+'</th><th>'+tl('Rozpad hodnocení','Evaluation breakdown')+'</th></tr></thead><tbody>'+rows+'</tbody></table>'
     +'<div class="foot">'+tl('Rating je podpora rozhodnutí, ne automatické zamítnutí — o postupu kandidátů rozhoduje personalista (EU AI Act čl. 14, GDPR čl. 22). Skóre počítá deterministický rubrik nad daty z viditelného textu; skrytý/instrukční obsah je označen a do hodnocení nevstupuje.','The rating is decision support, not automatic rejection — the recruiter decides on advancing candidates (EU AI Act Art. 14, GDPR Art. 22). The score is computed by a deterministic rubric over data from the visible text; hidden/instruction content is flagged and does not enter scoring.')+'</div></body></html>';
 }
 function renderResults(r){
   lastResult=r;
+  if(r){ if(r.inzerat==null)r.inzerat=($('#inzerat')?$('#inzerat').value:'')||''; if(!r.requirementsFull)r.requirementsFull=reqFromForm(); }
   const hideNC=$('#hideNonCand')?$('#hideNonCand').checked:true;
   const all=r.ranking||[];
   const shown=hideNC?all.filter(c=>c.isCandidate!==false):all;

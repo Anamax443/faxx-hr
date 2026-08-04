@@ -2,6 +2,23 @@
 
 Append-only. Nejnovější záznam nahoru. Slouží k pokračování z jiného počítače / po pauze.
 
+## 2026-08-04 (u) — tiskový výstup = doklad výběrového řízení (zadání + vyhodnocení)
+- **`buildReport` v `worker/src/app.ts`**: manažerský tiskový výstup (🖨️ / ⬇️ HTML) nově začíná sekcí
+  **„Zadání výběrového řízení"** — pozice, min. roky (gate), klíčové dovednosti, **váhy kritérií**
+  (jen zapnutá) a **původní text inzerátu** (pre-wrap, HTML escapovaný = XSS-safe) — pak teprve pořadí
+  a rozpad. Cíl: tisknout jako doklad VŘ (zadání i výsledek na jednom papíře).
+- **Perzistence:** výsledek se stampuje `inzerat` + `requirementsFull` (váhy/disabled) v `renderResults`;
+  `slimResult` je nese do JSON exportu i autosave; `importResult` obnoví i textareu inzerátu →
+  doklad projde uložením/načtením i bez DB (Track A).
+- **Ověřeno izolovaně** (klientský JS je uvnitř HTML stringu → esbuild ho NEvaliduje): Node harness
+  `scratchpad/test-report.mjs` proti mocku, CS+EN, 10/10 checků (inzerát, escaping XSS, váhy bez
+  vypnutého kritéria, kandidát/skóre/DQ, validní HTML). In-app Dokumentace (CS+EN) aktualizována.
+
+## 2026-08-04 (t) — appka na vlastní doméně faxx-hr.maxferit.cz (Workers Custom Domain)
+- `wrangler.app.jsonc`: `routes` s `custom_domain=true` na `faxx-hr.maxferit.cz`. `wrangler deploy` sám
+  založil proxy DNS + TLS cert (zóna `maxferit.cz` je ve stejném účtu `a37a36…`). `workers_dev` zůstává
+  true → `…workers.dev` URL dál funguje. Ověřeno: DNS→CF IP, HTTPS 200, cert hotový, otisk commitu sedí.
+
 ## 2026-08-04 (s) — kompletní doc sweep: `status.html` + RESPONSE-2 srovnány se současným stavem
 - **`status.html`** (Stav projektu, linkovaný z README) byl zastaralý (~stav 2026-08-02): opraveno
   regresní sada 14/14 → **24/24** (DOCX 14 + PDF 10), fáze **F1–F3 „plánováno" → 🟢 prototyp v appce**,
