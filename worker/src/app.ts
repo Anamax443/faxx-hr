@@ -36,7 +36,7 @@ const str = (x: unknown): string => (typeof x === "string" ? x : x == null ? "" 
 const num = (x: unknown): number => (typeof x === "number" && Number.isFinite(x) ? x : Number(x) || 0);
 const arr = (x: unknown): unknown[] => (Array.isArray(x) ? x : []);
 
-interface Requirements { jobTitle: string; minYears: number; requiredSkills: string[]; weights?: Record<string, number> }
+interface Requirements { jobTitle: string; minYears: number; requiredSkills: string[]; weights?: Record<string, number>; disabled?: string[] }
 
 // výchozí váhy (v %); rubric.ts je stejně normalizuje podle součtu, takže stačí kladná čísla
 export const DEFAULT_WEIGHTS: Record<string, number> = { roky_praxe: 25, dovednosti: 30, vzdelani: 15, en: 10, stabilita: 10, certifikace: 10 };
@@ -44,17 +44,20 @@ export const DEFAULT_WEIGHTS: Record<string, number> = { roky_praxe: 25, dovedno
 function buildRubric(r: Requirements, lang: Lang = "cs"): Rubric {
   const w = r.weights || {};
   const wv = (k: string) => (typeof w[k] === "number" && w[k] >= 0 ? w[k] : DEFAULT_WEIGHTS[k]);
+  const off = new Set(r.disabled || []); // kritéria vypnutá personalistou (editor rubriku)
+  const allCriteria: Rubric["criteria"] = [
+    { key: "roky_praxe", label: L(lang, "Roky praxe", "Years of experience"), type: "numeric_scale", weight: wv("roky_praxe"), min: 0, max: Math.max(8, r.minYears + 3) },
+    { key: "dovednosti", label: L(lang, "Shoda klíčových dovedností", "Key-skill match"), type: "set_overlap", weight: wv("dovednosti"), required: r.requiredSkills },
+    { key: "vzdelani", label: L(lang, "Vzdělání", "Education"), type: "category_map", weight: wv("vzdelani"), aggregate: "max", map: { secondary: 5, bachelor: 7, master: 10, phd: 10, course: 4, other: 2 } },
+    { key: "en", label: L(lang, "Angličtina", "English"), type: "cefr_map", weight: wv("en"), language: "EN", map: { A1: 0, A2: 0, B1: 4, B2: 7, C1: 9, C2: 10, native: 10 } },
+    { key: "stabilita", label: L(lang, "Stabilita zaměstnání", "Employment stability"), type: "tenure", weight: wv("stabilita"), penaltyBelowMonths: 6 },
+    { key: "certifikace", label: L(lang, "Relevantní certifikace", "Relevant certifications"), type: "bonus", weight: wv("certifikace"), pointsEach: 2, cap: 10 },
+  ];
+  const criteria = allCriteria.filter((c) => !off.has(c.key));
   return {
     jobTitle: r.jobTitle || L(lang, "Pozice", "Position"),
     gates: r.minYears > 0 ? [{ key: "min_praxe", field: "years_total_experience", op: ">=", value: r.minYears, reason: L(lang, `Méně než ${r.minYears} let praxe = diskvalifikace.`, `Fewer than ${r.minYears} years of experience = disqualified.`) }] : [],
-    criteria: [
-      { key: "roky_praxe", label: L(lang, "Roky praxe", "Years of experience"), type: "numeric_scale", weight: wv("roky_praxe"), min: 0, max: Math.max(8, r.minYears + 3) },
-      { key: "dovednosti", label: L(lang, "Shoda klíčových dovedností", "Key-skill match"), type: "set_overlap", weight: wv("dovednosti"), required: r.requiredSkills },
-      { key: "vzdelani", label: L(lang, "Vzdělání", "Education"), type: "category_map", weight: wv("vzdelani"), aggregate: "max", map: { secondary: 5, bachelor: 7, master: 10, phd: 10, course: 4, other: 2 } },
-      { key: "en", label: L(lang, "Angličtina", "English"), type: "cefr_map", weight: wv("en"), language: "EN", map: { A1: 0, A2: 0, B1: 4, B2: 7, C1: 9, C2: 10, native: 10 } },
-      { key: "stabilita", label: L(lang, "Stabilita zaměstnání", "Employment stability"), type: "tenure", weight: wv("stabilita"), penaltyBelowMonths: 6 },
-      { key: "certifikace", label: L(lang, "Relevantní certifikace", "Relevant certifications"), type: "bonus", weight: wv("certifikace"), pointsEach: 2, cap: 10 },
-    ],
+    criteria: criteria.length ? criteria : allCriteria, // nikdy prázdný rubrik (fallback na vše)
   };
 }
 
@@ -338,7 +341,7 @@ export default {
           systemPrompt = str(b.systemPrompt);
           visionMethod = str(b.visionMethod) || visionMethod;
           lang = asLang(b.lang);
-          if (b.requirements) { const r = obj(b.requirements); req0 = { jobTitle: str(r.jobTitle), minYears: Math.max(0, Math.round(num(r.minYears))), requiredSkills: arr(r.requiredSkills).map((s) => str(s).toLowerCase().trim()).filter(Boolean), weights: obj(r.weights) as Record<string, number> }; }
+          if (b.requirements) { const r = obj(b.requirements); req0 = { jobTitle: str(r.jobTitle), minYears: Math.max(0, Math.round(num(r.minYears))), requiredSkills: arr(r.requiredSkills).map((s) => str(s).toLowerCase().trim()).filter(Boolean), weights: obj(r.weights) as Record<string, number>, disabled: arr(r.disabled).map((s) => str(s)) }; }
           for (const c of arr(b.candidates)) { const o = obj(c); files.push({ name: str(o.name) || "kandidát", visible: str(o.visible_text) }); }
         } else {
           const form = await req.formData();
@@ -348,7 +351,7 @@ export default {
           visionMethod = str(form.get("visionMethod")) || visionMethod;
           lang = asLang(form.get("lang"));
           const rq = form.get("requirements");
-          if (typeof rq === "string" && rq) { const r = obj(JSON.parse(rq)); req0 = { jobTitle: str(r.jobTitle), minYears: Math.max(0, Math.round(num(r.minYears))), requiredSkills: arr(r.requiredSkills).map((s) => str(s).toLowerCase().trim()).filter(Boolean), weights: obj(r.weights) as Record<string, number> }; }
+          if (typeof rq === "string" && rq) { const r = obj(JSON.parse(rq)); req0 = { jobTitle: str(r.jobTitle), minYears: Math.max(0, Math.round(num(r.minYears))), requiredSkills: arr(r.requiredSkills).map((s) => str(s).toLowerCase().trim()).filter(Boolean), weights: obj(r.weights) as Record<string, number>, disabled: arr(r.disabled).map((s) => str(s)) }; }
           let total = 0;
           for (const f of form.getAll("cv")) {
             if (typeof f === "string") continue;
@@ -405,7 +408,7 @@ export default {
         const b = obj(await req.json());
         const lang = asLang(b.lang);
         const r0 = obj(b.requirements);
-        const req0: Requirements = { jobTitle: str(r0.jobTitle), minYears: Math.max(0, Math.round(num(r0.minYears))), requiredSkills: arr(r0.requiredSkills).map((s) => str(s).toLowerCase().trim()).filter(Boolean), weights: obj(r0.weights) as Record<string, number> };
+        const req0: Requirements = { jobTitle: str(r0.jobTitle), minYears: Math.max(0, Math.round(num(r0.minYears))), requiredSkills: arr(r0.requiredSkills).map((s) => str(s).toLowerCase().trim()).filter(Boolean), weights: obj(r0.weights) as Record<string, number>, disabled: arr(r0.disabled).map((s) => str(s)) };
         const rubric = buildRubric(req0, lang);
         const results = arr(b.candidates).map((c) => {
           const o = obj(c);
@@ -575,6 +578,23 @@ a{color:var(--accent)}
     <input type="text" id="skills" placeholder="python, sql, git, docker, rest api">
     <div class="hint" data-i18n-html="hint_gate">Gate (min. roky praxe) = tvrdé vyřazení. <b>Výchozí 0 = vypnuto.</b> Roky se z CV spolehlivě nevytáhnou (málokdo píše „celkem X let"), proto se defaultně nepenalizují — počítají se jen jako jedno z kritérií. Zadej číslo jen když chceš tvrdý limit; kdo má roky neznámé, se ani pak nediskvalifikuje (rozhodne se dle ostatních kritérií).</div>
   </div>
+  <div class="card" id="tplCard">
+    <h3 data-i18n="h_templates">Šablony pozic (rubrik)</h3>
+    <div class="row" style="align-items:flex-end">
+      <div><label data-i18n="l_tplname">Název šablony</label><input type="text" id="tplName" placeholder="Backend vývojář"></div>
+      <div style="flex:0 0 auto"><button class="ghost" id="tplSave" data-i18n="b_tplsave" data-i18n-title="t_tplsave" title="Uložit aktuální požadavky, váhy a zapnutá kritéria jako pojmenovanou šablonu">💾 Uložit šablonu</button></div>
+    </div>
+    <div class="row" style="align-items:flex-end;margin-top:6px">
+      <div><label data-i18n="l_tplload">Uložené šablony</label><select id="tplSel"></select></div>
+      <div style="flex:0 0 auto;display:flex;gap:8px"><button class="ghost" id="tplLoad" data-i18n="b_tplload">📂 Načíst</button><button class="ghost" id="tplDel" data-i18n="b_tpldel">🗑 Smazat</button></div>
+    </div>
+    <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <button class="ghost" id="tplExport" data-i18n="b_tplexport">⬇️ Export šablon (JSON)</button>
+      <label class="filebtn" data-i18n-title="t_tplimport" title="Načíst šablony ze souboru JSON (přidají se ke stávajícím)"><span data-i18n="b_tplimport">⬆️ Import šablon</span><input type="file" id="tplImport" accept=".json,application/json" style="display:none"></label>
+      <span class="hint" id="tplMsg"></span>
+    </div>
+    <div class="hint" data-i18n="hint_templates">Šablona uloží název pozice, roky, dovednosti, váhy a zapnutá kritéria — příště jen načteš a upravíš. Ukládá se v prohlížeči; Export/Import přenese šablony mezi počítači.</div>
+  </div>
   <div class="card">
     <h3 data-i18n="h_cv">3 · Životopisy</h3>
     <label class="drop" id="drop"><span data-i18n-html="drop_text"><b>Přetáhni sem CV</b> nebo klikni (víc souborů) · PDF/DOCX (obrázky jen upozorní) · ≤ 10 MB celkem</span>
@@ -612,16 +632,17 @@ a{color:var(--accent)}
   <div class="card">
     <h3 data-i18n="h_weights">Váhy kritérií</h3>
     <div class="row">
-      <div><label data-i18n="w_roky_praxe">Roky praxe (%)</label><input type="number" min="0" id="w_roky_praxe" value="25"></div>
-      <div><label data-i18n="w_dovednosti">Shoda dovedností (%)</label><input type="number" min="0" id="w_dovednosti" value="30"></div>
-      <div><label data-i18n="w_vzdelani">Vzdělání (%)</label><input type="number" min="0" id="w_vzdelani" value="15"></div>
+      <div><label><input type="checkbox" class="crit-on" id="on_roky_praxe" checked style="width:auto;margin-right:6px"><span data-i18n="w_roky_praxe">Roky praxe (%)</span></label><input type="number" min="0" id="w_roky_praxe" value="25"></div>
+      <div><label><input type="checkbox" class="crit-on" id="on_dovednosti" checked style="width:auto;margin-right:6px"><span data-i18n="w_dovednosti">Shoda dovedností (%)</span></label><input type="number" min="0" id="w_dovednosti" value="30"></div>
+      <div><label><input type="checkbox" class="crit-on" id="on_vzdelani" checked style="width:auto;margin-right:6px"><span data-i18n="w_vzdelani">Vzdělání (%)</span></label><input type="number" min="0" id="w_vzdelani" value="15"></div>
     </div>
     <div class="row">
-      <div><label data-i18n="w_en">Angličtina (%)</label><input type="number" min="0" id="w_en" value="10"></div>
-      <div><label data-i18n="w_stabilita">Stabilita (%)</label><input type="number" min="0" id="w_stabilita" value="10"></div>
-      <div><label data-i18n="w_certifikace">Certifikace (%)</label><input type="number" min="0" id="w_certifikace" value="10"></div>
+      <div><label><input type="checkbox" class="crit-on" id="on_en" checked style="width:auto;margin-right:6px"><span data-i18n="w_en">Angličtina (%)</span></label><input type="number" min="0" id="w_en" value="10"></div>
+      <div><label><input type="checkbox" class="crit-on" id="on_stabilita" checked style="width:auto;margin-right:6px"><span data-i18n="w_stabilita">Stabilita (%)</span></label><input type="number" min="0" id="w_stabilita" value="10"></div>
+      <div><label><input type="checkbox" class="crit-on" id="on_certifikace" checked style="width:auto;margin-right:6px"><span data-i18n="w_certifikace">Certifikace (%)</span></label><input type="number" min="0" id="w_certifikace" value="10"></div>
     </div>
     <div class="hint" id="wSum">Součet: 100 %</div>
+    <div class="hint" data-i18n="hint_criton">Odškrtnuté kritérium se do skóre nezapočítá (vyřadíš ho z rubriku). Vypnutí/zapnutí přepočítá výsledky bez AI.</div>
     <button class="ghost" id="wReset" style="margin-top:10px" data-i18n="b_reset">Obnovit výchozí</button>
     <div class="hint" style="margin-top:8px" data-i18n="hint_weights">Skóre 0–100 počítá deterministický rubrik nad daty, která z CV vytáhla AI. Váhy se ukládají v prohlížeči a použijí se při dalším vyhodnocení (nemusí dát dohromady přesně 100 % — skóre se normalizuje). Gate (min. roky praxe) nastavíš u požadavků na záložce Hodnocení.</div>
   </div>
@@ -705,7 +726,7 @@ a{color:var(--accent)}
 
   <div class="card doc" id="d-skore">
     <h4>5 · Hodnocení a skóre</h4>
-    <p>Skóre 0–100 je vážený součet šesti kritérií (každé 0–10 bodů), normalizovaný podle vah. <b>Váhy si nastavíš</b> v záložce Nastavení.</p>
+    <p>Skóre 0–100 je vážený součet šesti kritérií (každé 0–10 bodů), normalizovaný podle vah. <b>Váhy si nastavíš</b> v záložce Nastavení a jednotlivá kritéria tam lze <b>vypnout</b> (nezapočítají se do rubriku). Celé nastavení pozice (požadavky + váhy + zapnutá kritéria) uložíš jako <b>šablonu pozice</b> (záložka Hodnocení) a příště jen načteš.</p>
     <p><b>Gate (min. roky praxe) je defaultně vypnutý.</b> Roky se z CV spolehlivě nevytáhnou (málokdo píše „celkem X let"), proto se defaultně nepenalizují — neznámé roky dostanou neutrální skóre a nikoho nevyřadí. Chceš-li tvrdé vyřazení, zadej „min. roky praxe" ručně; i tak se diskvalifikuje jen ten, u koho <b>reálně víme</b>, že je pod limitem (kandidát s neznámými roky projde).</p>
     <table>
       <thead><tr><th>Kritérium</th><th>Jak se boduje</th><th>Výchozí váha</th></tr></thead>
@@ -844,7 +865,7 @@ a{color:var(--accent)}
 
   <div class="card doc" id="en-skore">
     <h4>5 · Scoring</h4>
-    <p>The 0–100 score is a weighted sum of six criteria (each 0–10 points), normalised by the weights. <b>You set the weights</b> under Settings.</p>
+    <p>The 0–100 score is a weighted sum of six criteria (each 0–10 points), normalised by the weights. <b>You set the weights</b> under Settings, where you can also <b>disable</b> individual criteria (excluded from the rubric). The whole position setup (requirements + weights + enabled criteria) can be saved as a <b>position template</b> (Evaluation tab) and loaded next time.</p>
     <p><b>The gate (minimum years of experience) is off by default.</b> Years are not reliably extractable from a CV (few people write "X years total"), so by default they are not penalised — unknown years get a neutral score and disqualify no one. If you want a hard cut-off, set "minimum years of experience" manually; even then, only someone we <b>actually know</b> is below the limit is disqualified (a candidate with unknown years passes).</p>
     <table>
       <thead><tr><th>Criterion</th><th>How it is scored</th><th>Default weight</th></tr></thead>
@@ -962,6 +983,10 @@ var EN={
   sys_saved:"Stored in the browser and used when evaluating.",
   h_display:"Display", l_hidenoncand:"Hide documents that are not applicant material (job ads, random files) — the app recognises them by content",
   hint_hidenoncand:"If you accidentally upload a job ad or a foreign file among the CVs, it will not pose as a candidate. Toggling re-renders the results immediately (without a new evaluation).",
+  hint_criton:"An unchecked criterion is excluded from the score (removed from the rubric). Turning it off/on recomputes the results without AI.",
+  h_templates:"Position templates (rubric)", l_tplname:"Template name", b_tplsave:"💾 Save template", t_tplsave:"Save the current requirements, weights and enabled criteria as a named template",
+  l_tplload:"Saved templates", b_tplload:"📂 Load", b_tpldel:"🗑 Delete", b_tplexport:"⬇️ Export templates (JSON)", b_tplimport:"⬆️ Import templates", t_tplimport:"Load templates from a JSON file (merged with existing ones)",
+  hint_templates:"A template stores the position title, years, skills, weights and enabled criteria — next time just load and tweak it. Stored in the browser; Export/Import moves templates between computers.",
   foot:"faxx-hr · working version · scoring does not see raw text · a human decides"
 };
 function applyI18n(){
@@ -982,9 +1007,9 @@ $('#sbTheme').onclick=()=>setTheme(THEME==='light'?'dark':'light');
 function syncLangBtns(){$$('[data-lang-btn]').forEach(b=>b.classList.toggle('on',b.getAttribute('data-lang-btn')===LANG))}
 function setLang(l){LANG=l;document.documentElement.setAttribute('data-lang',l);document.documentElement.setAttribute('lang',l);try{localStorage.setItem('faxx_lang',l)}catch(e){}applyI18n();syncLangBtns();afterLangChange();}
 $$('[data-lang-btn]').forEach(b=>b.onclick=()=>setLang(b.getAttribute('data-lang-btn')));
-function afterLangChange(){try{tickClock()}catch(e){}try{wSum()}catch(e){}try{pingAI()}catch(e){}
+function afterLangChange(){try{tickClock()}catch(e){}try{wSum()}catch(e){}try{pingAI()}catch(e){}try{refreshTplSel()}catch(e){}
   if(typeof lastEval!=='undefined'&&lastEval){rescoreForLang()}else if(typeof lastResult!=='undefined'&&lastResult){renderResults(lastResult)}}
-function reqFromForm(){return {jobTitle:$('#jobTitle').value.trim(),minYears:+$('#minYears').value||0,requiredSkills:$('#skills').value.split(',').map(s=>s.trim().toLowerCase()).filter(Boolean),weights:getWeights()}}
+function reqFromForm(){return {jobTitle:$('#jobTitle').value.trim(),minYears:+$('#minYears').value||0,requiredSkills:$('#skills').value.split(',').map(s=>s.trim().toLowerCase()).filter(Boolean),weights:getWeights(),disabled:getDisabled()}}
 // Přepočet BEZ AI nad už načtenou dávkou (funguje i po importu, bez nahraných CV).
 async function rescoreNow(){
   if(typeof lastEval==='undefined'||!lastEval)return null;
@@ -1056,10 +1081,25 @@ tickClock();setInterval(tickClock,1000);
 const WKEYS=['roky_praxe','dovednosti','vzdelani','en','stabilita','certifikace'];
 const WDEF={roky_praxe:25,dovednosti:30,vzdelani:15,en:10,stabilita:10,certifikace:10};
 function getWeights(){const o={};WKEYS.forEach(k=>o[k]=Math.max(0,+$('#w_'+k).value||0));return o}
-function wSum(){const o=getWeights();$('#wSum').textContent=tl('Součet: ','Sum: ')+WKEYS.reduce((a,k)=>a+o[k],0)+' %'}
-function saveWeights(){localStorage.setItem('faxx_weights',JSON.stringify(getWeights()));wSum()}
-(function(){const s=JSON.parse(localStorage.getItem('faxx_weights')||'null')||WDEF;WKEYS.forEach(k=>{$('#w_'+k).value=s[k]??WDEF[k];$('#w_'+k).oninput=saveWeights});wSum()})();
-$('#wReset').onclick=()=>{WKEYS.forEach(k=>$('#w_'+k).value=WDEF[k]);saveWeights()};
+function getDisabled(){return WKEYS.filter(k=>{const c=$('#on_'+k);return c&&!c.checked})}
+function applyDisabledState(){WKEYS.forEach(k=>{const c=$('#on_'+k),inp=$('#w_'+k);if(c&&inp)inp.disabled=!c.checked})}
+function wSum(){const o=getWeights(),on=WKEYS.filter(k=>{const c=$('#on_'+k);return !c||c.checked});$('#wSum').textContent=tl('Součet (zapnutá): ','Sum (enabled): ')+on.reduce((a,k)=>a+o[k],0)+' % · '+on.length+'/'+WKEYS.length+' '+tl('kritérií','criteria')}
+function saveWeights(){localStorage.setItem('faxx_weights',JSON.stringify(getWeights()));localStorage.setItem('faxx_disabled',JSON.stringify(getDisabled()));applyDisabledState();wSum()}
+(function(){const s=JSON.parse(localStorage.getItem('faxx_weights')||'null')||WDEF;let dis=[];try{dis=JSON.parse(localStorage.getItem('faxx_disabled')||'[]')||[]}catch(e){}
+  WKEYS.forEach(k=>{$('#w_'+k).value=s[k]??WDEF[k];$('#w_'+k).oninput=saveWeights;const c=$('#on_'+k);if(c){c.checked=dis.indexOf(k)<0;c.onchange=()=>{saveWeights();if(typeof lastEval!=='undefined'&&lastEval)rescoreNow()}}});applyDisabledState();wSum()})();
+$('#wReset').onclick=()=>{WKEYS.forEach(k=>{$('#w_'+k).value=WDEF[k];const c=$('#on_'+k);if(c)c.checked=true});saveWeights();if(typeof lastEval!=='undefined'&&lastEval)rescoreNow()};
+// ---- šablony pozic (rubrik) — localStorage, bez DB ----
+function loadTpls(){try{return JSON.parse(localStorage.getItem('faxx_templates')||'{}')||{}}catch(e){return {}}}
+function saveTpls(o){localStorage.setItem('faxx_templates',JSON.stringify(o))}
+function refreshTplSel(){const o=loadTpls(),sel=$('#tplSel');if(!sel)return;const cur=sel.value,keys=Object.keys(o).sort();sel.innerHTML=keys.length?keys.map(n=>'<option>'+esc(n)+'</option>').join(''):'<option value="" disabled>'+tl('(žádné šablony)','(no templates)')+'</option>';if(cur&&o[cur])sel.value=cur}
+function currentTpl(){return {jobTitle:$('#jobTitle').value.trim(),minYears:+$('#minYears').value||0,requiredSkills:$('#skills').value.split(',').map(s=>s.trim()).filter(Boolean),weights:getWeights(),disabled:getDisabled()}}
+function applyTpl(t){if(!t)return;$('#jobTitle').value=t.jobTitle||'';$('#minYears').value=t.minYears||0;$('#skills').value=(t.requiredSkills||[]).join(', ');const w=t.weights||{};WKEYS.forEach(k=>{if(typeof w[k]==='number')$('#w_'+k).value=w[k];const c=$('#on_'+k);if(c)c.checked=(t.disabled||[]).indexOf(k)<0});saveWeights();if(typeof lastEval!=='undefined'&&lastEval)rescoreNow()}
+if($('#tplSave'))$('#tplSave').onclick=()=>{const n=$('#tplName').value.trim();if(!n){$('#tplMsg').textContent=tl('Zadej název šablony.','Enter a template name.');return}const o=loadTpls();o[n]=currentTpl();saveTpls(o);refreshTplSel();$('#tplSel').value=n;$('#tplMsg').textContent=tl('Uloženo: ','Saved: ')+n};
+if($('#tplLoad'))$('#tplLoad').onclick=()=>{const n=$('#tplSel').value,o=loadTpls();if(o[n]){applyTpl(o[n]);$('#tplName').value=n;$('#tplMsg').textContent=tl('Načteno: ','Loaded: ')+n}};
+if($('#tplDel'))$('#tplDel').onclick=()=>{const n=$('#tplSel').value,o=loadTpls();if(o[n]){delete o[n];saveTpls(o);refreshTplSel();$('#tplMsg').textContent=tl('Smazáno: ','Deleted: ')+n}};
+if($('#tplExport'))$('#tplExport').onclick=()=>{const blob=new Blob([JSON.stringify({app:'faxx-hr',kind:'templates',version:1,templates:loadTpls()},null,2)],{type:'application/json;charset=utf-8'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='faxx-hr-'+tl('sablony','templates')+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),4000)};
+if($('#tplImport'))$('#tplImport').onchange=async()=>{const f=$('#tplImport').files[0];if(!f)return;try{const data=JSON.parse(await f.text());const incoming=(data&&data.templates)?data.templates:data;if(!incoming||typeof incoming!=='object')throw new Error('x');const o=loadTpls();let n=0;Object.keys(incoming).forEach(k=>{const t=incoming[k];if(t&&typeof t==='object'&&('requiredSkills'in t||'weights'in t||'jobTitle'in t)){o[k]=t;n++}});saveTpls(o);refreshTplSel();$('#tplMsg').textContent=tl('Naimportováno šablon: ','Templates imported: ')+n}catch(e){$('#tplMsg').textContent=tl('Chyba importu šablon.','Template import error.')}$('#tplImport').value=''};
+refreshTplSel();
 // editovatelný systémový prompt pro extrakci (instrukce pro AI)
 const DEFAULT_SYS=${JSON.stringify(DEFAULT_EXTRACT_SYSTEM)};
 const sysTa=$('#sysPrompt');
@@ -1134,7 +1174,7 @@ inzTa.addEventListener('drop',ev=>{ev.preventDefault();inzTa.classList.remove('h
 $('#evalBtn').onclick=async()=>{
   $('#err').textContent='';
   if(!files.length){$('#err').textContent=tl('Přidej aspoň jedno CV.','Add at least one CV.');return}
-  const req={jobTitle:$('#jobTitle').value.trim(),minYears:+$('#minYears').value||0,requiredSkills:$('#skills').value.split(',').map(s=>s.trim().toLowerCase()).filter(Boolean),weights:getWeights()};
+  const req=reqFromForm();
   curSig=evalSig();
   $('#evalBtn').disabled=true;
   try{

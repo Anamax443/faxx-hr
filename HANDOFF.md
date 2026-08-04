@@ -2,6 +2,19 @@
 
 Append-only. Nejnovější záznam nahoru. Slouží k pokračování z jiného počítače / po pauze.
 
+## 2026-08-04 (i) — editor rubriku: vypínání kritérií + šablony pozic
+- **Zapnout/vypnout kritérium.** Karta Váhy (Nastavení) má u každého z 6 kritérií checkbox;
+  odškrtnuté se vyřadí z rubriku (`requirements.disabled: string[]` → `buildRubric` filtruje;
+  rubric.ts normalizuje váhy jen přes zapnutá). Vypnutí/zapnutí = auto **rescore bez AI**.
+  Fallback: prázdný výběr → počítá vše (nikdy prázdný rubrik). wSum ukazuje „zapnutá N/6".
+- **Šablony pozic** (karta na Hodnocení): ulož název pozice + roky + dovednosti + váhy + zapnutá
+  kritéria jako pojmenovanou šablonu (localStorage), načti/smaž, **Export/Import JSON** (přenos mezi PC).
+  `loadTpls/saveTpls/currentTpl/applyTpl`. Šablona nese i `disabled`.
+- `reqFromForm()` teď nese `disabled`; `evalBtn` sjednocen na `reqFromForm`.
+- 6 typů kritérií zůstává natvrdo (ověřené/bezpečné) — editor je vyřazuje a konfiguruje, nepřidává nové typy.
+- **Ověřeno:** dry-run build 183 KiB, syntax-check, esbuild rubric test (3 kritéria po filtru, total normalizován),
+  jsdom (on/off → getDisabled, weight disable, save/load šablony obnoví i disabled). NENASAZENO — čeká svolení.
+
 ## 2026-08-04 (h) — evidence kotvy v rozpadu (dovednosti), ověřené z textu CV
 - Rozpad kritéria **Shoda dovedností** teď u každé matchnuté dovednosti ukazuje **doslovný
   úryvek z viditelného textu CV** („🔎 doloženo v CV"). Kotva se bere **deterministicky
