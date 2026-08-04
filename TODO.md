@@ -33,11 +33,16 @@ Cílem NENÍ hotový produkt, ale doložitelné číslo. Bez něj nemá smysl st
 - [x] Ladicí regresní sada `detector/test_vectors.py` (9 útoků + 5 FP kontrol), 14/14
 - [x] Živě na Cloudflare: DOCX plná v2 + PDF přes Workers AI `toMarkdown` (embedded fonty)
 - [x] Oprava FP: metadata/alt-texty jen při injekci; lidské popisy nálezů v UI; otisk verze
-- [ ] **HELD-OUT sada** — sestavuje někdo jiný než autor detektorů
+- [x] **Měřicí harness** hotový: [`detector/benchmark.py`](detector/benchmark.py) — containment /
+      detection / critical / FP proti prahům F0; `--corpus DIR` pro held-out sadu. Protokol +
+      formát manifestu: [`detector/HELDOUT-PROTOCOL.md`](detector/HELDOUT-PROTOCOL.md).
+      Smoke (vestavěné vektory): containment 100 %, FP 0 %, critical 77,8 % (parafráze/fakt-swapy
+      jsou jen `warn` — doloženo). **NEUZAVÍRÁ F0** (self-bias).
+- [ ] **HELD-OUT sada** — sestavuje někdo JINÝ než autor detektorů (runner + protokol připraveny)
   - [ ] ≥ 50 reálných čistých CV (anonymizovaných), z toho ≥ 15 grafických
         s tmavými sidebary a textboxy — hlavní zdroj false positives
   - [ ] ≥ 30 otrávených, min. 10 vektorů, včetně **parafrázovaných** injection
-        bez shody s blocklistem
+        bez shody s blocklistem + fakt-swapů
 - [ ] **Externí red-team** — někdo dostane detektor a má za úkol ho obejít
 - [x] Hraniční PDF vektory změřeny (edge vs. on-prem) → [`docs/PDF-BOUNDARY-MATRIX.md`](docs/PDF-BOUNDARY-MATRIX.md)
       — CID/Identity-H, ToUnicode/cmap obfuskace, XFA, JS/OpenAction, render mode 3, off-page,

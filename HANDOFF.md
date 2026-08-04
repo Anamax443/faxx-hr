@@ -2,6 +2,21 @@
 
 Append-only. Nejnovější záznam nahoru. Slouží k pokračování z jiného počítače / po pauze.
 
+## 2026-08-04 (o) — G1 z oponentur: F0 měřicí harness + held-out protokol
+- **`detector/benchmark.py`** — F0 benchmark runner: měří **containment recall** (skrytý payload
+  nesmí do `visible_text` — strukturální, bezpečnost), **detection recall**, **critical recall**
+  (heuristika/blocklist) a **FP rate** proti prahům F0. `--corpus DIR` (manifest.json) pro budoucí
+  held-out sadu; bez argumentu = smoke na vestavěných vektorech (reuse `test_vectors`+`adversarial_pdf`).
+- **Klíčové rozlišení (které oba posudky slévaly):** containment = strukturální (~100 %),
+  critical = heuristika (parafráze ho minou). Smoke: **containment 100 %, FP 0 %, critical 77,8 %**
+  — přidal jsem parafrázové + fakt-swap skryté vektory (bílý text, mimo blocklist) → doloženo, že
+  jsou jen `warn`, ale ZADRŽENÉ (zádrž 100 %). To je poctivá odpověď na „parafráze mimo blocklist".
+- **`detector/HELDOUT-PROTOCOL.md`** — kdo/co/jak sestaví nezávislou held-out sadu (role: autor
+  detektoru ≠ kurátor ≠ red-teamer), složení (≥50 čistých vč. ≥15 grafických, ≥30 otrávených ≥10
+  vektorů vč. parafrází/fakt-swapů), formát manifestu, prahy, red-team.
+- **F0 ZŮSTÁVÁ OTEVŘENÝ** — runner + protokol jsou infrastruktura; gate uzavře jen nezávislá sada +
+  red-team (self-bias). detector/README + TODO + oponentura kap. 15 §15.0 (stav G1) aktualizovány.
+
 ## 2026-08-04 (n) — P0 z oponentur: uzavřen V-PDF-06 (ToUnicode fact-swap) glyf↔ToUnicode diffem
 - **Reakce na bod #1 obou oponentur** („invariant chrání slot na verdikt, ne fakta" → skrytý
   fact-swap přes ToUnicode). On-prem detektor `detector/hidden_text.py`: nové

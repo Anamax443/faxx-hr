@@ -51,6 +51,13 @@ bezpečnostní a validační brány platí ihned na sdíleném jádře.**
 > nejde do `visible_text`. Regrese 24/24, 0 FP (embedované/subset fonty se přeskočí). Zbývá plný
 > **render→OCR dual-path** (display-divergence i mimo ToUnicode: render mode, off-page) — čeká na
 > OCR engine (Tesseract) v on-prem runneru.
+>
+> **Stav G1 (2026-08-04):** **měřicí harness hotový** — `detector/benchmark.py` (containment /
+> detection / critical / FP proti prahům F0; `--corpus DIR` pro held-out) + protokol
+> `detector/HELDOUT-PROTOCOL.md`. Smoke na vestavěných vektorech: **containment 100 %, FP 0 %,
+> critical 77,8 %** (parafráze/fakt-swapy jsou jen `warn` — doložený rozdíl containment vs.
+> heuristika). **F0 zůstává OTEVŘENÝ**: chybí nezávislá **held-out sada 3. strany + red-team**
+> (self-bias). Runner je připravený, čísla vypadnou automaticky, jakmile sada bude.
 
 Sekce §15.1–§15.6 níže popisují fáze a kroky podrobněji; kde mluví o D1/R2 perzistenci,
 `audit_log` a DPIA, patří to nově do **větve B**.

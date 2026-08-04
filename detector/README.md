@@ -43,6 +43,18 @@ Bez závislostí, soubor neopustí tvůj počítač. Toto je F0 náhrada za budo
 Cloudflare Pages upload — až bude Worker, stránka se jen přesměruje z localhostu
 na něj (stejné UI, stejné detektory).
 
+## F0 benchmark (recall / FP / zádrž)
+
+```bash
+python benchmark.py                 # smoke na vestavěných vektorech (self-bias, NEuzavírá F0)
+python benchmark.py --corpus DIR    # held-out sada (DIR/manifest.json) — skutečný gate
+```
+
+Měří odděleně **containment recall** (skrytý payload nesmí do `visible_text` — strukturální,
+bezpečnost), **detection recall**, **critical recall** (heuristika/blocklist — parafráze ji
+minou) a **false-positive rate** proti prahům F0. Skutečný gate uzavře jen **nezávislá held-out
+sada 3. strany + red-team** — postup a formát manifestu: [`HELDOUT-PROTOCOL.md`](HELDOUT-PROTOCOL.md).
+
 ## Co detekuje
 
 - **DOCX** (čistě stdlib): `w:vanish`, bílý/téměř bílý font, komentáře, poznámky,
