@@ -793,7 +793,7 @@ a{color:var(--accent)}
       <li><b>Kvalita zdarma modelu kolísá.</b> Llama 3.1 8B může u téhož CV dát mírně jiné pořadí. Pro stabilnější výsledky přepni na silnější model (a Claude, až bude klíč).</li>
       <li><b>Vision OCR není dokonalý.</b> U obrázkových CV / screenshotů může chybět či být nepřesné. Doporučeno dodávat CV jako PDF/DOCX s textovou vrstvou.</li>
       <li><b>PDF — hloubka detekce.</b> Přesné určení „proč skrytý“ (barva/render mód/XFA) běží na on-prem runneru; webová verze u PDF zachytí instrukční text v textové vrstvě.</li>
-      <li><b>Ukládání jen do souboru.</b> Dokumenty se zpracují v paměti a na server se neukládají. Výsledek si můžeš <b>stáhnout jako JSON a později načíst</b> (vrátíš se k dávce bez databáze), ale sdílené úložiště dávek se stavem kandidáta (osloven/postupuje/odmítnut) teprve přijde — perzistence D1/R2 je na roadmapě.</li>
+      <li><b>Ukládání v prohlížeči, ne na serveru.</b> Dokumenty se zpracují v paměti a na server se neukládají. Rozpracovaná relace (inzerát, požadavky a poslední výsledek) se <b>automaticky ukládá v prohlížeči a po obnově stránky se sama natáhne</b>; výsledek si můžeš i <b>stáhnout jako JSON a jinde načíst</b>. Nahrané soubory ale refresh nepřežijí — pro otevírání originálů je nahraj znovu. Sdílené úložiště dávek se stavem kandidáta (osloven/postupuje/odmítnut) teprve přijde — perzistence D1/R2 je na roadmapě.</li>
       <li><b>Skóre = podklad.</b> Vždy si projdi rozpad a nálezy; konečné rozhodnutí je tvoje.</li>
     </ul>
     <p style="font-size:12px;color:var(--muted)">Verze aplikace (commit + čas nasazení) je v horní liště.</p>
@@ -933,7 +933,7 @@ a{color:var(--accent)}
       <li><b>Free-model quality varies.</b> Llama 3.1 8B may give a slightly different order for the same CV. For more stable results switch to a stronger model (and Claude, once there is a key).</li>
       <li><b>Vision OCR is not perfect.</b> For image CVs / screenshots it may be missing or inaccurate. Prefer supplying CVs as PDF/DOCX with a text layer.</li>
       <li><b>PDF — detection depth.</b> Determining exactly "why hidden" (colour/render mode/XFA) runs on the on-prem runner; the web version catches instruction text in the PDF text layer.</li>
-      <li><b>File-only storage.</b> Documents are processed in memory and not stored on the server. You can <b>download the result as JSON and load it back later</b> (return to the batch without a database), but a shared batch store with candidate status (contacted/advancing/rejected) is still to come — D1/R2 persistence is on the roadmap.</li>
+      <li><b>Stored in the browser, not on the server.</b> Documents are processed in memory and not stored on the server. Your working session (job ad, requirements and the last result) is <b>auto-saved in the browser and restored after a page reload</b>; you can also <b>download the result as JSON and load it elsewhere</b>. Uploaded files do not survive a reload, though — re-upload them to open the originals. A shared batch store with candidate status (contacted/advancing/rejected) is still to come — D1/R2 persistence is on the roadmap.</li>
       <li><b>The score is a basis.</b> Always review the breakdown and findings; the final decision is yours.</li>
     </ul>
     <p style="font-size:12px;color:var(--muted)">The application version (commit + deploy time) is in the top bar.</p>
@@ -1015,7 +1015,7 @@ async function rescoreNow(){
   if(typeof lastEval==='undefined'||!lastEval)return null;
   try{
     const r=await fetch('/api/rescore',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({requirements:reqFromForm(),model:model(),candidates:lastEval.result.ranking,lang:LANG})}).then(x=>x.json());
-    if(!r.error){renderResults(r);lastEval={sig:(typeof curSig!=='undefined'&&curSig)?curSig:evalSig(),result:r}}
+    if(!r.error){renderResults(r);lastEval={sig:(typeof curSig!=='undefined'&&curSig)?curSig:evalSig(),result:r};saveSession()}
     return r;
   }catch(e){return {error:String(e)}}
 }
@@ -1037,13 +1037,38 @@ async function importResult(file){
     const req=data.requirements||{};
     $('#jobTitle').value=req.jobTitle||'';$('#minYears').value=req.minYears||0;$('#skills').value=(req.requiredSkills||[]).join(', ');
     if(req.weights)WKEYS.forEach(k=>{if(typeof req.weights[k]==='number')$('#w_'+k).value=req.weights[k]});
+    if(req.disabled)WKEYS.forEach(k=>{const c=$('#on_'+k);if(c)c.checked=(req.disabled||[]).indexOf(k)<0});
     saveWeights();
     curSig=evalSig();lastEval={sig:curSig,result:data.result};
     $$('.tab')[0].click();
-    renderResults(data.result);
+    renderResults(data.result);saveSession();
     const when=data.savedAt?' ('+new Date(data.savedAt).toLocaleString(LANG==='en'?'en-GB':'cs-CZ')+')':'';
     $('#evalMsg').textContent=tl('Načteno z uloženého souboru'+when+'. Přepočet vah/gate běží bez AI.','Loaded from a saved file'+when+'. Weight/gate recompute runs without AI.');
   }catch(e){$('#err').textContent=tl('Chyba načtení: ','Load error: ')+((e&&e.message)||e)}
+}
+// ---- autosave kompletní relace do localStorage → přežije obnovu prohlížeče (bez DB) ----
+const SESSION_KEY='faxx_session';
+function saveSession(){
+  try{
+    const snap={version:1,savedAt:new Date().toISOString(),inzerat:$('#inzerat').value,jobTitle:$('#jobTitle').value,minYears:$('#minYears').value,skills:$('#skills').value,result:(typeof lastEval!=='undefined'&&lastEval)?lastEval.result:null};
+    localStorage.setItem(SESSION_KEY,JSON.stringify(snap));
+  }catch(e){/* kvóta / soukromý režim → tichý fail (příště jen bez výsledku) */}
+}
+function clearSession(){try{localStorage.removeItem(SESSION_KEY)}catch(e){}lastEval=null;lastResult=null;$('#results').innerHTML='';$('#evalMsg').textContent=tl('Uložená relace vymazána.','Saved session cleared.')}
+function restoreSession(){
+  let snap=null;try{snap=JSON.parse(localStorage.getItem(SESSION_KEY)||'null')}catch(e){}
+  if(!snap)return;
+  if(snap.inzerat!=null)$('#inzerat').value=snap.inzerat;
+  if(snap.jobTitle!=null)$('#jobTitle').value=snap.jobTitle;
+  if(snap.minYears!=null)$('#minYears').value=snap.minYears;
+  if(snap.skills!=null)$('#skills').value=snap.skills;
+  if(snap.result&&snap.result.ranking){
+    curSig=evalSig();lastEval={sig:curSig,result:snap.result};
+    renderResults(snap.result);
+    const when=snap.savedAt?' ('+new Date(snap.savedAt).toLocaleString(LANG==='en'?'en-GB':'cs-CZ')+')':'';
+    $('#evalMsg').innerHTML=tl('↩︎ Obnovena poslední relace','↩︎ Last session restored')+when+' — '+tl('soubory nahraj znovu, chceš-li otevírat originály. ','re-upload the files if you want to open the originals. ')+'<a id="clrSess" style="cursor:pointer;text-decoration:underline">'+tl('Vymazat relaci','Clear session')+'</a>';
+    const clr=$('#clrSess');if(clr)clr.onclick=clearSession;
+  }
 }
 
 // tabs
@@ -1183,7 +1208,7 @@ $('#evalBtn').onclick=async()=>{
       $('#evalMsg').textContent=tl('Přepočítávám bez AI (data už načtena)…','Recomputing without AI (data already loaded)…');
       const r=await fetch('/api/rescore',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({requirements:req,model:model(),candidates:lastEval.result.ranking,lang:LANG})}).then(x=>x.json());
       $('#evalMsg').textContent='';
-      if(r.error){$('#err').textContent=r.error}else{renderResults(r);lastEval={sig:curSig,result:r}}
+      if(r.error){$('#err').textContent=r.error}else{renderResults(r);lastEval={sig:curSig,result:r};saveSession()}
     }else{
       const fd=new FormData();fd.set('model',model());fd.set('requirements',JSON.stringify(req));fd.set('inzerat',$('#inzerat').value);fd.set('systemPrompt',getSysPrompt());fd.set('visionMethod',visionMethod());fd.set('lang',LANG);
       for(const f of files)fd.append('cv',f);
@@ -1212,7 +1237,7 @@ async function evaluateStream(fd){
         let msg;try{msg=JSON.parse(line)}catch(e){continue}
         if(msg.type==='start'){state={total:msg.total,done:0,items:(msg.names||[]).map(n=>({name:n,status:'wait'}))};renderProgress(state,t0)}
         else if(msg.type==='progress'){state.done=msg.index;const it=state.items[msg.index-1];if(it){it.name=msg.name;it.status='done';it.total=msg.total_score;it.dq=msg.disqualified;it.flags=msg.flagCount}if(state.items[msg.index])state.items[msg.index].status='run';renderProgress(state,t0)}
-        else if(msg.type==='done'){ended=true;clearInterval(tick);renderResults(msg.result);lastEval={sig:curSig,result:msg.result}}
+        else if(msg.type==='done'){ended=true;clearInterval(tick);renderResults(msg.result);lastEval={sig:curSig,result:msg.result};saveSession()}
         else if(msg.type==='error'){ended=true;clearInterval(tick);$('#err').textContent=msg.error}
       }
     }
@@ -1304,4 +1329,7 @@ function renderResults(r){
   $('#btnSave').onclick=exportResult;
   $('#btnRescore').onclick=async()=>{const b=$('#btnRescore');b.disabled=true;const old=b.textContent;b.textContent=tl('Přepočítávám…','Recomputing…');const r=await rescoreNow();if(r&&r.error)$('#err').textContent=tl('Chyba přepočtu: ','Recompute error: ')+r.error;const nb=$('#btnRescore');if(nb){nb.disabled=false;nb.textContent=old}};
 }
+// --- autosave relace: ulož při změně formuláře, obnov po startu (přežije obnovu prohlížeče) ---
+['#inzerat','#jobTitle','#minYears','#skills'].forEach(sel=>{const el=$(sel);if(el)el.addEventListener('change',saveSession)});
+restoreSession();
 </script></body></html>`;

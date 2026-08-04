@@ -2,6 +2,17 @@
 
 Append-only. Nejnovější záznam nahoru. Slouží k pokračování z jiného počítače / po pauze.
 
+## 2026-08-04 (j) — autosave kompletní relace → přežije obnovu prohlížeče (bez DB)
+- Rozpracovaná relace (inzerát + jobTitle/roky/dovednosti + **poslední výsledek** s rankingem/
+  rozpadem/evidencí) se **automaticky ukládá** do `localStorage` (`faxx_session`) při změně
+  formuláře a po každém vyhodnocení/přepočtu/importu. Po **obnově prohlížeče** se sama natáhne
+  (`restoreSession()` na konci skriptu) — hláška „↩︎ Obnovena poslední relace" + odkaz **Vymazat relaci**.
+- Nahrané soubory refresh NEpřežijí (File objekty nejdou serializovat) → pro otevírání originálů
+  je nutné je nahrát znovu; ranking/skóre/kontakty/nálezy/evidence jsou ale plně obnovené.
+- Import z JSON teď obnoví i vypnutá kritéria (`req.disabled`). Tichý fail při vyčerpané kvótě localStorage.
+- Ověřeno: dry-run build 186 KiB, syntax-check, jsdom 2-okenní test (okno1 uloží, okno2 po „refreshi"
+  obnoví inzerát+ranking+hlášku, clear smaže). NENASAZENO — čeká svolení.
+
 ## 2026-08-04 (i) — editor rubriku: vypínání kritérií + šablony pozic
 - **Zapnout/vypnout kritérium.** Karta Váhy (Nastavení) má u každého z 6 kritérií checkbox;
   odškrtnuté se vyřadí z rubriku (`requirements.disabled: string[]` → `buildRubric` filtruje;
