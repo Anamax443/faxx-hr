@@ -1,0 +1,178 @@
+/**
+ * faxx-hr — deterministický rubrik (F3 jádro).
+ *
+ * Skóre a pořadí kandidátů počítá VÝHRADNĚ tento kód nad strukturovaným
+ * `qualification` blokem z extrakce (LLM #1). Skórovací cesta NIKDY nevidí
+ * surový text CV — proto sem injection nemá kam zapsat: rozhoduje o pořadí
+ * pevný vzorec, ne model, který by šel přemluvit větou „jsem nejlepší".
+ *
+ * Vstup: `Qualification` (podmnožina schema/extraction.schema.json, blok
+ * qualification) + `Rubric` (must-have gates + vážená kritéria, odvozené z
+ * inzerátu, doladí personalista).
+ * Výstup: `ScoreResult` — total 0..100, gates, rozpad po kritériích s evidencí.
+ *
+ * Bez závislostí, čistě deterministické → reprodukovatelné a auditovatelné.
+ */
+
+// --- vstupní data (podmnožina extraction schématu) -------------------------
+export interface QSkill { name: string; category?: string; level?: string | null; evidence?: string }
+export interface QExperience { title: string; employer?: string | null; months?: number | null; seniority?: string | null }
+export interface QEducation { level: string; field?: string | null; year?: number | null }
+export interface QLanguage { language: string; level?: string | null }
+export interface Qualification {
+  years_total_experience?: number | null;
+  experience?: QExperience[];
+  skills?: QSkill[];
+  education?: QEducation[];
+  languages?: QLanguage[];
+  certifications?: string[];
+}
+
+// --- rubrik (odvozený z inzerátu, editovatelný personalistou) ---------------
+export type GateOp = ">=" | ">" | "<=" | "<" | "==";
+export interface Gate {
+  key: string;
+  field: string;          // cesta v qualification, např. "years_total_experience"
+  op: GateOp;
+  value: number;
+  reason: string;
+}
+export type CriterionType =
+  | "numeric_scale"   // číselná hodnota → lineární škála (min..max)
+  | "set_overlap"     // překryv dovedností s požadovanými
+  | "category_map"    // kategorie (vzdělání) → body
+  | "cefr_map"        // jazyková úroveň → body
+  | "tenure"          // průměrná délka setrvání → stabilita
+  | "bonus";          // počet položek × body (certifikace)
+export interface Criterion {
+  key: string;
+  label: string;
+  weight: number;                 // 0..1, součet vah ≈ 1 (normalizuje se)
+  type: CriterionType;
+  min?: number; max?: number;                 // numeric_scale
+  required?: string[];                         // set_overlap
+  map?: Record<string, number>;                // category_map / cefr_map (0..10)
+  aggregate?: "max" | "avg";                   // category_map
+  language?: string;                           // cefr_map — který jazyk
+  penaltyBelowMonths?: number;                 // tenure
+  pointsEach?: number; cap?: number;           // bonus (cap ve výsledných bodech 0..10)
+}
+export interface Rubric {
+  jobTitle: string;
+  gates: Gate[];
+  criteria: Criterion[];
+}
+
+// --- výstup -----------------------------------------------------------------
+export interface GateResult { key: string; passed: boolean; reason: string; value: number | null }
+export interface CriterionResult {
+  key: string; label: string; weight: number;
+  score: number;          // 0..10
+  contribution: number;   // příspěvek do total (0..100), = weight/Σweight * score * 10
+  detail: string;         // lidsky čitelná evidence, PROČ tolik bodů
+}
+export interface ScoreResult {
+  total: number;          // 0..100 (0 při diskvalifikaci)
+  disqualified: boolean;
+  gates: GateResult[];
+  breakdown: CriterionResult[];
+}
+
+// --- pomůcky ----------------------------------------------------------------
+function isNum(x: unknown): x is number { return typeof x === "number" && Number.isFinite(x); }
+function clamp01(x: number): number { return x < 0 ? 0 : x > 1 ? 1 : x; }
+export function norm(s: string): string {
+  return (s || "").normalize("NFKD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
+}
+function getField(q: Qualification, path: string): unknown {
+  return path.split(".").reduce<unknown>((o, k) => (o == null ? null : (o as Record<string, unknown>)[k]), q);
+}
+function gateEval(v: number, op: GateOp, target: number): boolean {
+  switch (op) {
+    case ">=": return v >= target;
+    case ">": return v > target;
+    case "<=": return v <= target;
+    case "<": return v < target;
+    case "==": return v === target;
+  }
+}
+
+// --- skóre jednoho kritéria (vždy 0..10) ------------------------------------
+function criterionScore(c: Criterion, q: Qualification): { score: number; detail: string } {
+  switch (c.type) {
+    case "numeric_scale": {
+      const raw = getField(q, "years_total_experience");
+      const v = isNum(raw) ? raw : 0;
+      const min = c.min ?? 0, max = c.max ?? 10;
+      const s = clamp01(max > min ? (v - min) / (max - min) : 0) * 10;
+      return { score: s, detail: `${v} (škála ${min}–${max}) → ${s.toFixed(1)}/10` };
+    }
+    case "set_overlap": {
+      const req = (c.required ?? []).map(norm);
+      const have = new Set((q.skills ?? []).map((s) => norm(s.name)));
+      const hit = req.filter((r) => [...have].some((h) => h === r || h.includes(r) || r.includes(h)));
+      const s = req.length ? (hit.length / req.length) * 10 : 0;
+      const miss = req.filter((r) => !hit.includes(r));
+      return { score: s, detail: `${hit.length}/${req.length} klíčových dovedností${miss.length ? ` (chybí: ${miss.join(", ")})` : ""}` };
+    }
+    case "category_map": {
+      const levels = (q.education ?? []).map((e) => c.map?.[norm(e.level)] ?? 0);
+      if (!levels.length) return { score: 0, detail: "bez uvedeného vzdělání" };
+      const s = c.aggregate === "avg" ? levels.reduce((a, b) => a + b, 0) / levels.length : Math.max(...levels);
+      const best = (q.education ?? []).find((e) => (c.map?.[norm(e.level)] ?? 0) === Math.max(...levels));
+      return { score: s, detail: `nejvyšší: ${best?.level ?? "?"} → ${s.toFixed(1)}/10` };
+    }
+    case "cefr_map": {
+      const want = norm(c.language ?? "en");
+      const langs = (q.languages ?? []).filter((l) => {
+        const n = norm(l.language);
+        return n === want || n.includes(want) || (want === "en" && (n.includes("angl") || n.includes("english")));
+      });
+      const pts = langs.map((l) => c.map?.[(l.level ?? "").toUpperCase()] ?? 0);
+      const s = pts.length ? Math.max(...pts) : 0;
+      const lvl = langs.map((l) => l.level).filter(Boolean).join("/") || "neuvedeno";
+      return { score: s, detail: `${c.language ?? "EN"}: ${lvl} → ${s.toFixed(1)}/10` };
+    }
+    case "tenure": {
+      const months = (q.experience ?? []).map((e) => e.months).filter(isNum) as number[];
+      if (!months.length) return { score: 5, detail: "bez dat o délce pozic (neutrální)" };
+      const avg = months.reduce((a, b) => a + b, 0) / months.length;
+      const floor = c.penaltyBelowMonths ?? 6;
+      // ≤floor = 0 b., ≥24 měs = 10 b., mezi lineárně
+      const s = clamp01((avg - floor) / (24 - floor)) * 10;
+      return { score: s, detail: `průměrné setrvání ${avg.toFixed(0)} měs → ${s.toFixed(1)}/10` };
+    }
+    case "bonus": {
+      const n = (q.certifications ?? []).length;
+      const pts = Math.min(n * (c.pointsEach ?? 2), c.cap ?? 10);
+      return { score: pts, detail: `${n} certifikací → ${pts.toFixed(1)}/10` };
+    }
+  }
+}
+
+// --- veřejné API ------------------------------------------------------------
+export function scoreCandidate(q: Qualification, rubric: Rubric): ScoreResult {
+  const gates: GateResult[] = rubric.gates.map((g) => {
+    const raw = getField(q, g.field);
+    const v = isNum(raw) ? raw : null;
+    const passed = v != null && gateEval(v, g.op, g.value);
+    return { key: g.key, passed, reason: g.reason, value: v };
+  });
+  const disqualified = gates.some((g) => !g.passed);
+
+  const wsum = rubric.criteria.reduce((a, c) => a + c.weight, 0) || 1;
+  const breakdown: CriterionResult[] = rubric.criteria.map((c) => {
+    const { score, detail } = criterionScore(c, q);
+    return { key: c.key, label: c.label, weight: c.weight, score, contribution: (c.weight / wsum) * score * 10, detail };
+  });
+  const total = disqualified ? 0 : breakdown.reduce((a, b) => a + b.contribution, 0);
+  return { total: Math.round(total * 10) / 10, disqualified, gates, breakdown };
+}
+
+/** Seřadí kandidáty: nediskvalifikovaní podle skóre sestupně, diskvalifikovaní nakonec. */
+export function rankCandidates<T extends { score: ScoreResult }>(cands: T[]): T[] {
+  return [...cands].sort((a, b) => {
+    if (a.score.disqualified !== b.score.disqualified) return a.score.disqualified ? 1 : -1;
+    return b.score.total - a.score.total;
+  });
+}

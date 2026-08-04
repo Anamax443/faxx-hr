@@ -62,7 +62,7 @@ dual-path diff se měří odděleně (diff ještě neexistuje, viz F1).
 - [ ] Deduplikace — týž uchazeč pošle CV dvakrát / přes dva kanály
 - [ ] **Dual-path diff** — textová vrstva vs. render→OCR, on-prem runner (Conduit → Beelink)
 - [ ] Rozhodnout doménu pro e-mail ingest — *blokuje spuštění*
-- [ ] LLM #1 extrakce → `schema/extraction.schema.json`, vstup **jen `visible_text`**, bez zadání (least privilege)
+- [~] LLM #1 extrakce → `schema/extraction.schema.json`, vstup **jen `visible_text`**, bez zadání (least privilege) — **prototyp hotový** `worker/src/extract.ts` (Workers AI, přepínatelný model, soft validace), ověřeno spikem 2026-08-04 (b); zbývá napojit na pipeline + Claude backend
 - [ ] Soft validace (field-level): neznámé klíče zahodit, sporné pole → flag, ne ERROR celého CV
 - [ ] Kaskáda: Workers AI (klasifikace, Llama Guard) → Haiku 4.5 → Sonnet 5 + vision; logovat `model`, tokeny, `cost_czk`
 - [ ] Denní práh nákladů + alert
@@ -94,8 +94,8 @@ Jádro hodnoty pro personalistu, zatím nejméně rozpracované.
 
 - [ ] **Parsování inzerátu** na strukturované požadavky (must-have / nice-to-have, roky, technologie, jazyky, lokalita, úvazek)
 - [ ] Editor požadavků — personalista musí umět váhy a gates upravit ručně (inzerát bývá marketingový)
-- [ ] Deterministický rubrik nad `qualification_json`: vážený součet po gates
-- [ ] `breakdown_json` s odkazem na evidence — bez toho není vysvětlitelnost
+- [~] Deterministický rubrik nad `qualification_json`: vážený součet po gates — **prototyp hotový** `worker/src/rubric.ts` (gates + 6 typů kritérií, total 0..100), /selftest 6/6, ověřeno spikem 2026-08-04 (b); zbývá editor rubriku + parser inzerátu
+- [~] `breakdown_json` s odkazem na evidence — rozpad po kritériích s `detail` hotový v `rubric.ts`; dopojit evidence kotvy z extrakce
 - [ ] **Validace rubriku proti historickým rozhodnutím** personalisty (reprodukovatelné ≠ správné)
 - [ ] Rozhodnout, kdo rubrik píše: personalista se šablonou vs. správce
 - [ ] Chráněné atributy: `meta.sensitive_attributes_detected` hlásí přítomnost, **hodnoty se neextrahují**

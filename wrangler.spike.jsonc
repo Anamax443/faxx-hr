@@ -1,0 +1,9 @@
+{
+  // faxx-hr — VERIFY-CORE spike (throwaway). Běh: npx wrangler dev -c wrangler.spike.jsonc --port 8799
+  // AI binding jde na reálný Cloudflare Workers AI (účet bass443, token má ai:write).
+  "name": "faxx-hr-spike",
+  "main": "spike/spike.ts",
+  "compatibility_date": "2026-08-01",
+  "account_id": "a37a36270aa2db7382f62912ba5a0130",
+  "ai": { "binding": "AI" }
+}
