@@ -123,7 +123,7 @@ async function visionText(buf: Uint8Array, name: string, env: Env, method = "toM
 async function cleanupOcr(desc: string, model: string, env: Env): Promise<string> {
   try {
     const r = await aiJson(env.AI, model, [
-      { role: "system", content: "Dostaneš strojový POPIS obrázku dokumentu (pracovní inzerát nebo životopis, popis bývá anglicky). Zrekonstruuj z něj ČISTÝ souvislý text původního dokumentu v jeho původním jazyce (nejspíš čeština). Vrať POUZE text dokumentu — bez popisných vět, bez meta-nadpisů typu 'Header', 'Textual Content', 'Visual Style', bez uvozovek a komentářů. Zachovej fakta: název pozice, roky praxe, dovednosti, jazyky, vzdělání, kontakty." },
+      { role: "system", content: "Dostaneš strojový POPIS obrázku dokumentu (pracovní inzerát nebo životopis, popis bývá anglicky). Zrekonstruuj z něj ČISTÝ souvislý text původního dokumentu v jeho původním jazyce (nejspíš čeština). Vrať POUZE text dokumentu — bez popisných vět, bez meta-nadpisů typu 'Header', 'Textual Content', 'Visual Style', bez uvozovek a komentářů. Piš přirozenou češtinou a NEPŘEKLÁDEJ běžné termíny do angličtiny (např. 'vývojář', ne 'developer'; 'životopis', ne 'resume'; 'znalost', ne 'proficiency'). Zachovej fakta: název pozice, roky praxe, dovednosti, jazyky, vzdělání, kontakty." },
       { role: "user", content: String(desc).slice(0, 6000) },
     ]);
     return String(r.raw || "").trim();
