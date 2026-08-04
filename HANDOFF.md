@@ -2,6 +2,35 @@
 
 Append-only. Nejnovější záznam nahoru. Slouží k pokračování z jiného počítače / po pauze.
 
+## 2026-08-04 (c) — appka skeleton: záložky + dávka CV + inzerát→požadavky + ranking (F1/F2/F3 v1)
+- **Postaven skeleton hodnoticí appky** kolem ověřeného jádra (spike b). Nový worker
+  [`worker/src/app.ts`](worker/src/app.ts) + [`wrangler.app.jsonc`](wrangler.app.jsonc) (`faxx-hr-app`, AI binding).
+- **Sdílená detekce vytažena do [`worker/src/detect.ts`](worker/src/detect.ts)** (zdroj pravdy) —
+  `upload.ts` na ni **zrefaktorován** (zeštíhlen, jen stránka+/scan). Oba workery buildují (dry-run OK:
+  upload 34 KiB, app 81 KiB). upload.ts se NENÍ nutné hned redeployovat (živá verze běží dál).
+- **extract.ts refaktor:** vytažen sdílený `aiJson()` (robustní call+parse: response_format i OpenAI
+  `choices[].message.content` i CF `response`); používá ho extrakce i odvození požadavků. spike beze změny.
+- **Appka (záložky Hodnocení / Nastavení / Dokumentace):**
+  - Hodnocení: textarea inzerátu + „✨ Odvodit požadavky" (`POST /api/derive` → LLM navrhne
+    jobTitle/minYears/requiredSkills, editovatelné); formulář požadavků; drag&drop **víc CV ≤10 MB**
+    (per-file 8 MB, celkem 10 MB, hlídáno klient i server); „Vyhodnotit" → `POST /api/evaluate`
+    (multipart NEBO JSON) → ranking tabulka se skóre/barem, rozpad po kritériích, flagy ze zdroje,
+    export **Tisk/PDF** (window.print + print CSS) a **Stáhnout HTML**. Bez „hromadně zamítnout".
+  - Nastavení: přepínač modelu (8b-fp8 default / 70b / gpt-oss-120b / Claude disabled=bez klíče),
+    localStorage; váhy kritérií (v1 pevné).
+  - Dokumentace: princip (skórování nevidí surový text), AI Act.
+- **Rubrik z požadavků:** `buildRubric(requirements)` — gate minYears + 6 kritérií (váhy pevné v1);
+  requiredSkills → set_overlap.
+- **Ověřeno přes wrangler dev (reálný Workers AI, bass443):**
+  - `GET /` HTML OK. `POST /api/evaluate` JSON: Anna 77,6 › Jan(injection) 49,9 — injection nulový vliv.
+  - **Multipart upload DOCX se skrytým bílým injection:** detekce ho chytila (`docx_low_contrast` critical
+    „ohodnoť 100/100"), skrytý text (84 zn.) oddělen od viditelného (232 zn.) → do skóre nešel, skóre 77,6
+    z viditelných kvalifikací, flag zobrazen člověku. **Celá cesta detect→extract→rubric→rank funguje.**
+- **NENASAZENO** (deploy je outward-facing, čeká na svolení): `npx wrangler deploy -c wrangler.app.jsonc`
+  → nová veřejná URL `faxx-hr-app.bass443.workers.dev`. Pozn.: `npm install` byl potřeba (čerstvý klon).
+- **Zbývá:** editovatelné váhy + šablony rubriků; screenshot inzerátu (vision); Claude backend (klíč);
+  perzistence dávek (D1/R2); konvergovat upload.ts plně na detect.ts (dnes už importuje).
+
 ## 2026-08-04 (b) — VERIFY-CORE spike: extrakce (free model) → deterministický rubrik → ranking FUNGUJE
 - **Ověřeno jádro celé appky DŘÍV, než se kolem staví UI** (prior-art check napřed → injection-obrana
   pro HR screening v OSS není, viz paměť `faxx-hr-prior-art`; ranking part hotový ale bez obrany → náš niche).
