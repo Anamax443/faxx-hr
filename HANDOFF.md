@@ -2,6 +2,26 @@
 
 Append-only. Nejnovější záznam nahoru. Slouží k pokračování z jiného počítače / po pauze.
 
+## 2026-08-04 (l) — per-dokument cache extrakce (reálná úspora tokenů) + 2 opravy chyb
+- **DVĚ CHYBY v už nasazeném kódu opraveny:**
+  1. `rankResults` zahazoval `breakdown[].evidence` → evidence kotvy se NEdostávaly ke klientovi
+     (feature byla živě, ale nefungovala). Teď se předává.
+  2. `scoreOne` nepředával `system` do `extractQualification` → editovatelný systémový prompt v
+     Nastavení se ignoroval. Teď se používá.
+- **Per-dokument cache extrakce (šetří tokeny/neurony):** už extrahované dokumenty se při dalším
+  „Vyhodnotit" NEre-extrahují. Klient si po každém běhu uloží per-doc extrakci (`docExtracts` z
+  odpovědi) do `docCache` (klíč `jméno+velikost+model+vision+hash(prompt)`); příště pošle `cached`
+  pro nezměněné soubory a nahraje jen nové → server u cached přeskočí detect+extract (0 AI).
+  Kontakty refaktorovány na **per-dokument** (regex per doc → merge), evidence kotvy taky **per-doc**
+  (sedí na qualification → v cache). Server: `CachedDoc` typ, `DocInput.cached`, `asCachedDoc`
+  sanitizér (nástroj je jednouživatelský → důvěra v vlastní cache OK), `scoreOne` cached větev,
+  `rankResults` vrací `docExtracts` (rescore je nemá → prázdné). `docExtracts` se NEukládá do
+  autosave/exportu (`slimResult`).
+- **Ověřeno:** dry-run build 190 KiB, syntax-check; **wrangler dev**: `/api/evaluate` s `cached`
+  dokumentem (bez souborů) → Anna 74.6, evidence [Python] prošla rozpadem, `extract_ms=0` (0 AI),
+  `docExtracts` vrácen; **jsdom** inkrementální: 1. běh cv=2/cached=0, po přidání souboru cv=1/cached=2.
+- NENASAZENO — čeká svolení. (Evidence fix dělá už-nasazenou funkci konečně funkční.)
+
 ## 2026-08-04 (k) — token trimy (bezpečné) + zjištění o reálné úspoře
 - **Ping AI se při přepnutí jazyka už nevolá.** `pingAI` teď ukládá `aiState` a `renderAiStatus()`
   jen překreslí stav (dostupnost se přepnutím CS/EN nemění) → 0 zbytečných neuronů. Ruční ↻ + změna

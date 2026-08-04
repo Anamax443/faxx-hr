@@ -10,7 +10,7 @@
  * Deploy: wrangler deploy -c wrangler.app.jsonc
  */
 import { scanDocument, injectionContext, type DetectEnv } from "./detect";
-import { extractQualification, mergeQualifications, mergeIdentity, aiJson, EXTRACT_MODEL_DEFAULT, DEFAULT_EXTRACT_SYSTEM, type AiBinding, type Identity } from "./extract";
+import { extractQualification, mergeQualifications, mergeIdentity, aiJson, sanitizeQualification, sanitizeIdentity, EXTRACT_MODEL_DEFAULT, DEFAULT_EXTRACT_SYSTEM, type AiBinding, type Identity } from "./extract";
 import { scoreCandidate, rankCandidates, type Rubric, type Qualification, type Lang } from "./rubric";
 
 interface Env extends DetectEnv { AI: AiBinding & DetectEnv["AI"] }
@@ -166,7 +166,17 @@ async function scanOrVision(name: string, buf: Uint8Array, env: Env, visionMetho
   return { visible: s.visible, flags: s.flags, note: s.note, hiddenChars: s.hiddenChars };
 }
 
-interface DocInput { name: string; buf?: Uint8Array; visible?: string; flags?: { type: string; severity: string; location: string; evidence: string }[]; hidden_chars?: number; note?: string }
+// Per-dokument extrakce (výstup i vstup cache): vše, co scoreOne potřebuje BEZ
+// nového volání AI. Klient si ji uloží a příště pošle pro nezměněné soubory.
+interface DocFlag { type: string; severity: string; location: string; evidence: string }
+interface CachedDoc {
+  name: string; doc_type: string;
+  qualification: Qualification;                    // s evidence kotvami (skills[].evidence)
+  identity: Identity;                              // model-extrahovaná (jméno/lokalita/odkazy)
+  contacts: { emails: string[]; phones: string[] }; // regex z textu TOHOTO dokumentu
+  flags: DocFlag[]; hidden_chars: number; visible_chars: number; note: string;
+}
+interface DocInput { name: string; buf?: Uint8Array; visible?: string; flags?: DocFlag[]; hidden_chars?: number; note?: string; cached?: CachedDoc }
 interface CandidateInput { name: string; docs: DocInput[] }
 
 // Odvodí jméno osoby z názvu souboru → seskupí dokumenty téhož kandidáta.
@@ -178,51 +188,78 @@ export function personKey(filename: string): { key: string; display: string } {
   const key = n.normalize("NFKD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
   return key ? { key, display: n } : { key: filename.toLowerCase(), display: filename };
 }
-export function groupByPerson(files: { name: string; buf?: Uint8Array; visible?: string }[]): CandidateInput[] {
+export function groupByPerson(files: { name: string; buf?: Uint8Array; visible?: string; cached?: CachedDoc }[]): CandidateInput[] {
   const m = new Map<string, CandidateInput>();
   for (const f of files) {
     const { key, display } = personKey(f.name);
     if (!m.has(key)) m.set(key, { name: display, docs: [] });
-    m.get(key)!.docs.push({ name: f.name, buf: f.buf, visible: f.visible });
+    m.get(key)!.docs.push({ name: f.name, buf: f.buf, visible: f.visible, cached: f.cached });
   }
   return [...m.values()];
 }
 
+// Sanitizace klientem poslané per-doc cache (jeho vlastní data z minulého běhu).
+// Pozn.: nástroj je jednouživatelský (personalista) — „útočník" je CV, ne uživatel,
+// takže důvěra v vlastní cache je OK; přesto koercujeme tvar přes sdílené sanitizéry.
+function asCachedDoc(x: unknown): CachedDoc | null {
+  const o = obj(x); const name = str(o.name); if (!name) return null;
+  const c = obj(o.contacts);
+  return {
+    name, doc_type: str(o.doc_type),
+    qualification: sanitizeQualification(o.qualification ?? {}),
+    identity: sanitizeIdentity(o.identity ?? {}),
+    contacts: { emails: arr(c.emails).map(str).filter(Boolean), phones: arr(c.phones).map(str).filter(Boolean) },
+    flags: arr(o.flags).map((f) => { const fo = obj(f); return { type: str(fo.type), severity: str(fo.severity), location: str(fo.location), evidence: str(fo.evidence) }; }),
+    hidden_chars: num(o.hidden_chars), visible_chars: num(o.visible_chars), note: str(o.note),
+  };
+}
+
 // Zpracuje JEDNOHO kandidáta (všechny jeho dokumenty) → výsledek se skóre.
 async function scoreOne(c: CandidateInput, rubric: Rubric, ai: AiBinding, model: string, env: Env, system: string, visionMethod: string, lang: Lang = "cs") {
-  let flags: { type: string; severity: string; location: string; evidence: string; doc?: string }[] = [];
+  let flags: (DocFlag & { doc?: string })[] = [];
   let hiddenChars = 0, extMs = 0, extOk = false, totalVisible = 0, extError = "";
   const notes: string[] = [];
-  const docsMeta: { name: string; doc_type: string; visible_chars: number; hidden_chars: number; flags: number; note: string }[] = [];
+  const docsMeta: { name: string; doc_type: string; visible_chars: number; hidden_chars: number; flags: number; note: string; cached?: boolean }[] = [];
   const quals: Qualification[] = [];
   const ids: Identity[] = [];
   const docTypes: string[] = [];
-  let allVisible = "";
+  const docExtracts: CachedDoc[] = [];               // per-dokument extrakce → klient si ji uloží do cache
+  const emailSet = new Set<string>(), phoneSet = new Set<string>();
   for (const d of c.docs) {
-    let visible = d.visible ?? "", dflags = d.flags ?? [], dhidden = d.hidden_chars ?? 0, note = d.note ?? "", dType = "";
-    if (d.buf) {
-      const scan = await scanOrVision(d.name, d.buf, env, visionMethod, lang);
-      visible = scan.visible; dflags = scan.flags; dhidden = scan.hiddenChars; note = scan.note;
+    let de: CachedDoc;
+    if (d.cached) {
+      de = d.cached; extOk = true;                    // REUSE — žádné volání AI (extMs zůstává 0)
+    } else {
+      let visible = d.visible ?? "", dflags: DocFlag[] = d.flags ?? [], dhidden = d.hidden_chars ?? 0, note = d.note ?? "", dType = "";
+      if (d.buf) {
+        const scan = await scanOrVision(d.name, d.buf, env, visionMethod, lang);
+        visible = scan.visible; dflags = scan.flags; dhidden = scan.hiddenChars; note = scan.note;
+      }
+      let qual: Qualification = { years_total_experience: null, experience: [], skills: [], education: [], languages: [], certifications: [] };
+      let ident: Identity = { full_name: null, emails: [], phones: [], links: [], location: null };
+      if (visible.trim()) {
+        const ext = await extractQualification(visible, ai, model, system);   // FIX: použít editovaný systémový prompt
+        qual = ext.qualification; ident = ext.identity; dType = ext.docType;
+        extMs += ext.ms; extOk = extOk || ext.ok;
+        if (ext.error && !extError) extError = ext.error;
+        for (const sk of qual.skills ?? []) if (!sk.evidence) { const e = snippetFor(sk.name, visible); if (e) sk.evidence = e; } // evidence per dokument → uloží se do cache
+      }
+      de = { name: d.name, doc_type: dType, qualification: qual, identity: ident, contacts: contactsFromText(visible), flags: dflags, hidden_chars: dhidden, visible_chars: visible.length, note };
     }
-    totalVisible += visible.length;
-    if (visible.trim()) allVisible += visible + "\n";
-    if (visible.trim()) {
-      const ext = await extractQualification(visible, ai, model);
-      quals.push(ext.qualification); ids.push(ext.identity); dType = ext.docType; docTypes.push(ext.docType); extMs += ext.ms; extOk = extOk || ext.ok;
-      if (ext.error && !extError) extError = ext.error;
-    }
-    flags = flags.concat(dflags.map((f) => ({ ...f, doc: d.name })));
-    hiddenChars += dhidden;
-    if (note) notes.push(note);
-    docsMeta.push({ name: d.name, doc_type: dType, visible_chars: visible.length, hidden_chars: dhidden, flags: dflags.length, note });
+    // zapojení do souhrnu kandidáta (stejné pro cache i nově extrahované)
+    if (de.doc_type) docTypes.push(de.doc_type);
+    quals.push(de.qualification); ids.push(de.identity);
+    for (const e of de.contacts.emails) emailSet.add(e);
+    for (const p of de.contacts.phones) phoneSet.add(p);
+    flags = flags.concat((de.flags || []).map((f) => ({ ...f, doc: d.name })));
+    hiddenChars += de.hidden_chars; totalVisible += de.visible_chars;
+    if (de.note) notes.push(de.note);
+    docsMeta.push({ name: d.name, doc_type: de.doc_type, visible_chars: de.visible_chars, hidden_chars: de.hidden_chars, flags: (de.flags || []).length, note: de.note, cached: !!d.cached });
+    docExtracts.push(de);
   }
   const merged = mergeQualifications(quals);
-  // evidence kotvy dovedností = doslovný úryvek z viditelného textu (ověřený, ne od modelu);
-  // sedí na qualification → přežije export/import i přepočet bez AI
-  for (const sk of merged.skills ?? []) if (!sk.evidence) { const e = snippetFor(sk.name, allVisible); if (e) sk.evidence = e; }
   const identity = mergeIdentity(ids);
-  const rx = contactsFromText(allVisible);          // e-maily a telefony JEN z reálného textu (model je jinak halucinuje)
-  identity.emails = rx.emails; identity.phones = rx.phones;
+  identity.emails = [...emailSet]; identity.phones = [...phoneSet];  // e-maily/telefony JEN z reálného textu (regex per dokument), sloučené
   if (!identity.full_name) identity.full_name = c.name;
   // je to materiál uchazeče? (CV/dopis, nebo osobní kontakt, nebo pracovní historie) — jinak inzerát/náhodný soubor
   const isCandidate = docTypes.some((t) => t === "cv" || t === "cover_letter")
@@ -233,6 +270,7 @@ async function scoreOne(c: CandidateInput, rubric: Rubric, ai: AiBinding, model:
     flags, worstSeverity: worstSeverity(flags), flagCount: flags.length,
     qualification: merged, extract_ms: extMs, extract_ok: extOk, extract_error: extError,
     docs: docsMeta, visible_chars: totalVisible, hidden_chars: hiddenChars, note: notes.join(" · "),
+    docExtracts,
   };
 }
 
@@ -241,12 +279,15 @@ function rankResults(results: OneResult[], req: Requirements, model: string) {
   const ranking = rankCandidates(results).map((r, i) => ({
     rank: i + 1, name: r.name, total: r.score.total, disqualified: r.score.disqualified,
     gatesFailed: r.score.gates.filter((g) => !g.passed).map((g) => ({ key: g.key, reason: g.reason, value: g.value })),
-    breakdown: r.score.breakdown.map((b) => ({ label: b.label, score: b.score, detail: b.detail })),
+    breakdown: r.score.breakdown.map((b) => ({ label: b.label, score: b.score, detail: b.detail, evidence: b.evidence })),
     identity: r.identity, isCandidate: r.isCandidate, docTypes: r.docTypes, qualification: r.qualification,
     flags: r.flags, worstSeverity: r.worstSeverity, flagCount: r.flagCount, docs: r.docs,
     extract_ms: r.extract_ms, extract_ok: r.extract_ok, extract_error: r.extract_error, visible_chars: r.visible_chars, hidden_chars: r.hidden_chars, note: r.note,
   }));
-  return { rubric: { jobTitle: req.jobTitle, minYears: req.minYears, requiredSkills: req.requiredSkills }, model, count: ranking.length, ranking };
+  // per-dokument extrakce pro klientskou cache (klíč = jméno souboru); rescore je nemá → prázdné
+  const docExtracts: Record<string, CachedDoc> = {};
+  for (const r of results) for (const de of (r as { docExtracts?: CachedDoc[] }).docExtracts || []) docExtracts[de.name] = de;
+  return { rubric: { jobTitle: req.jobTitle, minYears: req.minYears, requiredSkills: req.requiredSkills }, model, count: ranking.length, ranking, docExtracts };
 }
 
 async function evaluate(cands: CandidateInput[], req: Requirements, ai: AiBinding, model: string, env: Env, system: string, visionMethod: string, lang: Lang = "cs") {
@@ -326,7 +367,7 @@ export default {
     if (req.method === "POST" && url.pathname === "/api/evaluate") {
       try {
         const ctype = req.headers.get("content-type") || "";
-        const files: { name: string; buf?: Uint8Array; visible?: string }[] = [];
+        const files: { name: string; buf?: Uint8Array; visible?: string; cached?: CachedDoc }[] = [];
         let req0: Requirements | null = null;
         let inzerat = "";
         let model = EXTRACT_MODEL_DEFAULT;
@@ -343,6 +384,7 @@ export default {
           lang = asLang(b.lang);
           if (b.requirements) { const r = obj(b.requirements); req0 = { jobTitle: str(r.jobTitle), minYears: Math.max(0, Math.round(num(r.minYears))), requiredSkills: arr(r.requiredSkills).map((s) => str(s).toLowerCase().trim()).filter(Boolean), weights: obj(r.weights) as Record<string, number>, disabled: arr(r.disabled).map((s) => str(s)) }; }
           for (const c of arr(b.candidates)) { const o = obj(c); files.push({ name: str(o.name) || "kandidát", visible: str(o.visible_text) }); }
+          for (const cd of arr(b.cached)) { const cc = asCachedDoc(cd); if (cc) files.push({ name: cc.name, cached: cc }); }
         } else {
           const form = await req.formData();
           model = str(form.get("model")) || model;
@@ -360,6 +402,10 @@ export default {
             total += file.size;
             if (total > MAX_TOTAL_BYTES) return json({ error: L(lang, "Součet souborů přesahuje 10 MB.", "Total file size exceeds 10 MB.") }, 413);
             files.push({ name: file.name, buf: new Uint8Array(await file.arrayBuffer()) });
+          }
+          const cachedStr = form.get("cached");
+          if (typeof cachedStr === "string" && cachedStr) {
+            try { for (const cd of arr(JSON.parse(cachedStr))) { const cc = asCachedDoc(cd); if (cc) files.push({ name: cc.name, cached: cc }); } } catch { /* neplatná cache → ignoruj, extrahuje se */ }
           }
         }
 
@@ -1024,7 +1070,7 @@ function rescoreForLang(){return rescoreNow()}
 function exportResult(){
   if(typeof lastEval==='undefined'||!lastEval){$('#err').textContent=tl('Není co uložit — nejdřív vyhodnoť dávku.','Nothing to save — evaluate a batch first.');return}
   const req=reqFromForm();
-  const data={app:'faxx-hr',kind:'evaluation',version:1,savedAt:new Date().toISOString(),lang:LANG,model:model(),requirements:req,result:lastEval.result};
+  const data={app:'faxx-hr',kind:'evaluation',version:1,savedAt:new Date().toISOString(),lang:LANG,model:model(),requirements:req,result:slimResult(lastEval.result)};
   const base=(req.jobTitle||'davka').normalize('NFKD').replace(/[^\\w-]+/g,'_').slice(0,40)||'davka';
   const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json;charset=utf-8'});
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='faxx-hr-'+base+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),4000);
@@ -1048,9 +1094,10 @@ async function importResult(file){
 }
 // ---- autosave kompletní relace do localStorage → přežije obnovu prohlížeče (bez DB) ----
 const SESSION_KEY='faxx_session';
+function slimResult(r){if(!r)return null;const o={...r};delete o.docExtracts;return o} // docExtracts patří jen do klientské cache, ne do úložiště
 function saveSession(){
   try{
-    const snap={version:1,savedAt:new Date().toISOString(),inzerat:$('#inzerat').value,jobTitle:$('#jobTitle').value,minYears:$('#minYears').value,skills:$('#skills').value,result:(typeof lastEval!=='undefined'&&lastEval)?lastEval.result:null};
+    const snap={version:1,savedAt:new Date().toISOString(),inzerat:$('#inzerat').value,jobTitle:$('#jobTitle').value,minYears:$('#minYears').value,skills:$('#skills').value,result:(typeof lastEval!=='undefined'&&lastEval)?slimResult(lastEval.result):null};
     localStorage.setItem(SESSION_KEY,JSON.stringify(snap));
   }catch(e){/* kvóta / soukromý režim → tichý fail (příště jen bez výsledku) */}
 }
@@ -1143,6 +1190,15 @@ const hideNonCand=$('#hideNonCand');
 if(hideNonCand){hideNonCand.checked=localStorage.getItem('faxx_hidenoncand')!=='0';hideNonCand.onchange=()=>{localStorage.setItem('faxx_hidenoncand',hideNonCand.checked?'1':'0');if(lastResult)renderResults(lastResult)}}
 let lastEval=null,curSig='';
 function evalSig(){return files.map(f=>f.name+':'+f.size).join('|')+'::'+model()+'::'+visionMethod()+'::'+getSysPrompt()}
+// per-dokument cache extrakce (šetří tokeny): už extrahované soubory se přeskočí, extrahují se jen nové.
+// klíč zahrnuje model+vision+prompt (na těch extrakce závisí) → jejich změna cache invaliduje.
+const docCache={};
+function hashStr(s){let h=0;for(let i=0;i<(s||'').length;i++){h=(h*31+s.charCodeAt(i))|0}return h}
+function cacheKey(f){return f.name+'|'+f.size+'|'+model()+'|'+visionMethod()+'|'+hashStr(getSysPrompt())}
+function updateDocCache(result){ // po vyhodnocení: ulož per-doc extrakci pro aktuální soubory (klíč dle obsahu+nastavení)
+  const dx=result&&result.docExtracts; if(!dx)return;
+  for(const f of files){const de=dx[f.name];if(de)docCache[cacheKey(f)]=de}
+}
 // files
 let files=[];
 const drop=$('#drop'),fileInput=$('#file');
@@ -1218,8 +1274,11 @@ $('#evalBtn').onclick=async()=>{
       if(r.error){$('#err').textContent=r.error}else{renderResults(r);lastEval={sig:curSig,result:r};saveSession()}
     }else{
       const fd=new FormData();fd.set('model',model());fd.set('requirements',JSON.stringify(req));fd.set('inzerat',$('#inzerat').value);fd.set('systemPrompt',getSysPrompt());fd.set('visionMethod',visionMethod());fd.set('lang',LANG);
-      for(const f of files)fd.append('cv',f);
-      $('#evalMsg').textContent='';
+      // per-doc cache: nezměněné soubory pošli jako už extrahované (bez AI), nahraj jen nové
+      const cached=[];let nNew=0;
+      for(const f of files){const de=docCache[cacheKey(f)];if(de){cached.push(de)}else{fd.append('cv',f);nNew++}}
+      if(cached.length)fd.set('cached',JSON.stringify(cached));
+      $('#evalMsg').textContent=cached.length?tl('Z cache '+cached.length+' dok., extrahuji '+nNew+'…','From cache '+cached.length+' docs, extracting '+nNew+'…'):'';
       await evaluateStream(fd);
     }
   }catch(e){ $('#err').textContent=tl('Chyba: ','Error: ')+e }
@@ -1232,7 +1291,7 @@ async function evaluateStream(fd){
   const res=await fetch('/api/evaluate?stream=1',{method:'POST',body:fd});
   const ct=res.headers.get('content-type')||'';
   if(!res.ok){let m='HTTP '+res.status;try{m=(await res.json()).error||m}catch(e){}$('#err').textContent=m;return}
-  if(!(res.body&&ct.indexOf('ndjson')>=0)){const j=await res.json();if(j.error)$('#err').textContent=j.error;else renderResults(j);return}
+  if(!(res.body&&ct.indexOf('ndjson')>=0)){const j=await res.json();if(j.error)$('#err').textContent=j.error;else{renderResults(j);lastEval={sig:curSig,result:j};updateDocCache(j);saveSession()}return}
   const reader=res.body.getReader(),dec=new TextDecoder();let buf='',state=null,t0=Date.now(),ended=false;
   const tick=setInterval(()=>{if(state&&!ended)renderProgress(state,t0)},500);
   try{
@@ -1244,7 +1303,7 @@ async function evaluateStream(fd){
         let msg;try{msg=JSON.parse(line)}catch(e){continue}
         if(msg.type==='start'){state={total:msg.total,done:0,items:(msg.names||[]).map(n=>({name:n,status:'wait'}))};renderProgress(state,t0)}
         else if(msg.type==='progress'){state.done=msg.index;const it=state.items[msg.index-1];if(it){it.name=msg.name;it.status='done';it.total=msg.total_score;it.dq=msg.disqualified;it.flags=msg.flagCount}if(state.items[msg.index])state.items[msg.index].status='run';renderProgress(state,t0)}
-        else if(msg.type==='done'){ended=true;clearInterval(tick);renderResults(msg.result);lastEval={sig:curSig,result:msg.result};saveSession()}
+        else if(msg.type==='done'){ended=true;clearInterval(tick);renderResults(msg.result);lastEval={sig:curSig,result:msg.result};updateDocCache(msg.result);saveSession()}
         else if(msg.type==='error'){ended=true;clearInterval(tick);$('#err').textContent=msg.error}
       }
     }
