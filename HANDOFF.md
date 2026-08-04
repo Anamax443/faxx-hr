@@ -2,6 +2,10 @@
 
 Append-only. Nejnovější záznam nahoru. Slouží k pokračování z jiného počítače / po pauze.
 
+## 2026-08-04 (r) — verze-řádky dokumentace bumpnuty na živý commit
+- `OPONENTURA-FULL.md` (ř. 5, `710e201`) a `docs/oponentura/README.md` (ř. 7, `27a110a`) →
+  **`2ac3843`** = commit, ve kterém byl obsah dokumentace zmražen (viz (q)). Dořešuje poznámku z (q).
+
 ## 2026-08-04 (q) — dokumentace srovnaná: uzavření V-PDF-06 propsáno + `OPONENTURA-FULL.md` přegenerován
 - **Oponentura kapitoly**: dopropsána poslední zbylá zmínka v `06-detekce.md` (ř. 564
   `contained=False` → `contained=True`, payload do `hidden_text`, `critical:pdf_tounicode_mismatch`,

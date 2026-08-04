@@ -4,7 +4,7 @@
 > pro hodnocení životopisů proti pracovnímu inzerátu s obranou proti prompt injection.
 > Určeno **kritickému oponentovi** (technický garant / investor / regulatorní posudek).
 >
-> **Verze dokumentu:** 2026-08-04 · odpovídá stavu repozitáře na commitu `27a110a` (main).
+> **Verze dokumentu:** 2026-08-04 · odpovídá stavu repozitáře na commitu `2ac3843` (main).
 > **Jazyk:** čeština. **Rozsah:** ~100 stran (17 kapitol).
 
 ---

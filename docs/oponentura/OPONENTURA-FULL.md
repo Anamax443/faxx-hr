@@ -2,7 +2,7 @@
 
 > Technicko-regulatorní dokumentace projektu **faxx-hr** — HR nástroj proti prompt injection.
 >
-> **Verze:** 2026-08-04 · commit `710e201` · **Jazyk:** čeština · **Rozsah:** ~100 stran (17 kapitol).
+> **Verze:** 2026-08-04 · commit `2ac3843` · **Jazyk:** čeština · **Rozsah:** ~100 stran (17 kapitol).
 > Reakce na dvě oponentury + dvouvětvový model: `OPONENTURA-RESPONSE-2.md` (kap. 15 §15.0).
 >
 > **Tisk do PDF:** otevři v prohlížeči → Tisk → Uložit jako PDF; kapitoly na nové stránce.
