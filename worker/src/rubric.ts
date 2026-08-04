@@ -14,11 +14,13 @@
  * Bez závislostí, čistě deterministické → reprodukovatelné a auditovatelné.
  */
 
+import { normalizeLanguageLevel } from "./reference/cefr";
+
 // --- vstupní data (podmnožina extraction schématu) -------------------------
 export interface QSkill { name: string; category?: string; level?: string | null; evidence?: string }
 export interface QExperience { title: string; employer?: string | null; months?: number | null; seniority?: string | null }
 export interface QEducation { level: string; field?: string | null; year?: number | null }
-export interface QLanguage { language: string; level?: string | null }
+export interface QLanguage { language: string; level?: string | null; level_raw?: string | null }
 export interface Qualification {
   years_total_experience?: number | null;
   experience?: QExperience[];
@@ -145,15 +147,26 @@ function criterionScore(c: Criterion, q: Qualification, lang: Lang): ScoreParts 
       const want = norm(c.language ?? "en");
       const langs = (q.languages ?? []).filter((l) => {
         const n = norm(l.language);
-        return n === want || n.includes(want) || (want === "en" && (n.includes("angl") || n.includes("english")));
+        return n === want || n.includes(want) || (want === "en" && (n.includes("angl") || n.includes("english") || n === "aj"));
       });
-      const pts = langs.map((l) => c.map?.[(l.level ?? "").toUpperCase()] ?? 0);
-      const s = pts.length ? Math.max(...pts) : 0;
-      const lvl = langs.map((l) => l.level).filter(Boolean).join("/") || L(lang, "neuvedeno", "not stated");
-      const has = langs.some((l) => l.level);
-      // basis dnes „stated" (úroveň dává model); po napojení level_raw + reference/cefr.ts
-      // se z volné fráze odvozené úrovně označí jako „inferred".
-      return { score: s, known: has, basis: has ? "stated" : "unknown", detail: `${c.language ?? "EN"}: ${lvl} → ${s.toFixed(1)}/10` };
+      // Úroveň mapuje DETERMINISTICKY náš normalizér podle citovaného CEFR standardu
+      // (reference/cefr.ts), ne model. level_raw (doslovná fráze z CV) má přednost.
+      const cand = langs.map((l) => {
+        const src = l.level_raw ?? l.level ?? "";
+        const m = normalizeLanguageLevel(src);
+        const key = (m.level ?? "").toUpperCase();
+        const pts = m.level ? (c.map?.[key] ?? c.map?.[m.level] ?? 0) : 0;
+        return { l, m, pts, src };
+      });
+      if (!cand.length || cand.every((x) => !x.m.level)) {
+        return { score: 0, known: false, basis: "unknown", detail: L(lang, `${c.language ?? "EN"}: neuvedeno`, `${c.language ?? "EN"}: not stated`) };
+      }
+      const best = cand.reduce((a, b) => (b.pts > a.pts ? b : a));
+      const basis: "stated" | "inferred" = best.m.stated ? "stated" : "inferred";
+      // odvozená úroveň nese jako evidenci doslovnou frázi z CV (personalista ověří/přepíše)
+      const evidence = (!best.m.stated && best.src) ? [{ label: best.l.language || (c.language ?? "EN"), text: best.src }] : undefined;
+      const tag = best.m.stated ? "" : L(lang, ` (odvozeno z „${best.src}“)`, ` (inferred from “${best.src}”)`);
+      return { score: best.pts, known: true, basis, detail: `${c.language ?? "EN"}: ${best.m.level}${tag} → ${best.pts.toFixed(1)}/10`, evidence };
     }
     case "tenure": {
       const months = (q.experience ?? []).map((e) => e.months).filter(isNum) as number[];

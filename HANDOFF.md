@@ -2,6 +2,17 @@
 
 Append-only. Nejnovější záznam nahoru. Slouží k pokračování z jiného počítače / po pauze.
 
+## 2026-08-04 (x) — CEFR napojení: level_raw → deterministický normalizér v rubriku
+- **Extrakce** (`extract.ts`): schéma + prompt + parser rozšířeny o `languages[].level_raw` (DOSLOVNÁ
+  formulace úrovně z CV). Model má dávat `level_raw` + `level` jen když je v CV PŘÍMO CEFR — mapu dělá KÓD.
+- **Rubrik** (`rubric.ts` `cefr_map`): úroveň mapuje DETERMINISTICKY `normalizeLanguageLevel` z
+  [`reference/cefr.ts`](reference/README.md) (`level_raw` má přednost) → `basis` doloženo/odvozeno,
+  evidence = doslovná fráze, detail „(odvozeno z …)". Zpětně kompatibilní (bez `level_raw` spadne na
+  `level`). + rozpoznání „aj" jako angličtiny.
+- Pohledové hodnocení tím u jazyka ukáže **◇ odvozeno + úsek z CV** → uzavírá vlákno „AJ umožňující
+  profesionální práci → C1 **odvozeno**, ne od modelu". Ověřeno `view.test.mjs` **18/18**; worker 204 KiB.
+- Pozn.: prompt/schéma se projeví až na NOVÝCH extrakcích (AI); deterministická cesta ověřena bez AI.
+
 ## 2026-08-04 (w) — pohledové hodnocení napojené do appky (Nastavení + UI + tisk)
 - **Nastavení → „Zobrazení hodnocení"** (`#scoreView`, `faxx_scoreview`, default `both`): Pohledové /
   Číselné / Obojí; ukládá se v prohlížeči jako jazyk/motiv, přepnutí přerenderuje výsledky (bez AI).
