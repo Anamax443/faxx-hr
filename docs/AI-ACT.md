@@ -1,5 +1,7 @@
 # AI Act & GDPR — regulatorní pozice faxx-hr
 
+> 🇨🇿 Čeština · [🇬🇧 English](AI-ACT.en.md)
+
 > Orientační pracovní přehled, ne právní stanovisko. Konkrétní data účinnosti a
 > odklady AI Act jsou pohyblivé — ověřit u aktuálního znění / právního poradce.
 > Návrh se na odklad nespoléhá. GDPR a antidiskriminace platí bez ohledu na AI Act.

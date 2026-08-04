@@ -1,5 +1,7 @@
 # detector — detekce skrytého obsahu v CV
 
+> 🇨🇿 Čeština · [🇬🇧 English](README.en.md)
+
 Deterministický detektor skrytého textu (nosič prompt injection) v životopisech.
 Bez AI: reprodukovatelné, auditovatelné, sám nepředstavuje attack surface.
 

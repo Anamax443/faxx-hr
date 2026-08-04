@@ -1,5 +1,7 @@
 # Threat model — faxx-hr
 
+> 🇨🇿 Čeština · [🇬🇧 English](THREAT-MODEL.en.md)
+
 Citlivý projekt (osobní data uchazečů + nepřátelský vstup). Model hrozeb dle
 project-standard. Primární hrozba = **prompt injection skrytým textem v CV**
 (OWASP LLM01).

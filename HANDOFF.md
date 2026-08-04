@@ -2,6 +2,26 @@
 
 Append-only. Nejnovější záznam nahoru. Slouží k pokračování z jiného počítače / po pauze.
 
+## 2026-08-04 (f) — dvojjazyčnost CS/EN + světlý/tmavý motiv + aktualizace veškeré dokumentace
+- **Appka plně dvojjazyčná (CS/EN) a s přepínačem světlý/tmavý motiv.** Oboje v horní liště,
+  volba se ukládá v prohlížeči (`faxx_lang`, `faxx_theme`); brzký inline skript v `<head>` nastaví
+  `data-lang`/`data-theme` na `<html>` před vykreslením (bez bliknutí). Motiv = přepis CSS proměnných
+  přes `:root[data-theme=light]`. Jazyk statického UI = slovník `EN` + atributy `data-i18n` /
+  `-html` / `-ph` / `-title` (čeština je SSR default, `applyI18n` cachuje originál a překlápí).
+- **Server generuje lokalizované řetezce.** `lang` parametr protažen do `/api/evaluate`, `/api/rescore`,
+  `/api/derive`, `/api/extract-text`, `/api/health`. Lokalizováno: popisky kritérií + gate důvod
+  (`buildRubric`), detaily rozpadu (`rubric.ts`), poznámky a labely nálezů (`detect.ts` — `scanDocx`/
+  `scanDocument` mají `lang`, default „cs", takže `upload.ts` beze změny), hlášky appky, tiskový výstup.
+  Při přepnutí jazyka nad hotovou dávkou proběhne tichý **rescore** (bez AI) → přeloží se i rozpad/detaily.
+- **Dokumentace v appce (11 sekcí) přeložena do EN** — dva statické bloky `.lang-cs`/`.lang-en`
+  přepínané čistě CSS (`en-` prefixy id, žádné duplicitní kotvy).
+- **Ověřeno:** wrangler dry-run build OK (167 KiB / gzip 51); syntax-check obou inline skriptů OK;
+  **runtime test v jsdom** — `setLang('cs'/'en')` překlápí taby/tlačítka/lead/model volby i doc sekce,
+  `setTheme` mění motiv+ikonu, 0 chyb. (Testovací jsdom instalován `--no-save`, mimo repo.)
+- **Repo dokumentace aktualizována** (README, DESIGN — přidána živá hodnoticí appka, stav fází,
+  struktura `worker/src`) + **anglické verze** (`README.en.md`, `DESIGN.en.md`, `docs/*.en.md`).
+- **NENASAZENO** (deploy je outward-facing, čeká na svolení): `npm run deploy:app`.
+
 ## 2026-08-04 (e) — přepočet bez AI, filtr ne-uchazečů, gate off default, OCR úklid, kvóta
 - **Přepočet BEZ AI (`/api/rescore`).** Změna gate/vah/dovedností už NEspouští extrakci — klient pošle
   už extrahovaná data (`rankResults` nese `qualification`) + nové požadavky, server jen znovu spustí

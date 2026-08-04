@@ -1,5 +1,7 @@
 # Detektor v2 — co se změnilo a proč
 
+> 🇨🇿 Čeština · [🇬🇧 English](DETECTOR-V2.en.md)
+
 > 2026-08-01. Týká se `detector/hidden_text.py`. Verze v1 zůstává jako
 > `detector/hidden_text_v1_backup.py` pro srovnávací měření ve fázi F0.
 

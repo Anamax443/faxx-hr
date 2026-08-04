@@ -78,6 +78,10 @@ export interface ScoreResult {
   breakdown: CriterionResult[];
 }
 
+// --- jazyk (jen lidsky čitelné řetežce; logika je stejná) -------------------
+export type Lang = "cs" | "en";
+const L = (lang: Lang, cs: string, en: string): string => (lang === "en" ? en : cs);
+
 // --- pomůcky ----------------------------------------------------------------
 function isNum(x: unknown): x is number { return typeof x === "number" && Number.isFinite(x); }
 function clamp01(x: number): number { return x < 0 ? 0 : x > 1 ? 1 : x; }
@@ -98,15 +102,15 @@ function gateEval(v: number, op: GateOp, target: number): boolean {
 }
 
 // --- skóre jednoho kritéria (vždy 0..10) ------------------------------------
-function criterionScore(c: Criterion, q: Qualification): { score: number; detail: string } {
+function criterionScore(c: Criterion, q: Qualification, lang: Lang): { score: number; detail: string } {
   switch (c.type) {
     case "numeric_scale": {
       const raw = getField(q, "years_total_experience");
-      if (!isNum(raw)) return { score: 5, detail: "roky praxe v CV neuvedeny → neutrální 5/10 (nepenalizuje se)" };
+      if (!isNum(raw)) return { score: 5, detail: L(lang, "roky praxe v CV neuvedeny → neutrální 5/10 (nepenalizuje se)", "years of experience not stated in CV → neutral 5/10 (no penalty)") };
       const v = raw;
       const min = c.min ?? 0, max = c.max ?? 10;
       const s = clamp01(max > min ? (v - min) / (max - min) : 0) * 10;
-      return { score: s, detail: `${v} (škála ${min}–${max}) → ${s.toFixed(1)}/10` };
+      return { score: s, detail: L(lang, `${v} (škála ${min}–${max}) → ${s.toFixed(1)}/10`, `${v} (scale ${min}–${max}) → ${s.toFixed(1)}/10`) };
     }
     case "set_overlap": {
       const req = (c.required ?? []).map(norm);
@@ -114,14 +118,16 @@ function criterionScore(c: Criterion, q: Qualification): { score: number; detail
       const hit = req.filter((r) => [...have].some((h) => h === r || h.includes(r) || r.includes(h)));
       const s = req.length ? (hit.length / req.length) * 10 : 0;
       const miss = req.filter((r) => !hit.includes(r));
-      return { score: s, detail: `${hit.length}/${req.length} klíčových dovedností${miss.length ? ` (chybí: ${miss.join(", ")})` : ""}` };
+      return { score: s, detail: L(lang,
+        `${hit.length}/${req.length} klíčových dovedností${miss.length ? ` (chybí: ${miss.join(", ")})` : ""}`,
+        `${hit.length}/${req.length} key skills${miss.length ? ` (missing: ${miss.join(", ")})` : ""}`) };
     }
     case "category_map": {
       const levels = (q.education ?? []).map((e) => c.map?.[norm(e.level)] ?? 0);
-      if (!levels.length) return { score: 0, detail: "bez uvedeného vzdělání" };
+      if (!levels.length) return { score: 0, detail: L(lang, "bez uvedeného vzdělání", "no education stated") };
       const s = c.aggregate === "avg" ? levels.reduce((a, b) => a + b, 0) / levels.length : Math.max(...levels);
       const best = (q.education ?? []).find((e) => (c.map?.[norm(e.level)] ?? 0) === Math.max(...levels));
-      return { score: s, detail: `nejvyšší: ${best?.level ?? "?"} → ${s.toFixed(1)}/10` };
+      return { score: s, detail: L(lang, `nejvyšší: ${best?.level ?? "?"} → ${s.toFixed(1)}/10`, `highest: ${best?.level ?? "?"} → ${s.toFixed(1)}/10`) };
     }
     case "cefr_map": {
       const want = norm(c.language ?? "en");
@@ -131,28 +137,28 @@ function criterionScore(c: Criterion, q: Qualification): { score: number; detail
       });
       const pts = langs.map((l) => c.map?.[(l.level ?? "").toUpperCase()] ?? 0);
       const s = pts.length ? Math.max(...pts) : 0;
-      const lvl = langs.map((l) => l.level).filter(Boolean).join("/") || "neuvedeno";
+      const lvl = langs.map((l) => l.level).filter(Boolean).join("/") || L(lang, "neuvedeno", "not stated");
       return { score: s, detail: `${c.language ?? "EN"}: ${lvl} → ${s.toFixed(1)}/10` };
     }
     case "tenure": {
       const months = (q.experience ?? []).map((e) => e.months).filter(isNum) as number[];
-      if (!months.length) return { score: 5, detail: "bez dat o délce pozic (neutrální)" };
+      if (!months.length) return { score: 5, detail: L(lang, "bez dat o délce pozic (neutrální)", "no data on position tenure (neutral)") };
       const avg = months.reduce((a, b) => a + b, 0) / months.length;
       const floor = c.penaltyBelowMonths ?? 6;
       // ≤floor = 0 b., ≥24 měs = 10 b., mezi lineárně
       const s = clamp01((avg - floor) / (24 - floor)) * 10;
-      return { score: s, detail: `průměrné setrvání ${avg.toFixed(0)} měs → ${s.toFixed(1)}/10` };
+      return { score: s, detail: L(lang, `průměrné setrvání ${avg.toFixed(0)} měs → ${s.toFixed(1)}/10`, `average tenure ${avg.toFixed(0)} months → ${s.toFixed(1)}/10`) };
     }
     case "bonus": {
       const n = (q.certifications ?? []).length;
       const pts = Math.min(n * (c.pointsEach ?? 2), c.cap ?? 10);
-      return { score: pts, detail: `${n} certifikací → ${pts.toFixed(1)}/10` };
+      return { score: pts, detail: L(lang, `${n} certifikací → ${pts.toFixed(1)}/10`, `${n} certifications → ${pts.toFixed(1)}/10`) };
     }
   }
 }
 
 // --- veřejné API ------------------------------------------------------------
-export function scoreCandidate(q: Qualification, rubric: Rubric): ScoreResult {
+export function scoreCandidate(q: Qualification, rubric: Rubric, lang: Lang = "cs"): ScoreResult {
   const gates: GateResult[] = rubric.gates.map((g) => {
     const raw = getField(q, g.field);
     const v = isNum(raw) ? raw : null;
@@ -164,7 +170,7 @@ export function scoreCandidate(q: Qualification, rubric: Rubric): ScoreResult {
 
   const wsum = rubric.criteria.reduce((a, c) => a + c.weight, 0) || 1;
   const breakdown: CriterionResult[] = rubric.criteria.map((c) => {
-    const { score, detail } = criterionScore(c, q);
+    const { score, detail } = criterionScore(c, q, lang);
     return { key: c.key, label: c.label, weight: c.weight, score, contribution: (c.weight / wsum) * score * 10, detail };
   });
   const total = disqualified ? 0 : breakdown.reduce((a, b) => a + b.contribution, 0);

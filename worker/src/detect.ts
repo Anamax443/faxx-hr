@@ -23,6 +23,10 @@ export interface Flag {
   method: string;
 }
 
+// Jazyk lidsky čitelných řetezců (labely nálezů, poznámky). Logika je stejná.
+export type Lang = "cs" | "en";
+const L = (lang: Lang, cs: string, en: string): string => (lang === "en" ? en : cs);
+
 // --- injection heuristika (jen eskalátor severity) -------------------------
 const HIGH: Record<number, string> = { 0x8a: "s", 0x9a: "s", 0x8c: "s", 0x9c: "s", 0x8e: "z", 0x9e: "z", 0x9f: "y" };
 export function fold(s: string): string {
@@ -59,9 +63,9 @@ export function injectionContext(text: string): string | null {
   }
   return injOverride(text) ? (text || "").replace(/\s+/g, " ").trim().slice(0, 300) : null;
 }
-function sevFor(txt: string, base: "info" | "warn" = "warn"): ["info" | "warn" | "critical", string] {
+function sevFor(txt: string, base: "info" | "warn" = "warn", lang: Lang = "cs"): ["info" | "warn" | "critical", string] {
   const hit = inj(txt);
-  if (hit) return ["critical", `[shoda: ${hit}] ${txt.slice(0, 180)}`];
+  if (hit) return ["critical", `${L(lang, "[shoda: ", "[match: ")}${hit}] ${txt.slice(0, 180)}`];
   return [base, txt.slice(0, 180)];
 }
 
@@ -163,7 +167,8 @@ export interface Out {
   hidden: string;
 }
 
-function scanPart(xml: string, label: string, docBg: RGB, out: Out): void {
+function scanPart(xml: string, label: string, docBg: RGB, out: Out, lang: Lang): void {
+  const kontrast = L(lang, "kontrast", "contrast");
   for (const run of xml.match(/<w:r\b[\s\S]*?<\/w:r>/g) || []) {
     const rpr = rprOf(run);
     const raw = wtText(run);
@@ -172,8 +177,8 @@ function scanPart(xml: string, label: string, docBg: RGB, out: Out): void {
     const hiddenCps = invisibleCps(raw);
     if (hiddenCps.length >= 3) {
       const tags = decodeUnicodeTags(raw);
-      const [sev] = sevFor(tags || "", "warn");
-      const payload = tags || `${hiddenCps.length} neviditelných kódových bodů`;
+      const [sev] = sevFor(tags || "", "warn", lang);
+      const payload = tags || `${hiddenCps.length} ${L(lang, "neviditelných kódových bodů", "invisible code points")}`;
       out.flags.push({ type: "unicode_invisible", severity: sev, location: label, evidence: payload.slice(0, 150), method: "deterministic" });
       if (tags) out.hidden += tags + "\n";
     }
@@ -181,7 +186,7 @@ function scanPart(xml: string, label: string, docBg: RGB, out: Out): void {
 
     const vm = rpr.match(/<w:(?:vanish|specVanish|webHidden)\b([^>]*)\/?>/);
     if (vm && !/w:val="(?:false|0|off)"/i.test(vm[1])) {
-      const [sev, ev] = sevFor(txt);
+      const [sev, ev] = sevFor(txt, "warn", lang);
       out.flags.push({ type: "docx_vanish", severity: sev, location: `${label} (w:vanish)`, evidence: ev, method: "deterministic" });
       out.hidden += txt + "\n";
       continue;
@@ -196,25 +201,25 @@ function scanPart(xml: string, label: string, docBg: RGB, out: Out): void {
     const hex = (c: RGB) => `#${c.map((x) => x.toString(16).padStart(2, "0")).join("").toUpperCase()}`;
 
     if (ratio < CONTRAST_HIDDEN) {
-      const [sev, ev] = sevFor(txt);
-      out.flags.push({ type: "docx_low_contrast", severity: sev, location: `${label} (${hex(fg)} na ${hex(bg)}, kontrast ${ratio.toFixed(2)}:1)`, evidence: ev, method: "deterministic" });
+      const [sev, ev] = sevFor(txt, "warn", lang);
+      out.flags.push({ type: "docx_low_contrast", severity: sev, location: `${label} (${hex(fg)} ${L(lang, "na", "on")} ${hex(bg)}, ${kontrast} ${ratio.toFixed(2)}:1)`, evidence: ev, method: "deterministic" });
       out.hidden += txt + "\n";
       continue;
     }
     if (size !== null && size < MIN_FONT_PT) {
-      const [sev, ev] = sevFor(txt);
+      const [sev, ev] = sevFor(txt, "warn", lang);
       out.flags.push({ type: "docx_tiny_font", severity: sev, location: `${label} (${size.toFixed(1)} pt)`, evidence: ev, method: "deterministic" });
       out.hidden += txt + "\n";
       continue;
     }
     if (ratio < CONTRAST_LOW) {
-      out.flags.push({ type: "docx_faint_text", severity: "info", location: `${label} (kontrast ${ratio.toFixed(2)}:1)`, evidence: txt.slice(0, 180), method: "deterministic" });
+      out.flags.push({ type: "docx_faint_text", severity: "info", location: `${label} (${kontrast} ${ratio.toFixed(2)}:1)`, evidence: txt.slice(0, 180), method: "deterministic" });
     }
     out.visible += txt + " ";
   }
 }
 
-export function scanDocx(buf: Uint8Array): Out {
+export function scanDocx(buf: Uint8Array, lang: Lang = "cs"): Out {
   const out: Out = { flags: [], visible: "", hidden: "" };
   const zip = unzipSync(buf);
   const get = (n: string): string | null => (zip[n] ? strFromU8(zip[n]) : null);
@@ -223,29 +228,34 @@ export function scanDocx(buf: Uint8Array): Out {
   let docBg: RGB = [255, 255, 255];
   if (doc) {
     docBg = docBackground(doc);
-    scanPart(doc, "hlavní tok", docBg, out);
+    scanPart(doc, L(lang, "hlavní tok", "main body"), docBg, out, lang);
     for (const am of doc.matchAll(/\b(?:descr|title)="([^"]+)"/g)) {
       const v = unesc(am[1]).trim();
       if (inj(v)) {
-        const [sev, ev] = sevFor(v);
-        out.flags.push({ type: "docx_alt_text", severity: sev, location: "word/document.xml (alt-text obrázku)", evidence: ev, method: "deterministic" });
+        const [sev, ev] = sevFor(v, "warn", lang);
+        out.flags.push({ type: "docx_alt_text", severity: sev, location: L(lang, "word/document.xml (alt-text obrázku)", "word/document.xml (image alt text)"), evidence: ev, method: "deterministic" });
         out.hidden += v + "\n";
       }
     }
   }
   for (const name of Object.keys(zip)) {
     if (/^word\/(header|footer)\d*\.xml$/.test(name)) {
-      const label = name.includes("header") ? "hlavička" : "patička";
+      const label = name.includes("header") ? L(lang, "hlavička", "header") : L(lang, "patička", "footer");
       const part = get(name);
-      if (part) scanPart(part, label, docBg, out);
+      if (part) scanPart(part, label, docBg, out, lang);
     }
   }
-  for (const [part, label] of [["word/comments.xml", "komentář"], ["word/footnotes.xml", "poznámka pod čarou"], ["word/endnotes.xml", "vysvětlivka"]] as [string, string][]) {
+  const annParts: [string, string][] = [
+    ["word/comments.xml", L(lang, "komentář", "comment")],
+    ["word/footnotes.xml", L(lang, "poznámka pod čarou", "footnote")],
+    ["word/endnotes.xml", L(lang, "vysvětlivka", "endnote")],
+  ];
+  for (const [part, label] of annParts) {
     const x = get(part);
     if (x) {
       const t = stripInvisible(wtText(x)).trim();
       if (t.length >= MIN_TEXT_LEN) {
-        const [sev, ev] = sevFor(t, "info");
+        const [sev, ev] = sevFor(t, "info", lang);
         out.flags.push({ type: "docx_annotation", severity: sev, location: `${part} (${label})`, evidence: ev, method: "deterministic" });
         out.hidden += t + "\n";
       }
@@ -256,7 +266,7 @@ export function scanDocx(buf: Uint8Array): Out {
     if (x) {
       const t = stripInvisible(unesc(x.replace(/<[^>]+>/g, " "))).replace(/\s+/g, " ").trim();
       if (inj(t)) {
-        const [sev, ev] = sevFor(t);
+        const [sev, ev] = sevFor(t, "warn", lang);
         out.flags.push({ type: "docx_metadata", severity: sev, location: part, evidence: ev, method: "deterministic" });
         out.hidden += t + "\n";
       }
@@ -346,12 +356,12 @@ export interface ScanDocResult {
   note: string;
 }
 
-export async function scanDocument(fname: string, buf: Uint8Array, env: DetectEnv): Promise<ScanDocResult> {
+export async function scanDocument(fname: string, buf: Uint8Array, env: DetectEnv, lang: Lang = "cs"): Promise<ScanDocResult> {
   const ext = (fname.split(".").pop() || "").toLowerCase();
   const res: ScanDocResult = { filename: fname, ext, flags: [], visible: "", hidden: "", visibleChars: 0, hiddenChars: 0, note: "" };
   try {
     if (ext === "docx") {
-      const out = scanDocx(buf);
+      const out = scanDocx(buf, lang);
       res.flags = out.flags;
       res.visible = out.visible.trim();
       res.hidden = out.hidden.trim();
@@ -360,21 +370,21 @@ export async function scanDocument(fname: string, buf: Uint8Array, env: DetectEn
       res.visible = text.trim();
       // injection hledáme ve viditelném textu I v raw extrakci (union) — ale raw už do visible NEjde
       const ctx = injectionContext(text) || (raw && raw !== text ? injectionContext(raw) : null);
-      if (ctx) res.flags.push({ type: "pdf_injection_text", severity: "warn", location: `PDF (textová vrstva, ${via})`, evidence: "nalezená pasáž: „" + ctx + "“", method: "classifier" });
+      if (ctx) res.flags.push({ type: "pdf_injection_text", severity: "warn", location: L(lang, `PDF (textová vrstva, ${via})`, `PDF (text layer, ${via})`), evidence: L(lang, "nalezená pasáž: „", "found passage: “") + ctx + (lang === "en" ? "”" : "“"), method: "classifier" });
       const base = ctx
-        ? "Nalezen text instrukčního charakteru (čte se i neviditelné bílé písmo s textovou vrstvou). Hloubkovou detekci skrytí podle barvy doplní on-prem runner."
+        ? L(lang, "Nalezen text instrukčního charakteru (čte se i neviditelné bílé písmo s textovou vrstvou). Hloubkovou detekci skrytí podle barvy doplní on-prem runner.", "Found instruction-like text (invisible white text with a text layer is read too). Deep colour-based hiding detection is added by the on-prem runner.")
         : text.trim()
-        ? "PDF: přečtena textová vrstva, nic instrukčního nenalezeno. Detekci skrytí podle barvy doplní on-prem."
-        : "PDF: textovou vrstvu se nepodařilo přečíst (naskenované CV / chyba parseru) → OCR/vision na on-prem runneru.";
-      res.note = `${base} [extrakce: ${via}${err ? " · chyba: " + err : ""}]`;
+        ? L(lang, "PDF: přečtena textová vrstva, nic instrukčního nenalezeno. Detekci skrytí podle barvy doplní on-prem.", "PDF: text layer read, nothing instruction-like found. Colour-based hiding detection is added on-prem.")
+        : L(lang, "PDF: textovou vrstvu se nepodařilo přečíst (naskenované CV / chyba parseru) → OCR/vision na on-prem runneru.", "PDF: could not read the text layer (scanned CV / parser error) → OCR/vision on the on-prem runner.");
+      res.note = `${base} [${L(lang, "extrakce", "extraction")}: ${via}${err ? " · " + L(lang, "chyba", "error") + ": " + err : ""}]`;
     } else if (["jpg", "jpeg", "png", "webp", "gif", "bmp", "tiff"].includes(ext)) {
-      res.note = "Obrázek/sken — čtení textu (OCR/vision) zatím není dostupné. Kandidát se nevyhodnotí; převeď CV do PDF/DOCX s textovou vrstvou.";
-      res.flags.push({ type: "needs_ocr", severity: "info", location: "soubor (obrázek)", evidence: res.note, method: "n/a" });
+      res.note = L(lang, "Obrázek/sken — čtení textu (OCR/vision) zatím není dostupné. Kandidát se nevyhodnotí; převeď CV do PDF/DOCX s textovou vrstvou.", "Image/scan — text reading (OCR/vision) not available here. Candidate cannot be scored; convert the CV to PDF/DOCX with a text layer.");
+      res.flags.push({ type: "needs_ocr", severity: "info", location: L(lang, "soubor (obrázek)", "file (image)"), evidence: res.note, method: "n/a" });
     } else {
-      res.note = "Podporováno: .docx (plná v2 detekce), .pdf (dekomprese + injection sken), obrázky jen upozornění (OCR přijde).";
+      res.note = L(lang, "Podporováno: .docx (plná v2 detekce), .pdf (dekomprese + injection sken), obrázky jen upozornění (OCR přijde).", "Supported: .docx (full v2 detection), .pdf (decompression + injection scan), images warn only (OCR to come).");
     }
   } catch (e: unknown) {
-    res.note = "chyba při čtení souboru: " + ((e as { message?: string })?.message || String(e));
+    res.note = L(lang, "chyba při čtení souboru: ", "error reading file: ") + ((e as { message?: string })?.message || String(e));
   }
   res.visibleChars = res.visible.length;
   res.hiddenChars = res.hidden.length;

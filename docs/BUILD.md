@@ -1,5 +1,7 @@
 # BUILD — jak postavit faxx-hr od nuly
 
+> 🇨🇿 Čeština · [🇬🇧 English](BUILD.en.md)
+
 > **Test hotovosti:** dostane se nový člověk (nebo já po výměně PC) JEN z tohoto dokumentu
 > k běžící aplikaci? Když ne, doplň, co chybělo.
 

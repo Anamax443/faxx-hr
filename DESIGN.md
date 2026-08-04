@@ -1,8 +1,19 @@
 # faxx-hr — Technický návrh (v0.1)
 
+> 🇨🇿 Čeština · [🇬🇧 English](DESIGN.en.md)
+>
 > v0.1 — 2026-08-01. HR aplikace pro hodnocení životopisů proti zadání, s
 > bezpečnostní vrstvou proti prompt injection. `faxx-hr` = pracovní název.
 > Plná oponentura záměru (~60 stran) je samostatný dokument mimo repo.
+
+> **Stav implementace (2026-08-04).** Tento dokument popisuje **cílovou architekturu**
+> (e-mail ingest → R2/D1 → dual-path → Claude kaskáda → on-prem OCR). Reálně už běží
+> **[hodnoticí appka](https://faxx-hr-app.bass443.workers.dev)** (`worker/src/app.ts`),
+> která ověřené jádro **detekce → extrakce → deterministický rubrik** poskládala do
+> **dávkového nástroje na edge** (bez e-mailu, zatím bez perzistence). Appka je plně
+> **dvojjazyčná (CS/EN)** a má **světlý/tmavý motiv**. Odchylky od návrhu níže: AI backend
+> je dnes **Cloudflare Workers AI** (Claude až s klíčem), vstup je **web upload dávky**
+> (ne e-mail), stav dávky žije v prohlížeči (D1/R2 perzistence = backlog).
 
 ---
 
@@ -98,13 +109,11 @@ Mapování povinností čl. 9–15, GDPR čl. 22/35: [`docs/AI-ACT.md`](docs/AI-
 ## 13. Fáze
 
 ```
-F0  BENCHMARK detekce (gate) — LADICÍ + oddělená HELD-OUT sada; externí red-team;
-    OCR/vision engine SPECIFIKOVÁN a měřen zvlášť; měř podíl vision fallbacku.
-    Exit: recall ≥98% na held-out otrávené sadě, FP ≤5–10% na čisté, extrakce ≥90%.
-    Hraniční vektory: EPS/PS objekty, obfuskované glyfy (cmap), XFA/JS-generovaný text.
-F1  Pipeline skeleton (Email Worker → R2/D1 → sanitizace+dual-path → extrakce → validace)
-F2  Review UI personalisty + flagy + audit
-F3  Deterministický rubrik + skórování + decisions
+F0  [hotovo] BENCHMARK detekce — detektor 24/24, živě. Zbývá: oddělená HELD-OUT sada,
+    externí red-team, měřit podíl vision fallbacku. Exit: recall ≥98% held-out, FP ≤5–10%.
+F1  [prototyp v appce] extrakce LLM #1 → validace. Zbývá: e-mail ingest, R2/D1 perzistence dávek.
+F2  [prototyp v appce] Review UI: ranking + flagy + rozpad. Zbývá: audit/decisions, filtr.
+F3  [prototyp v appce] Deterministický rubrik + skóre + požadavky z inzerátu. Zbývá: editor rubriku/šablony.
 F4  AI Act dokumentace (Annex IV, DPIA) + zpevnění na produkt
 
 PŘED F1: market validace — ~10 CZ HR manažerů (platí za ochranu proti injection, nebo chtějí jen funkční parser?).

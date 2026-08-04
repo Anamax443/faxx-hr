@@ -1,5 +1,7 @@
 # PDF boundary matrix — F0
 
+> 🇨🇿 Čeština · [🇬🇧 English](PDF-BOUNDARY-MATRIX.en.md)
+
 > Vygenerováno `detector/boundary_matrix.py` nad `detector/adversarial_pdf.py`.
 > Reprodukce: `python detector/boundary_matrix.py`. Vektory jsou laboratorní,
 > ne reálná CV — reálná held-out sada je jiná položka F0.

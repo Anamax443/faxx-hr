@@ -1,5 +1,7 @@
 # Architektura — faxx-hr
 
+> 🇨🇿 Čeština · [🇬🇧 English](ARCHITECTURE.en.md)
+
 ## Přehled
 
 Autonomní pipeline: CV natečou e-mailem → sanitizace + detekce skrytého textu →

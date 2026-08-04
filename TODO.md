@@ -79,6 +79,7 @@ dual-path diff se měří odděleně (diff ještě neexistuje, viz F1).
 
 ## F2 — Review UI personalisty ⚪
 
+- [x] Dvojjazyčné UI **CS/EN** + **světlý/tmavý motiv** (přepínače v liště, ukládané v prohlížeči; server generuje lokalizované řetezce přes `lang`) — 2026-08-04 (f)
 - [ ] Seznam dávky: kandidát · rating · nejhorší severity · stav
 - [ ] Detail: skóre + **rozpad podle kritérií** + evidence kotvy do CV
 - [ ] **Panel flagů** — co bylo skryto, kde, doslovné znění; „co viděl člověk" vs. „co bylo schováno"

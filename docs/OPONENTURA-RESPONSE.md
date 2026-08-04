@@ -1,5 +1,7 @@
 # Reakce na oponentury záměru faxx-hr
 
+> 🇨🇿 Čeština · [🇬🇧 English](OPONENTURA-RESPONSE.en.md)
+
 Ke záměru v0.1 přišly **dvě nezávislé externí oponentury**. Tento dokument je
 konsolidovaná reakce — bod po bodu, s verdiktem a s odkazem, kam se změna promítla.
 Obě oponentury byly věcné a posunuly návrh; nic se nezametá.
