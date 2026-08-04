@@ -292,6 +292,15 @@ function pdfText(buf: Uint8Array): string {
   }
   return out + " " + contentText(raw);
 }
+// toMarkdown přidává na začátek hlavičku "# soubor\n## Metadata\n- key=val…" —
+// pro člověka i AI je to šum, odstraníme ji (jen když je přesně v tomto tvaru).
+function stripMdMeta(md: string): string {
+  let s = md.replace(/^﻿/, "");
+  s = s.replace(/^#[^\n]*\n+/, "");                     // úvodní nadpis (název souboru)
+  s = s.replace(/^##\s*Metadata\s*\n(?:\s*-[^\n]*\n?)*/i, ""); // blok metadat
+  return s.trim();
+}
+
 export async function extractPdfText(buf: Uint8Array, fname: string, env: DetectEnv): Promise<{ text: string; raw: string; via: string; err?: string }> {
   const via: string[] = [];
   let err: string | undefined;
@@ -299,7 +308,7 @@ export async function extractPdfText(buf: Uint8Array, fname: string, env: Detect
   if (env?.AI?.toMarkdown) {
     try {
       const res = await env.AI.toMarkdown([{ name: fname || "cv.pdf", blob: new Blob([buf], { type: "application/pdf" }) }]);
-      md = Array.isArray(res) ? res.map((r) => r?.data || "").join("\n") : "";
+      md = Array.isArray(res) ? stripMdMeta(res.map((r) => r?.data || "").join("\n")) : "";
       via.push(md.trim() ? "cf-toMarkdown" : "cf-md:0");
     } catch (e: unknown) {
       err = String((e as { message?: string })?.message || e).slice(0, 180);
