@@ -2,6 +2,21 @@
 
 Append-only. Nejnovější záznam nahoru. Slouží k pokračování z jiného počítače / po pauze.
 
+## 2026-08-04 (q) — dokumentace srovnaná: uzavření V-PDF-06 propsáno + `OPONENTURA-FULL.md` přegenerován
+- **Oponentura kapitoly**: dopropsána poslední zbylá zmínka v `06-detekce.md` (ř. 564
+  `contained=False` → `contained=True`, payload do `hidden_text`, `critical:pdf_tounicode_mismatch`,
+  odkaz na §6.9). `12-validace.md` a `14-omezeni.md` už srovnané v (n)/(p).
+- **`OPONENTURA-FULL.md` přegenerován z opravených kapitol**: mechanická kontrola všech 17 kapitol
+  proti zdrojovým souborům → divergovaly jen **6/12/14**, zbylých 14 bajt-identických. Vyměněna jen
+  těla těch 3; hlavička+obsah (CRLF ř. 1–31), separátory (`page-break`+`<a id>`) a 14 kapitol
+  zachovány bajt po bajtu. Ověřeno: po přepsání == zdrojové kapitoly; `git diff` = čistě V-PDF-06
+  opravy (51+/41−, net +10 ř.), žádný jiný šum.
+- Repo-wide sweep: žádný `contained=False` mimo tento deník; EN mirrory (`DETECTOR-V2.en`,
+  `PDF-BOUNDARY-MATRIX.en`) už měly „CLOSED / held into hidden_text". Uzavírá otevřený bod z (n)
+  („FULL/matice přegenerovat").
+- Pozn.: verze-řádek `OPONENTURA-FULL.md` (ř. 5 `commit 710e201`) a README (`27a110a`) pinují starší
+  commit — stampne se až tímto commitem, hodnotu nechávám na doměření (necpu vymyšlený hash).
+
 ## 2026-08-04 (p) — V-PDF-06 uzavřen i na EDGE (Track A, bez DB)
 - Port ToUnicode fixu z on-prem na **edge detektor** `worker/src/detect.ts`: nové
   `pdfToUnicodeObfuscation` + `parseToUnicodeCmap` + `pdfObjectStream` (raw PDF bytes + fflate
@@ -13,7 +28,11 @@ Append-only. Nejnovější záznam nahoru. Slouží k pokračování z jiného p
   **0 nálezů** (0 FP), strip odstraní „nejlepsi kandidat" z visible. Oba buildy zelené (app 194 / upload 41 KiB).
 - **Rozsah:** edge raw-regex parser chytá crafted vektor; fonty ve compressed object streams
   (moderní PDF) nechytí — ty jsou ale embedované → přeskočeny (na attack stačí, na FP bezpečné).
-  On-prem PyMuPDF verze robustnější. Track A (bez DB). **NENASAZENO** — čeká svolení (app + upload).
+  On-prem PyMuPDF verze robustnější. Track A (bez DB).
+- **NASAZENO** oba edge workery (`npm run deploy:app` + `deploy:upload`): app commit `737b4f6`
+  (version e6d5344f), upload version a4c50749. **Ověřeno naživo:** upload `/scan` na V-PDF-06 →
+  `critical:pdf_tounicode_mismatch`, `hidden_chars=92` (payload zadržen) / `visible_chars=58`
+  (krátké, payload NENÍ ve visible). Detekce běží na raw bytech → funguje i při vyčerpané kvótě.
 - Roadmapa §15.0 stav G4 aktualizován (uzavřeno on-prem I na edge).
 
 ## 2026-08-04 (o) — G1 z oponentur: F0 měřicí harness + held-out protokol

@@ -97,10 +97,11 @@ i u PDF vektorů porovnává, zda distinktivní kus payloadu (`nejlepsi kandidat
 > overfittingu na vlastní vektory). Reálná held-out sada je samostatná, dosud
 > nesplněná položka F0 (§12.5).
 
-Jedna dokumentovaná hranice zádrže: u **V-PDF-06 (ToUnicode obfuskace)** payload ve
-`visible_text` **zůstává** (displej ≠ extrakce) a jistí ho jen `visible_instruction_tone`
-(warn), ne plná zádrž. Hlubší oprava (porovnání glyf ↔ ToUnicode) je vědomě **odložená**.
-Test to zná a explicitně to hlídá (`contained=False`).
+Dříve dokumentovaná hranice zádrže u **V-PDF-06 (ToUnicode obfuskace)** je **UZAVŘENA
+(2026-08-04):** glyf ↔ ToUnicode diff (on-prem `pdf_tounicode_obfuscation` + edge
+`pdfToUnicodeObfuscation`) zadrží payload do `hidden_text` (`critical:pdf_tounicode_mismatch`)
+a stripne z `visible_text`; embedované/subset fonty se přeskočí (0 FP). Test to hlídá jako
+`critical:pdf_tounicode_mismatch` + `contained=True` (zádrž vynucena), regrese 24/24.
 
 ### Sada roste s nalezenými dírami (v1 → v2)
 
@@ -152,8 +153,8 @@ PDF hardening — 3 díry z matice zavřeny + 2 bonus):
   V-PDF-10); XFA/AcroForm → `pdf_xfa` + obsah do `hidden_text` (V-PDF-07, dřív
   „transparency gap" — nenahlásila ani jedna vrstva); off-mediabox → `pdf_offpage`
   (V-PDF-04).
-- **Zbývá:** V-PDF-06 (ToUnicode) do `hidden_text` přes glyf↔ToUnicode porovnání
-  (payload dnes ve `visible_text` zůstává, jen se warnuje); JS/OpenAction flag na on-prem.
+- **Hotovo (2026-08-04):** V-PDF-06 (ToUnicode) → `hidden_text` přes glyf↔ToUnicode diff
+  (on-prem i edge). **Zbývá:** JS/OpenAction flag na on-prem; plný render→OCR dual-path.
 
 > **Reprodukce má háček.** Cloudflare Bot Fight Mode vrací na `Python-urllib` UA
 > **403**; runner proto posílá prohlížečový User-Agent. To je provozní detail, ale
@@ -298,9 +299,9 @@ neřeší** — a to ani po dosažení F0 exit:
   render→OCR vs. textová vrstva + embeddings nad `hidden_text`, PhantomLint princip) je
   **backlog**. Dnes jistí injekci deterministické nosiče + injection klasifikátor, ne
   sémantická anomálie.
-- **V-PDF-06 (ToUnicode) payload ve `visible_text` zůstává** (jen warn) — hlubší zádrž
-  glyf↔ToUnicode je odložená. Riziko tlumí to, že LLM #1 plní jen pevné schéma bez pole
-  „skóre".
+- **V-PDF-06 (ToUnicode) — UZAVŘENO (2026-08-04):** glyf↔ToUnicode diff zadrží payload do
+  `hidden_text` (`critical:pdf_tounicode_mismatch`) a stripne z `visible_text`, on-prem i na edge
+  (0 FP, regrese 24/24). Zbývá plný render→OCR dual-path pro divergenci mimo ToUnicode.
 - **Model kolísá u pořadí** (free 8B); reprodukovatelnost skóre platí pro *rubrik*, ne pro
   *extrakci* — táž CV mohou dát mírně jiné pořadí. Pro stabilitu je nutný 70B / Claude.
 

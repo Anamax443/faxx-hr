@@ -46,11 +46,11 @@ Důsledek: edge vidí „tady je podezřelý text", ale kompletní forenzní obr
 1 pt v patičce") vzniká jen tam, kde běží on-prem vrstva. pdf.js/unpdf ve workerd
 nefunguje (padá na `_isSameOrigin`), takže tuto hloubku **nelze mít čistě na edge**.
 
-Přiznaná hranice v samotném on-prem detektoru: u vektoru **V-PDF-06** (ToUnicode
-obfuskace, kde extrakce ≠ displej) payload ve `visible_text` **zatím zůstává** a jen se
-**warnuje** — plná zádrž chce porovnat glyf ↔ ToUnicode a je **odložená**. Riziko tlumí
-to, že extrakce plní jen pevné schéma bez pole „skóre", ale je to reálná díra, ne
-vyřešená položka.
+Dříve přiznaná hranice u vektoru **V-PDF-06** (ToUnicode obfuskace, extrakce ≠ displej) je
+**UZAVŘENA (2026-08-04):** glyf ↔ ToUnicode diff **on-prem i na edge** zadrží payload do
+`hidden_text` (`critical:pdf_tounicode_mismatch`) a stripne z `visible_text`; embedované/subset
+fonty se přeskočí (0 FP), regrese 24/24, ověřeno naživo. Zbývá už jen plný render→OCR dual-path
+pro display-divergenci MIMO ToUnicode (čeká na OCR engine).
 
 ### 14.1.4 Bez sdílené perzistence — jen soubor / localStorage
 
@@ -228,7 +228,7 @@ Věci, na které dnes **nemáme odpověď** a které blokují nebo ovlivňují d
 |---|---|---|
 | Free 8B model kolísá | Mírně jiné pořadí u téhož CV; extrakce nestabilní | Volitelně 70B / Claude pro stabilitu; skóre samo deterministické. **Trvalé omezení free tier.** |
 | Vision OCR best-effort | Sken/foto CV nepřesně přečteno | Pro přesnost vložit text/PDF; vision = záchrana. **Nedoměřeno.** |
-| PDF „proč skryté" jen on-prem | Edge chytí injekci, ale ne plnou diagnózu skrytí | On-prem runner (PyMuPDF). Edge zádrž textové vrstvy funguje. **V-PDF-06 payload zůstává (warn) — odloženo.** |
+| PDF „proč skryté" jen on-prem | Edge chytí injekci, ale ne plnou diagnózu skrytí | On-prem runner (PyMuPDF). Edge zádrž textové vrstvy funguje. **V-PDF-06 (ToUnicode) uzavřen on-prem i edge (glyf↔ToUnicode → hidden_text).** |
 | Bez sdílené perzistence | Není stav kandidáta, historie, audit | JSON/localStorage/cache. **D1 migrace existuje, NEZAPOJENÁ.** |
 | Důvěra v klientskou cache | Padá při víceuživatelském scope | OK pro jednouživatelský nástroj (útočník = CV). **Podmíněno scope.** |
 | Chybí held-out + red-team | Recall/FP na neznámých datech nedoložené | **CHYBÍ. Blokuje F0 exit.** Overfitting risk na vlastní sadě. |

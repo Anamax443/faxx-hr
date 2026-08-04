@@ -69,19 +69,26 @@ Nahrazeno **přesným routováním přes `get_texttrace`**:
   pole `[name ref …]`): přítomnost = `pdf_xfa` (warn), injection uvnitř = critical,
   obsah do `hidden_text` (V-PDF-07).
 - **instrukční tón ve viditelném textu** — `visible_instruction_tone` (**vždy jen
-  warn**, oddělená mírnější kategorie od skryté injection). Chytí i útok, kde
-  extrakce ≠ displej (ToUnicode/cmap obfuskace, V-PDF-06: člověk vidí gibberish,
-  extraktor přes ToUnicode přečte payload). **Přiznaná hranice:** payload u V-PDF-06
-  ve `visible_text` zůstává (dosáhne modelu), jen se warnuje; plná zádrž chce
-  porovnat vyrenderované glyfy s ToUnicode (odloženo). Riziko tlumí architektura:
-  extrakce (LLM #1) plní jen pevné schéma bez skóre.
+  warn**, oddělená mírnější kategorie od skryté injection).
+- **glyf ↔ ToUnicode diff (V-PDF-06) — UZAVŘENO (2026-08-04):** útok, kde extrakce ≠ displej
+  (ToUnicode/cmap obfuskace: člověk vidí gibberish, extraktor přes ToUnicode přečte payload).
+  U **neembedovaného simple fontu**, který remapuje ASCII kódy na neidentické Unicode, se
+  payload **zadrží do `hidden_text`** (`critical:pdf_tounicode_mismatch`) a **stripne z
+  `visible_text`** (co člověk nevidí, model nedostane). Embedované/subset fonty (reálný Word,
+  reportlab) se přeskočí → **0 FP**. On-prem: `pdf_tounicode_obfuscation` (PyMuPDF, `hidden_text.py`);
+  edge: `pdfToUnicodeObfuscation` (raw bytes + fflate, `detect.ts`). Regrese 24/24, ověřeno naživo.
 
 Hraniční vektory jsou **změřené** na obou vrstvách (on-prem + živý Worker) →
 [`PDF-BOUNDARY-MATRIX.md`](PDF-BOUNDARY-MATRIX.md), reprodukce
 `python detector/boundary_matrix.py`. Shrnutí: **napříč oběma vrstvami neprojde
-k modelu žádný vektor nezachycen** (defense-in-depth). Zbývá: V-PDF-06 do
-`hidden_text` (glyf↔ToUnicode) a volitelně flag JS/OpenAction na on-prem (dnes
-jistí jen edge). EPS/PS zvlášť nepostaveno (subsumováno Form XObjectem).
+k modelu žádný vektor nezachycen** (defense-in-depth). V-PDF-06 (ToUnicode) je nově
+**zadržen do `hidden_text`** on-prem i na edge (viz výše). Zbývá: volitelně flag
+JS/OpenAction na on-prem (dnes jistí jen edge) a plný render→OCR dual-path pro
+display-divergenci mimo ToUnicode (čeká na OCR engine). EPS/PS zvlášť nepostaveno
+(subsumováno Form XObjectem).
+
+**F0 benchmark:** `python detector/benchmark.py` měří containment / detection / critical / FP
+proti prahům F0 (`--corpus DIR` pro held-out sadu); viz [`../detector/HELDOUT-PROTOCOL.md`](../detector/HELDOUT-PROTOCOL.md).
 
 ## Prahy
 
@@ -110,8 +117,8 @@ metadata → čisto, V09 = injekce v metadatech → critical.)
 
 **PDF (on-prem, vyžaduje PyMuPDF): 10/10** — tytéž vektory jako boundary matice,
 ale offline a s **invariantem zádrže** (payload nesmí do `visible_text`). Pokrývá
-render mode 3, alfu 0, offpage, XFA, ToUnicode i FP sondy; V-PDF-06 je vědomě
-označen `contained=False` (payload ve `visible_text` zůstává, jistí ho warn).
+render mode 3, alfu 0, offpage, XFA, ToUnicode i FP sondy; V-PDF-06 je nově
+`contained=True` — payload se zadrží do `hidden_text` (`critical:pdf_tounicode_mismatch`), viz výše.
 Bez PyMuPDF se PDF část přeskočí, DOCX 14/14 jede dál. **Celkem 24/24.**
 
 Sada je **ladicí**, ne held-out. Neslouží k prohlášení o splnění gate F0 —

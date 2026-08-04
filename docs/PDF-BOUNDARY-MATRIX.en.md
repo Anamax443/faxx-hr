@@ -12,7 +12,7 @@
 
 - **Attack vectors:** 10 · **FP controls:** 2
 - **Slips through to the model uncaught across BOTH layers:** none ✅ — defense-in-depth (on-prem split + edge classifier).
-- **on-prem leaks into `visible_text` (would reach the AI):** `V-PDF-06_tounicode_obf` → render-mode-3 / alpha 0 / offpage are already held back into `hidden_text`; only the ToUnicode/cmap mismatch remains (V-PDF-06), where display≠extraction — the payload in `visible_text` is caught by `visible_instruction_tone` (warn), while a deeper glyph↔ToUnicode comparison is deferred.
+- **on-prem leaks into `visible_text` (would reach the AI):** none ✅ — V-PDF-06 (ToUnicode/cmap mismatch, display≠extraction) is now **held into `hidden_text`** via a glyph↔ToUnicode diff on-prem (`pdf_tounicode_obfuscation`, PyMuPDF) **and on edge** (`pdfToUnicodeObfuscation`, raw bytes + fflate): payload → `hidden_text` (`critical:pdf_tounicode_mismatch`), stripped from `visible_text`. Embedded/subset fonts are skipped → 0 FP. (2026-08-04)
 - **Reported by neither layer (transparency gap):** none ✅ → XFA/AcroForm (V-PDF-07) and offpage are now reported by on-prem. JS/OpenAction (V-PDF-08) is caught only by edge; on-prem currently only holds it back (the payload is not extracted).
 - **edge FP (visible legit text flagged):** `N-PDF-02_self_promo` → a deliberate trade-off; both on-prem and edge now report it as the milder `visible_instruction_tone` (_warn_), a separate category from hidden injection — a human decides.
 
@@ -25,7 +25,7 @@
 | `V-PDF-03_tiny_font` | micro-font 1 pt | ✅ | ✅ | ✅ | text layer, cf-toMarkdown+raw | pdf_tiny_font |
 | `V-PDF-04_offpage` | text outside the mediabox (y=-200) | ✅ | ✅ | ✅ | text layer, cf-toMarkdown+raw | pdf_offpage |
 | `V-PDF-05_cid_identity_h` | hidden white text in an embedded CID/Identity-H font (Word-like) | ✅ | ✅ | ✅ | text layer, cf-toMarkdown+raw | pdf_low_contrast |
-| `V-PDF-06_tounicode_obf` | ToUnicode/cmap obfuscation (display != extraction) | ✅ | ❌ | ✅ | text layer, cf-toMarkdown+raw | visible_instruction_tone |
+| `V-PDF-06_tounicode_obf` | ToUnicode/cmap obfuscation (display != extraction) | ✅ | ✅ | ✅ | payload → `hidden_text` (glyph↔ToUnicode) | pdf_tounicode_mismatch |
 | `V-PDF-07_xfa` | payload in an XFA form (outside the content stream) | ✅ | ✅ | ❌ | cf-toMarkdown+raw | pdf_xfa |
 | `V-PDF-08_javascript` | payload in PDF JavaScript (/OpenAction) | ❌ | ✅ | ✅ | text layer, cf-toMarkdown+raw | — |
 | `V-PDF-09_form_xobject` | white payload in a Form XObject | ✅ | ✅ | ✅ | text layer, cf-toMarkdown+raw | pdf_low_contrast |
@@ -47,12 +47,12 @@
 ## Fix status (hardening from findings)
 
 1. ✅ **on-prem: render mode 3 held back into `hidden_text`.** `get_texttrace` marks spans with render mode Tr 3/7 (and zero alpha `ca 0`); their text goes into `hidden_text`, not `visible_text` (V-PDF-01, V-PDF-10). The crude `3 Tr` probe remains only as a fallback for older PyMuPDF without `get_texttrace`.
-2. 🟡 **on-prem: ToUnicode/cmap ↔ glyph mismatch** (V-PDF-06). Injection over `visible_text` now flags the payload as `visible_instruction_tone` (warn) — ensuring a human finds out. But the payload **remains** in `visible_text` (it reaches the model); the deeper fix = compare the rendered glyphs with ToUnicode and route the mismatch into `hidden_text`. Mitigated by the fact that extraction (LLM #1) only fills a fixed schema without a score.
+2. ✅ **on-prem AND edge: ToUnicode/cmap ↔ glyph mismatch** (V-PDF-06) — **CLOSED (2026-08-04).** A non-embedded simple font that remaps ASCII codes to non-identity Unicode is detected and its payload is **held into `hidden_text`** (`critical:pdf_tounicode_mismatch`) + **stripped from `visible_text`** (what the human doesn't see, the model doesn't get). On-prem `pdf_tounicode_obfuscation` (PyMuPDF), edge `pdfToUnicodeObfuscation` (raw bytes + fflate). Embedded/subset fonts are skipped → 0 FP.
 3. ✅ **on-prem: XFA/AcroForm + offpage.** XFA XML is read via catalog→AcroForm→XFA (both stream and fields), presence = `pdf_xfa` (warn), injection inside = critical, content into `hidden_text` (V-PDF-07). Text entirely outside the mediabox, which `get_text` discards, is reported as `pdf_offpage` from `get_texttrace` (V-PDF-04).
 4. ✅ **edge FP → milder category.** Instructional tone in visible text is `visible_instruction_tone` (_warn_), separate from hidden injection (_critical_) — this reduces false-alarm fatigue (N-PDF-02).
 
 ## Remaining
 
-- **V-PDF-06 into `hidden_text`**: glyph↔ToUnicode comparison (the payload currently remains in `visible_text`, only warned about).
+- **Full render→OCR dual-path**: for display divergence beyond ToUnicode (render mode, off-page) — waiting on an OCR engine (Tesseract). The ToUnicode sub-class (V-PDF-06) is done (see "Fix status" above).
 - **V-PDF-08 JS/OpenAction on on-prem**: today only held back (not extracted), reported only by edge. Optionally add a flag "document contains JavaScript" (a CV should not have any).
 - **Threshold calibration** (`CONTRAST_HIDDEN`, `MIN_FONT_PT`) on the held-out set — a separate F0 item.

@@ -371,9 +371,10 @@ Word a spol. text kódují přes **CID / Identity-H** fonty s `ToUnicode` cmapem
 (mapuje glyf → Unicode pro extrakci). Toho lze zneužít: útočník nastaví
 `ToUnicode` tak, že **displej ≠ extrakce** — člověk vidí gibberish, ale extraktor
 přes `ToUnicode` přečte smysluplný payload (V-PDF-06). Skrytý bílý text ve
-vloženém CID fontu (V-PDF-05) detektor chytne kontrastem; **ToUnicode obfuskaci
-ale jen warnuje a payload ve `visible_text` zůstává** — to je jedna z poctivě
-přiznaných děr, viz §6.9.
+vloženém CID fontu (V-PDF-05) detektor chytne kontrastem; ToUnicode obfuskace je
+**UZAVŘENA (2026-08-04)** — glyf↔ToUnicode diff on-prem i na edge zadrží payload do
+`hidden_text` (`critical:pdf_tounicode_mismatch`) a stripne z `visible_text`;
+embedované/subset fonty se přeskočí (0 FP). Popis původní díry a jejího uzavření: §6.9.
 
 ## 6.5 · Boundary matice: edge vs. on-prem
 
@@ -391,7 +392,7 @@ nedostal do `visible_text` (split má jen on-prem; edge u PDF split nemá →
 | `V-PDF-03_tiny_font` | mikropísmo 1 pt | ✅ | ✅ | ✅ | `pdf_tiny_font` |
 | `V-PDF-04_offpage` | text mimo mediabox (y=−200) | ✅ | ✅ | ✅ | `pdf_offpage` |
 | `V-PDF-05_cid_identity_h` | skrytý bílý text v embedded CID/Identity-H | ✅ | ✅ | ✅ | `pdf_low_contrast` |
-| `V-PDF-06_tounicode_obf` | ToUnicode/cmap obfuskace (displej ≠ extrakce) | ✅ | **❌** | ✅ | `visible_instruction_tone` |
+| `V-PDF-06_tounicode_obf` | ToUnicode/cmap obfuskace (displej ≠ extrakce) | ✅ | **✅** | ✅ | `pdf_tounicode_mismatch` |
 | `V-PDF-07_xfa` | payload v XFA (mimo content stream) | ✅ | ✅ | **❌** | `pdf_xfa` |
 | `V-PDF-08_javascript` | payload v PDF JS (`/OpenAction`) | **❌** | ✅ | ✅ | — |
 | `V-PDF-09_form_xobject` | bílý payload ve Form XObjectu | ✅ | ✅ | ✅ | `pdf_low_contrast` |
@@ -413,16 +414,15 @@ Podstata je v **komplementaritě** obou vrstev — kde jedna vypadne, druhá jis
 - **V-PDF-08 (JavaScript/OpenAction):** on-prem ho jako flag nezvedá (❌) — ale
   **zadrží** ho (JS se neextrahuje jako text, payload se k modelu nedostane) —
   a edge injection sken ho v raw streamu chytne (✅). Zachycen.
-- **V-PDF-06 (ToUnicode obfuskace):** **jediný vektor, který on-prem protéká do
-  `visible_text`** (ZADRŽ ❌). Oba layery ho detekují (`visible_instruction_tone`
-  warn), ale payload k modelu dosáhne. Riziko tlumí architektura (extrakce plní
-  jen pevné schéma bez skóre), ne detektor. Viz §6.9.
+- **V-PDF-06 (ToUnicode obfuskace):** dříve jediný vektor, který on-prem protékal do
+  `visible_text`; **UZAVŘENO 2026-08-04** (ZADRŽ ✅) — glyf↔ToUnicode diff na obou vrstvách
+  zadrží payload do `hidden_text` (`critical:pdf_tounicode_mismatch`) a stripne z `visible_text`.
+  Viz §6.9.
 
 Souhrn boundary matice:
 
 - **Propluje k modelu nezachyceno napříč OBĚMA vrstvami: žádný vektor.** ✅
-- **on-prem protéká do `visible_text`:** jen `V-PDF-06` (render mode 3 / alfa 0 /
-  offpage jsou už zadrženy do `hidden_text`).
+- **on-prem protéká do `visible_text`: žádný** ✅ — V-PDF-06 nově zadržen (viz výše).
 - **Transparency gap (nenahlásí ani jedna vrstva): žádný.** ✅
 - **edge FP:** `N-PDF-02` (viditelná sebeprezentace) — vědomý trade-off,
   degradováno na `warn`.
@@ -561,9 +561,9 @@ Regrese se pouští `python detector/test_vectors.py`. Rozpad:
 - **PDF: 10/10** (on-prem, vyžaduje PyMuPDF) — tytéž vektory jako boundary
   matice, ale offline a **s invariantem zádrže** (payload nesmí do
   `visible_text`). Pokrývá render mode 3, alfu 0, offpage, XFA, ToUnicode i FP
-  sondy. V-PDF-06 je vědomě označen `contained=False` (payload ve `visible_text`
-  zůstává, jistí ho `warn`). Bez PyMuPDF se PDF část přeskočí, DOCX 14/14 jede
-  dál.
+  sondy. V-PDF-06 je nově `contained=True` — payload se zadrží do `hidden_text`
+  (`critical:pdf_tounicode_mismatch`), viz §6.9. Bez PyMuPDF se PDF část
+  přeskočí, DOCX 14/14 jede dál.
 
 **Celkem 24/24.** Živý Worker (`worker/src/detect.ts`) je pro DOCX doportován na
 v2 a ověřen proti stejným vektorům (N02 sidebar čistý; `#E8E8E8`, `#FEFEFE` a
@@ -581,20 +581,29 @@ patička chyceny; otrávené demo má vis/hid split správně).
 Tato sekce je pro kritického oponenta nejdůležitější. Kde detektor nedosahuje,
 je to řečeno bez příkras.
 
-### 1. ToUnicode-mismatch payload ve `visible_text` ZŮSTÁVÁ
+### 1. ToUnicode-mismatch payload — UZAVŘENO (2026-08-04)
 
-Nejtvrdší přiznaná díra. U **V-PDF-06** (ToUnicode/cmap obfuskace, displej ≠
-extrakce) on-prem detektor **nedokáže** payload odklonit do `hidden_text` —
+> **AKTUALIZACE:** tato dříve nejtvrdší přiznaná díra je **uzavřena** glyf↔ToUnicode diffem
+> **on-prem i na edge** (přesně reakce na bod #1 obou oponentur). Text níže popisuje původní
+> stav i jeho uzavření. Neembedovaný simple font, který přes `/ToUnicode` remapuje ASCII kódy
+> na neidentické Unicode, se rozpozná a jeho payload se **zadrží do `hidden_text`**
+> (`critical:pdf_tounicode_mismatch`) a **stripne z `visible_text`**. On-prem
+> `pdf_tounicode_obfuscation` (PyMuPDF), edge `pdfToUnicodeObfuscation` (raw bytes + fflate).
+> Embedované/subset fonty se přeskočí → **0 FP**. Regrese 24/24, ověřeno naživo. Zbývá už jen
+> plný **render→OCR dual-path** pro display-divergenci MIMO ToUnicode (render mode, off-page),
+> který čeká na OCR engine (Tesseract).
+
+**Původní stav (pro kontext).** U **V-PDF-06** (ToUnicode/cmap obfuskace, displej ≠
+extrakce) on-prem detektor payload **neodkláněl** do `hidden_text` —
 `get_text`/`toMarkdown` přečtou přes `ToUnicode` cmap smysluplný text, který
-člověk na displeji nevidí, a ten payload **dosáhne modelu**. Jediné, co se
-stane, je flag `visible_instruction_tone` (severity **jen `warn`**), aby se o
+člověk na displeji nevidí, a ten payload tehdy **dosáhl modelu**. Jediné, co se
+stalo, byl flag `visible_instruction_tone` (severity **jen `warn`**), aby se o
 tom personalista dozvěděl.
 
-Plná zádrž vyžaduje **porovnat vyrenderované glyfy s tím, co říká `ToUnicode`**,
-a nesoulad routovat do `hidden_text`. To je **odloženo** (glyf↔ToUnicode
-porovnání zatím není implementováno). Riziko dnes tlumí *výhradně architektura*
-— extrakce (LLM #1) plní jen pevné schéma bez pole skóre —, ne detektor. Oponent
-by měl tuto díru brát vážně: je to místo, kde se defense-in-depth spoléhá jen na
+Plná zádrž vyžadovala **porovnat, co říká `ToUnicode`, s base-encoding glyfem**
+a nesoulad routovat do `hidden_text` — což je **nyní implementováno** (viz banner
+výše). Do té doby riziko tlumila *výhradně architektura* — extrakce (LLM #1) plní
+jen pevné schéma bez pole skóre —, ne detektor. Šlo o místo, kde se defense-in-depth spoléhal jen na
 jednu ze dvou vrstev.
 
 ### 2. Held-out sada CHYBÍ, prahy nejsou kalibrované
@@ -685,7 +694,7 @@ Co detektor **prokazatelně dělá**:
 
 Co detektor **prokazatelně nedělá** (a nemá se to zamlčovat):
 
-- Nezadrží ToUnicode-mismatch payload — ten dosáhne modelu, jen se warnuje.
+- ~~Nezadrží ToUnicode-mismatch payload~~ — **UZAVŘENO (2026-08-04):** glyf↔ToUnicode diff zadrží payload do `hidden_text` on-prem i na edge (viz §6.9).
 - Není doměřen na held-out sadě; prahy nejsou kalibrované; externí red-team
   neproběhl. Číslo 24/24 je CI signál z **ladicí** sady, ne důkaz recall/FP.
 - Edge sám o sobě u PDF nedělá visible/hidden split — plná zádrž vyžaduje
@@ -696,5 +705,5 @@ jediná.** I kdyby propustil, skórovací cesta nemá kam injection zapsat verdi
 (pevné schéma bez skóre + deterministický rubrik), a rozhodnutí o kandidátovi
 vždy dělá člověk. Detektor tedy zvyšuje laťku útoku a poskytuje auditní stopu —
 ale bezpečnost systému nestojí a nepadá s ním. To je vědomá volba návrhu, ne
-alibi za nedodělky: nedodělky (held-out, ToUnicode zádrž, red-team) jsou
-pojmenované a patří do gate F0, který ještě není splněn.
+alibi za nedodělky: nedodělky (held-out sada, externí red-team; ToUnicode zádrž už
+uzavřena) jsou pojmenované a patří do gate F0, který ještě není splněn.

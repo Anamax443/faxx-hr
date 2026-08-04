@@ -69,19 +69,26 @@ anyway. Replaced by **precise routing via `get_texttrace`**:
   `[name ref …]` field): presence = `pdf_xfa` (warn), injection inside = critical,
   content into `hidden_text` (V-PDF-07).
 - **instructional tone in visible text** — `visible_instruction_tone` (**always only
-  warn**, a separate milder category from hidden injection). It also catches the attack where
-  extraction ≠ display (ToUnicode/cmap obfuscation, V-PDF-06: a human sees gibberish,
-  the extractor reads the payload via ToUnicode). **Acknowledged limit:** the payload for V-PDF-06
-  stays in `visible_text` (it reaches the model), it is only warned; a full stop requires
-  comparing the rendered glyphs against ToUnicode (deferred). The architecture dampens the risk:
-  extraction (LLM #1) only fills a fixed schema without scoring.
+  warn**, a separate milder category from hidden injection).
+- **glyph ↔ ToUnicode diff (V-PDF-06) — CLOSED (2026-08-04):** the attack where extraction ≠ display
+  (ToUnicode/cmap obfuscation: a human sees gibberish, the extractor reads the payload via ToUnicode).
+  For a **non-embedded simple font** that remaps printable ASCII codes to non-identity Unicode, the
+  payload is **held into `hidden_text`** (`critical:pdf_tounicode_mismatch`) and **stripped from
+  `visible_text`** (what the human doesn't see, the model doesn't get). Embedded/subset fonts (real Word,
+  reportlab) are skipped → **0 false positives**. On-prem: `pdf_tounicode_obfuscation` (PyMuPDF, `hidden_text.py`);
+  edge: `pdfToUnicodeObfuscation` (raw bytes + fflate, `detect.ts`). Regression 24/24, verified live.
 
 The boundary vectors are **measured** on both layers (on-prem + live Worker) →
 [`PDF-BOUNDARY-MATRIX.en.md`](PDF-BOUNDARY-MATRIX.en.md), reproduce with
 `python detector/boundary_matrix.py`. Summary: **across both layers no vector reaches
-the model uncaught** (defense-in-depth). Remaining: V-PDF-06 into
-`hidden_text` (glyph↔ToUnicode) and optionally flagging JS/OpenAction on-prem (today
-only the edge covers it). EPS/PS is not built separately (subsumed by the Form XObject).
+the model uncaught** (defense-in-depth). V-PDF-06 (ToUnicode) is now
+**held into `hidden_text`** on both on-prem and edge (see above). Remaining: optionally flagging
+JS/OpenAction on-prem (today only the edge covers it) and a full render→OCR dual-path for
+display divergence beyond ToUnicode (waiting on an OCR engine). EPS/PS is not built separately
+(subsumed by the Form XObject).
+
+**F0 benchmark:** `python detector/benchmark.py` measures containment / detection / critical / FP
+against F0 thresholds (`--corpus DIR` for a held-out set); see [`../detector/HELDOUT-PROTOCOL.md`](../detector/HELDOUT-PROTOCOL.md).
 
 ## Thresholds
 
@@ -110,8 +117,8 @@ metadata → clean, V09 = injection in metadata → critical.)
 
 **PDF (on-prem, requires PyMuPDF): 10/10** — the same vectors as the boundary matrix,
 but offline and with the **stop invariant** (the payload must not reach `visible_text`). It covers
-render mode 3, alpha 0, offpage, XFA, ToUnicode, and FP probes; V-PDF-06 is deliberately
-marked `contained=False` (the payload stays in `visible_text`, a warn covers it).
+render mode 3, alpha 0, offpage, XFA, ToUnicode, and FP probes; V-PDF-06 is now
+`contained=True` — the payload is held into `hidden_text` (`critical:pdf_tounicode_mismatch`), see above.
 Without PyMuPDF the PDF part is skipped, DOCX 14/14 keeps running. **Total 24/24.**
 
 The suite is a **debugging** suite, not held-out. It does not serve to declare gate F0 met —

@@ -17,6 +17,7 @@ personalistovi **viditelně vlajkovány**, ne tiše odfiltrovány.
 
 > **Pokračuješ v práci? Začni u [`HANDOFF.md`](HANDOFF.md).**
 > Stav projektu: [`status.html`](status.html) · Plný návrh: [`DESIGN.md`](DESIGN.md) · Regulatorika: [`docs/AI-ACT.md`](docs/AI-ACT.md)
+> **Oponentura** (~100 stran, technicko-regulatorní, vč. reakcí na 2 posudky): [`docs/oponentura/`](docs/oponentura/README.md)
 > Sdílí extraction jádro s [repo `faxx-dox`](https://github.com/Anamax443/faxx-dox).
 
 ---
@@ -89,7 +90,11 @@ python detector/demo.py
 
 # 1b) Regresní sada — DOCX 14/14 (stdlib, bez sítě) + PDF 10/10 on-prem
 #     (s PyMuPDF; invariant zádrže: skrytý text nesmí do visible_text) = 24/24
+#     vč. V-PDF-06 (ToUnicode fact-swap) uzavřeného glyf↔ToUnicode diffem
 python detector/test_vectors.py
+
+# 1d) F0 benchmark — containment / detection / critical / FP (smoke; --corpus DIR pro held-out)
+python detector/benchmark.py
 
 # 1c) Boundary matice — 12 hraničních PDF vektorů (CID/Identity-H, ToUnicode
 #     obfuskace, XFA, JS, render mode 3, nulová alfa, offpage …) proti lokálnímu
