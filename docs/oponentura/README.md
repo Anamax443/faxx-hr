@@ -36,6 +36,13 @@ Doporučené pořadí čtení pro oponenta: kapitoly 1–4 (rámec a princip) �
 (~100 stran) s obsahem a page-break pro tisk do PDF (otevři → Tisk → Uložit jako PDF).
 Níže je rozpad po jednotlivých kapitolách.
 
+## Reakce na oponentury
+
+💬 **[OPONENTURA-RESPONSE-2.md](OPONENTURA-RESPONSE-2.md)** — konsolidovaná reakce autorského
+týmu na **dvě nezávislé oponentury** (přijato / upřesněno / oponováno), včetně rozhodnutí
+o **dvouvětvovém modelu** (edge demonstrátor vs. lokální DB modifikace) a prioritních bran.
+Priority jsou promítnuté do kapitoly [15 · Roadmapa](15-roadmapa.md) (§15.0).
+
 ## Obsah (po kapitolách)
 
 | # | Kapitola | Soubor |

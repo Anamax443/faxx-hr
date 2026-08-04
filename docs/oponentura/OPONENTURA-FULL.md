@@ -4,11 +4,12 @@
 > hodnocení životopisů proti pracovnímu inzerátu s obranou proti prompt injection.
 > Určeno **kritickému oponentovi** (technický garant / investor / regulatorní posudek).
 >
-> **Verze:** 2026-08-04 · odpovídá stavu repozitáře na commitu $commit (main). **Jazyk:** čeština.
+> **Verze:** 2026-08-04 · odpovídá stavu repozitáře na commitu `00394f7` (main). **Jazyk:** čeština.
 > **Rozsah:** ~100 stran (17 kapitol) — jeden souvislý dokument.
 >
-> **Tisk do PDF:** otevři v prohlížeči (nebo VS Code náhled) → Tisk → Uložit jako PDF; kapitoly
-> začínají na nové stránce. Dokument neobsahuje žádné tajnosti (klíče/hesla/tokeny) — repo je veřejný.
+> **Reakce na dvě oponentury** a dvouvětvový model (edge vs. lokální DB): viz `OPONENTURA-RESPONSE-2.md` (kap. 15 §15.0).
+>
+> **Tisk do PDF:** otevři v prohlížeči → Tisk → Uložit jako PDF; kapitoly začínají na nové stránce.
 
 ---
 
@@ -5178,6 +5179,46 @@ textu, schéma nemá pole, kam by injection zapsala).
 > rozhodnutí.
 
 ---
+
+## 15.0 Dvouvětvový model a brány z oponentur (aktualizace 2026-08-04)
+
+> Doplněno po **dvou nezávislých technicko-regulatorních oponenturách** — konsolidovaná
+> reakce je v [`OPONENTURA-RESPONSE-2.md`](OPONENTURA-RESPONSE-2.md). Tato sekce mění, **kam**
+> patří perzistence a compliance, a stanovuje prioritní brány.
+
+Projekt se dělí na **dvě větve**:
+
+- **Větev A — edge demonstrátor** (současná bezstavová appka, veřejná URL): jen ukázková /
+  testovací data, **reálná CV nikdy** → GDPR a AI Act čl. 12/14 se jí netýkají. Komunikuje se
+  striktně jako **demonstrátor, ne MVP**.
+- **Větev B — lokální DB modifikace** (budoucí, **samostatná**): databáze na lokální síti;
+  teprve zde perzistence dávek, `audit_log`/`decisions`, GDPR, DPIA, Annex IV. Toto je
+  „produktová" větev pro reálný nábor.
+
+Bezpečnostní jádro (`detect` / `extract` / `rubric`) je **sdílené**, takže bezpečnost a
+validace se dělá jednou a platí pro obě větve. **Compliance-brány se přesouvají do větve B;
+bezpečnostní a validační brány platí ihned na sdíleném jádře.**
+
+### Konsolidované brány (z obou oponentur)
+
+| # | Brána | Větev | Priorita |
+|---|---|---|---|
+| **G1** | Held-out sada (3. strana, ~100+100) + externí red-team → naměřit recall/FP | A + B | **P0** |
+| **G4** | Dual-path diff (render ↔ textová vrstva) + uzavřít V-PDF-06 (skrytý fact-swap) | A + B (on-prem) | **P0** |
+| **G6** | Kalibrace FP na grafických CV + KPI dismissal-rate flagů | A + B | P1 |
+| **G7** | Změřit podíl vision fallbacku na reprezentativním vzorku | A + B | P1 |
+| **G5** | Async dávkové zpracování (Queues / Durable Objects / Workflows) — timeout Workeru | A (i B) | P1 |
+| **G8** | Silnější backend (Claude / 70B) + řešit bus factor | A + B | P2 |
+| **G2** | Perzistence (lokální DB) + `decisions`/`audit_log` + metrika dohledu | **jen B** | P0 *větve B* |
+| **G3** | DPIA + Annex IV-lite + GDPR před prvním reálným CV | **jen B** | P0 *větve B* |
+| — | **STOP** real-data pilot na edge; živá appka = demonstrátor | průřezově | ihned |
+
+> **Klíčový přijatý reframe (bod 1 obou posudků):** invariant chrání *slot na verdikt*, ne
+> *fakta*. Skrytý fact-swap (ToUnicode) je reálná díra → **dual-path diff povýšen na P0**.
+> Naopak *viditelné* nadsazené sebehodnocení je mimo scope (self-report, řeší člověk/pohovor).
+
+Sekce §15.1–§15.6 níže popisují fáze a kroky podrobněji; kde mluví o D1/R2 perzistenci,
+`audit_log` a DPIA, patří to nově do **větve B**.
 
 ## 15.1 Fáze F0 → F4: co a jaký stav
 
