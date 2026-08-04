@@ -124,6 +124,22 @@ export function sanitizeQualification(parsed: unknown): Qualification {
   };
 }
 
+/** Sloučí kvalifikace z více dokumentů jednoho kandidáta (CV + dopisy + přílohy).
+ * years = max, skills/certs = sjednocení podle názvu, ostatní = spojení (rubrik si bere max). */
+export function mergeQualifications(qs: Qualification[]): Qualification {
+  const out: Qualification = { years_total_experience: null, experience: [], skills: [], education: [], languages: [], certifications: [] };
+  const skillSeen = new Set<string>(), certSeen = new Set<string>();
+  for (const q of qs) {
+    if (typeof q.years_total_experience === "number") out.years_total_experience = Math.max(out.years_total_experience ?? 0, q.years_total_experience);
+    for (const e of q.experience ?? []) out.experience!.push(e);
+    for (const s of q.skills ?? []) { const k = (s.name || "").toLowerCase().trim(); if (k && !skillSeen.has(k)) { skillSeen.add(k); out.skills!.push(s); } }
+    for (const e of q.education ?? []) out.education!.push(e);
+    for (const l of q.languages ?? []) out.languages!.push(l);
+    for (const c of q.certifications ?? []) { const k = ("" + c).toLowerCase().trim(); if (k && !certSeen.has(k)) { certSeen.add(k); out.certifications!.push(c); } }
+  }
+  return out;
+}
+
 export interface ExtractResult { qualification: Qualification; ok: boolean; error?: string; raw: string; ms: number; model: string; usedResponseFormat: boolean }
 
 /** Zavolá Workers AI a vrátí validovaný qualification blok. Nikdy nehodí. */

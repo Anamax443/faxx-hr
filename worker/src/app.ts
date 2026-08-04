@@ -9,8 +9,8 @@
  * Záložky: Hodnocení / Nastavení / Dokumentace.
  * Deploy: wrangler deploy -c wrangler.app.jsonc
  */
-import { scanDocument, type DetectEnv } from "./detect";
-import { extractQualification, aiJson, EXTRACT_MODEL_DEFAULT, type AiBinding } from "./extract";
+import { scanDocument, injectionContext, type DetectEnv } from "./detect";
+import { extractQualification, mergeQualifications, aiJson, EXTRACT_MODEL_DEFAULT, type AiBinding } from "./extract";
 import { scoreCandidate, rankCandidates, type Rubric, type Qualification } from "./rubric";
 
 interface Env extends DetectEnv { AI: AiBinding & DetectEnv["AI"] }
@@ -73,6 +73,39 @@ function worstSeverity(flags: { severity: string }[]): string {
   return "clean";
 }
 
+// --- obrázky přes vision (OCR z printscreenu / skenu) ----------------------
+const IMAGE_EXTS = ["jpg", "jpeg", "png", "webp", "gif", "bmp"];
+const isImageName = (n: string) => IMAGE_EXTS.includes((n.split(".").pop() || "").toLowerCase());
+const VISION_MODEL = "@cf/llava-hf/llava-1.5-7b-hf";
+
+async function visionText(buf: Uint8Array, ai: AiBinding): Promise<string> {
+  try {
+    const r = await ai.run(VISION_MODEL, {
+      image: [...buf],
+      prompt: "Přepiš do textu VEŠKERÝ text z tohoto obrázku (pracovní inzerát nebo životopis). Vrať jen přepsaný text, bez komentáře.",
+      max_tokens: 1200,
+    });
+    const t = typeof r === "string" ? r : (obj(r).description ?? obj(r).response ?? "");
+    return String(t || "").trim();
+  } catch { return ""; }
+}
+
+interface ScanLike { visible: string; flags: { type: string; severity: string; location: string; evidence: string }[]; note: string; hiddenChars: number }
+
+// Jednotný sken: obrázky přes vision (OCR), ostatní přes detektor (split + flagy).
+async function scanOrVision(name: string, buf: Uint8Array, env: Env): Promise<ScanLike> {
+  if (isImageName(name)) {
+    const text = await visionText(buf, env.AI);
+    const flags: ScanLike["flags"] = [];
+    if (!text) return { visible: "", flags, note: "Obrázek: vision model nepřečetl žádný text (nekvalitní sken / screenshot?).", hiddenChars: 0 };
+    const ctx = injectionContext(text); // vision čte jen viditelné → instrukční tón = mírnější kategorie
+    if (ctx) flags.push({ type: "visible_instruction_tone", severity: "warn", location: "obrázek (vision)", evidence: "nalezená pasáž: „" + ctx + "“" });
+    return { visible: text, flags, note: "Text přečten z obrázku přes vision (llava-1.5) — může být nepřesné.", hiddenChars: 0 };
+  }
+  const s = await scanDocument(name, buf, env);
+  return { visible: s.visible, flags: s.flags, note: s.note, hiddenChars: s.hiddenChars };
+}
+
 interface DocInput { name: string; buf?: Uint8Array; visible?: string; flags?: { type: string; severity: string; location: string; evidence: string }[]; hidden_chars?: number; note?: string }
 interface CandidateInput { name: string; docs: DocInput[] }
 
@@ -99,32 +132,35 @@ async function evaluate(cands: CandidateInput[], req: Requirements, ai: AiBindin
   const rubric = buildRubric(req);
   const results = [];
   for (const c of cands) {
-    const parts: string[] = [];
     let flags: { type: string; severity: string; location: string; evidence: string; doc?: string }[] = [];
-    let hiddenChars = 0;
+    let hiddenChars = 0, extMs = 0, extOk = false, totalVisible = 0;
     const notes: string[] = [];
     const docsMeta: { name: string; visible_chars: number; hidden_chars: number; flags: number; note: string }[] = [];
+    const quals: Qualification[] = [];
     for (const d of c.docs) {
       let visible = d.visible ?? "", dflags = d.flags ?? [], dhidden = d.hidden_chars ?? 0, note = d.note ?? "";
       if (d.buf) {
-        const scan = await scanDocument(d.name, d.buf, env);
+        const scan = await scanOrVision(d.name, d.buf, env);
         visible = scan.visible; dflags = scan.flags; dhidden = scan.hiddenChars; note = scan.note;
       }
-      if (visible.trim()) parts.push(visible);
+      totalVisible += visible.length;
+      // extrakce PO DOKUMENTECH — CV spolehlivě dá roky, dopisy doplní; pak se sloučí
+      if (visible.trim()) {
+        const ext = await extractQualification(visible, ai, model);
+        quals.push(ext.qualification); extMs += ext.ms; extOk = extOk || ext.ok;
+      }
       flags = flags.concat(dflags.map((f) => ({ ...f, doc: d.name })));
       hiddenChars += dhidden;
       if (note) notes.push(note);
       docsMeta.push({ name: d.name, visible_chars: visible.length, hidden_chars: dhidden, flags: dflags.length, note });
     }
-    // hodnocení z CELKU: spojený viditelný text VŠECH dokumentů kandidáta
-    const combined = parts.join("\n\n").slice(0, 16000);
-    const ext = combined.trim() ? await extractQualification(combined, ai, model) : { qualification: {} as Qualification, ok: false, error: "prázdný viditelný text", ms: 0 };
-    const score = scoreCandidate(ext.qualification, rubric);
+    const merged = mergeQualifications(quals);      // celkové hodnocení = sloučení dat ze všech dokumentů
+    const score = scoreCandidate(merged, rubric);
     results.push({
       name: c.name, score,
       flags, worstSeverity: worstSeverity(flags), flagCount: flags.length,
-      qualification: ext.qualification, extract_ms: ext.ms, extract_ok: ext.ok,
-      docs: docsMeta, visible_chars: combined.length, hidden_chars: hiddenChars, note: notes.join(" · "),
+      qualification: merged, extract_ms: extMs, extract_ok: extOk,
+      docs: docsMeta, visible_chars: totalVisible, hidden_chars: hiddenChars, note: notes.join(" · "),
     });
   }
   const ranking = rankCandidates(results).map((r, i) => ({
@@ -160,7 +196,11 @@ export default {
           const s = await scanDocument(f.name, buf, env);
           return json({ text: s.visible, source: f.name, note: s.note });
         }
-        return json({ error: "Podporováno: TXT, PDF, DOCX. Screenshot/obrázek (vision) přijde později." }, 400);
+        if (isImageName(f.name)) {
+          const t = await visionText(buf, env.AI);
+          return json({ text: t, source: f.name, note: t ? "Text přečten z obrázku přes vision (llava-1.5) — zkontroluj přesnost." : "Vision model nepřečetl žádný text (nekvalitní screenshot?)." });
+        }
+        return json({ error: "Podporováno: TXT, PDF, DOCX a obrázky (PNG/JPG přes vision)." }, 400);
       } catch (e: unknown) { return json({ error: String((e as { message?: string })?.message || e) }, 500); }
     }
 
@@ -325,9 +365,9 @@ a{color:var(--accent)}
 <div class="view on" id="hod">
   <div class="card" id="inzeratCard">
     <h3>1 · Inzerát</h3>
-    <textarea id="inzerat" placeholder="Vlož text inzerátu, nebo ho nahraj ze souboru (📎), nebo rovnou vyplň požadavky níže…"></textarea>
+    <textarea id="inzerat" placeholder="Vlož text inzerátu, nahraj ho ze souboru (📎), nebo sem vlož printscreen (Ctrl+V) — obrázek přečte vision…"></textarea>
     <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-      <label class="filebtn" title="Nahraj inzerát jako TXT, PDF nebo DOCX — text se vloží do pole výše">📎 Vložit ze souboru<input type="file" id="inzFile" accept=".txt,.md,.pdf,.docx" style="display:none"></label>
+      <label class="filebtn" title="Nahraj inzerát jako TXT, PDF, DOCX nebo obrázek (PNG/JPG přes vision)">📎 Vložit ze souboru<input type="file" id="inzFile" accept=".txt,.md,.pdf,.docx,.png,.jpg,.jpeg,.webp" style="display:none"></label>
       <button class="ghost" id="deriveBtn" title="AI z inzerátu navrhne požadavky, které pak můžeš upravit">✨ Odvodit požadavky z inzerátu</button>
       <span class="hint" id="deriveMsg"></span>
     </div>
@@ -454,18 +494,24 @@ $('#deriveBtn').onclick=async()=>{
   }catch(e){$('#deriveMsg').textContent='Chyba: '+e}
   $('#deriveBtn').disabled=false;
 };
-// import inzerátu ze souboru
-$('#inzFile').onchange=async()=>{
-  const f=$('#inzFile').files[0]; if(!f)return;
-  $('#deriveMsg').textContent='Načítám '+f.name+'…';
-  const fd=new FormData();fd.set('file',f);
+// import inzerátu ze souboru NEBO printscreenu (Ctrl+V)
+async function importInzerat(f,label){
+  $('#deriveMsg').textContent='Načítám '+(label||f.name)+'…';
+  const fd=new FormData();fd.set('file',f,f.name||'printscreen.png');
   try{
     const r=await fetch('/api/extract-text',{method:'POST',body:fd}).then(r=>r.json());
     if(r.error){$('#deriveMsg').textContent='Chyba: '+r.error}
-    else{$('#inzerat').value=r.text||'';$('#deriveMsg').textContent='Načteno z '+esc(r.source||f.name)+' ('+((r.text||'').length)+' zn.). Zkontroluj text a odvoď požadavky.'}
+    else{$('#inzerat').value=r.text||'';$('#deriveMsg').textContent=(r.note?r.note+' ':'Načteno ('+((r.text||'').length)+' zn.). ')+'Zkontroluj text a odvoď požadavky.'}
   }catch(e){$('#deriveMsg').textContent='Chyba: '+e}
-  $('#inzFile').value='';
-};
+}
+$('#inzFile').onchange=()=>{const f=$('#inzFile').files[0];if(f)importInzerat(f);$('#inzFile').value=''};
+$('#inzerat').addEventListener('paste',ev=>{
+  const items=[...((ev.clipboardData||{}).items||[])];
+  const img=items.find(i=>i.type&&i.type.indexOf('image/')===0);
+  if(!img)return;            // běžný text necháme vložit normálně
+  ev.preventDefault();
+  const f=img.getAsFile(); if(f)importInzerat(f,'printscreen (vision)');
+});
 // evaluate
 $('#evalBtn').onclick=async()=>{
   $('#err').textContent='';
