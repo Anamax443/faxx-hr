@@ -88,31 +88,38 @@ const mimeFromName = (n: string) => { const e = (n.split(".").pop() || "").toLow
 
 // OCR obrázku. Primárně Cloudflare toMarkdown (dělá skutečné OCR líp než LLaVA
 // captioning, které text jen hádá); LLaVA je slabý fallback. Vrací {text, via}.
-async function visionText(buf: Uint8Array, name: string, env: Env): Promise<{ text: string; via: string }> {
-  if (env?.AI?.toMarkdown) {
+async function visionText(buf: Uint8Array, name: string, env: Env, method = "toMarkdown"): Promise<{ text: string; via: string }> {
+  const tryMd = async (): Promise<string> => {
+    if (!env?.AI?.toMarkdown) return "";
     try {
       const res = await env.AI.toMarkdown([{ name: name || "img.png", blob: new Blob([buf], { type: mimeFromName(name || "") }) }]);
       let md = Array.isArray(res) ? res.map((r) => r?.data || "").join("\n") : "";
       md = md.replace(/^#[^\n]*\n+/, "").replace(/^##\s*Metadata\s*\n(?:\s*-[^\n]*\n?)*/i, "").trim();
-      if (md.replace(/\s+/g, "").length >= 15) return { text: md, via: "cf-toMarkdown" };
-    } catch { /* zkus llava */ }
+      return md.replace(/\s+/g, "").length >= 15 ? md : "";
+    } catch { return ""; }
+  };
+  const tryLlava = async (): Promise<string> => {
+    try {
+      const r = await env.AI.run(VISION_MODEL, { image: [...buf], prompt: "Transcribe ALL text visible in this image exactly as written, line by line. Output only the transcribed text, nothing else.", max_tokens: 1200 });
+      return String(typeof r === "string" ? r : (obj(r).description ?? obj(r).response ?? "")).trim();
+    } catch { return ""; }
+  };
+  if (method === "llava") {
+    const l = await tryLlava(); if (l) return { text: l, via: "llava" };
+    const m = await tryMd(); if (m) return { text: m, via: "cf-toMarkdown" };
+  } else {
+    const m = await tryMd(); if (m) return { text: m, via: "cf-toMarkdown" };
+    const l = await tryLlava(); if (l) return { text: l, via: "llava" };
   }
-  try {
-    const r = await env.AI.run(VISION_MODEL, {
-      image: [...buf],
-      prompt: "Transcribe ALL text visible in this image exactly as written, line by line. Output only the transcribed text, nothing else.",
-      max_tokens: 1200,
-    });
-    return { text: String(typeof r === "string" ? r : (obj(r).description ?? obj(r).response ?? "")).trim(), via: "llava" };
-  } catch { return { text: "", via: "none" }; }
+  return { text: "", via: "none" };
 }
 
 interface ScanLike { visible: string; flags: { type: string; severity: string; location: string; evidence: string }[]; note: string; hiddenChars: number }
 
 // Jednotný sken: obrázky přes vision (OCR), ostatní přes detektor (split + flagy).
-async function scanOrVision(name: string, buf: Uint8Array, env: Env): Promise<ScanLike> {
+async function scanOrVision(name: string, buf: Uint8Array, env: Env, visionMethod = "toMarkdown"): Promise<ScanLike> {
   if (isImageName(name)) {
-    const { text, via } = await visionText(buf, name, env);
+    const { text, via } = await visionText(buf, name, env, visionMethod);
     const flags: ScanLike["flags"] = [];
     if (!text) return { visible: "", flags, note: "Obrázek: OCR nepřečetlo žádný text (nekvalitní sken / screenshot?).", hiddenChars: 0 };
     const ctx = injectionContext(text); // vision čte jen viditelné → hlásíme jen instrukce směřované na AI
@@ -146,7 +153,7 @@ export function groupByPerson(files: { name: string; buf?: Uint8Array; visible?:
 }
 
 // Zpracuje JEDNOHO kandidáta (všechny jeho dokumenty) → výsledek se skóre.
-async function scoreOne(c: CandidateInput, rubric: Rubric, ai: AiBinding, model: string, env: Env, system: string) {
+async function scoreOne(c: CandidateInput, rubric: Rubric, ai: AiBinding, model: string, env: Env, system: string, visionMethod: string) {
   let flags: { type: string; severity: string; location: string; evidence: string; doc?: string }[] = [];
   let hiddenChars = 0, extMs = 0, extOk = false, totalVisible = 0;
   const notes: string[] = [];
@@ -157,7 +164,7 @@ async function scoreOne(c: CandidateInput, rubric: Rubric, ai: AiBinding, model:
   for (const d of c.docs) {
     let visible = d.visible ?? "", dflags = d.flags ?? [], dhidden = d.hidden_chars ?? 0, note = d.note ?? "";
     if (d.buf) {
-      const scan = await scanOrVision(d.name, d.buf, env);
+      const scan = await scanOrVision(d.name, d.buf, env, visionMethod);
       visible = scan.visible; dflags = scan.flags; dhidden = scan.hiddenChars; note = scan.note;
     }
     totalVisible += visible.length;
@@ -198,10 +205,10 @@ function rankResults(results: OneResult[], req: Requirements, model: string) {
   return { rubric: { jobTitle: req.jobTitle, minYears: req.minYears, requiredSkills: req.requiredSkills }, model, count: ranking.length, ranking };
 }
 
-async function evaluate(cands: CandidateInput[], req: Requirements, ai: AiBinding, model: string, env: Env, system: string) {
+async function evaluate(cands: CandidateInput[], req: Requirements, ai: AiBinding, model: string, env: Env, system: string, visionMethod: string) {
   const rubric = buildRubric(req);
   const results: OneResult[] = [];
-  for (const c of cands) results.push(await scoreOne(c, rubric, ai, model, env, system));
+  for (const c of cands) results.push(await scoreOne(c, rubric, ai, model, env, system, visionMethod));
   return rankResults(results, req, model);
 }
 
@@ -229,7 +236,7 @@ export default {
           return json({ text: s.visible, source: f.name, note: s.note });
         }
         if (isImageName(f.name)) {
-          const { text: t, via } = await visionText(buf, f.name, env);
+          const { text: t, via } = await visionText(buf, f.name, env, str(form.get("visionMethod")) || "toMarkdown");
           return json({ text: t, source: f.name, note: t ? `Text přečten z obrázku (OCR: ${via}) — u obrázků/screenshotů zkontroluj přesnost; pro jistotu vlož text nebo PDF/DOCX.` : "OCR nepřečetlo žádný text (nekvalitní screenshot?). Zkus text vložit ručně nebo jako PDF." });
         }
         return json({ error: "Podporováno: TXT, PDF, DOCX a obrázky (PNG/JPG přes vision)." }, 400);
@@ -269,12 +276,14 @@ export default {
         let inzerat = "";
         let model = EXTRACT_MODEL_DEFAULT;
         let systemPrompt = "";
+        let visionMethod = "toMarkdown";
 
         if (ctype.includes("application/json")) {
           const b = obj(await req.json());
           model = str(b.model) || model;
           inzerat = str(b.inzerat);
           systemPrompt = str(b.systemPrompt);
+          visionMethod = str(b.visionMethod) || visionMethod;
           if (b.requirements) { const r = obj(b.requirements); req0 = { jobTitle: str(r.jobTitle), minYears: Math.max(0, Math.round(num(r.minYears))), requiredSkills: arr(r.requiredSkills).map((s) => str(s).toLowerCase().trim()).filter(Boolean), weights: obj(r.weights) as Record<string, number> }; }
           for (const c of arr(b.candidates)) { const o = obj(c); files.push({ name: str(o.name) || "kandidát", visible: str(o.visible_text) }); }
         } else {
@@ -282,6 +291,7 @@ export default {
           model = str(form.get("model")) || model;
           inzerat = str(form.get("inzerat"));
           systemPrompt = str(form.get("systemPrompt"));
+          visionMethod = str(form.get("visionMethod")) || visionMethod;
           const rq = form.get("requirements");
           if (typeof rq === "string" && rq) { const r = obj(JSON.parse(rq)); req0 = { jobTitle: str(r.jobTitle), minYears: Math.max(0, Math.round(num(r.minYears))), requiredSkills: arr(r.requiredSkills).map((s) => str(s).toLowerCase().trim()).filter(Boolean), weights: obj(r.weights) as Record<string, number> }; }
           let total = 0;
@@ -317,7 +327,7 @@ export default {
               await send({ type: "start", total: cands.length, names: cands.map((c) => c.name), model });
               const results: OneResult[] = [];
               for (let i = 0; i < cands.length; i++) {
-                const r = await scoreOne(cands[i], rubric, env.AI, model, env, systemPrompt || DEFAULT_EXTRACT_SYSTEM);
+                const r = await scoreOne(cands[i], rubric, env.AI, model, env, systemPrompt || DEFAULT_EXTRACT_SYSTEM, visionMethod);
                 results.push(r);
                 await send({ type: "progress", index: i + 1, total: cands.length, name: r.name, total_score: r.score.total, disqualified: r.score.disqualified, worstSeverity: r.worstSeverity, flagCount: r.flagCount, docs: r.docs.length });
               }
@@ -329,7 +339,7 @@ export default {
           return new Response(readable, { headers: { "content-type": "application/x-ndjson; charset=utf-8", "cache-control": "no-store" } });
         }
 
-        return json(await evaluate(cands, req0, env.AI, model, env, systemPrompt || DEFAULT_EXTRACT_SYSTEM));
+        return json(await evaluate(cands, req0, env.AI, model, env, systemPrompt || DEFAULT_EXTRACT_SYSTEM, visionMethod));
       } catch (e: unknown) { return json({ error: String((e as { message?: string })?.message || e) }, 500); }
     }
 
@@ -477,15 +487,22 @@ a{color:var(--accent)}
 <!-- NASTAVENÍ -->
 <div class="view" id="nast">
   <div class="card">
-    <h3>AI model</h3>
-    <label>Model pro extrakci dat z CV</label>
+    <h3>AI modely (každá agenda zvlášť)</h3>
+    <label>Extrakce dat z CV (hlavní, běží na každém dokumentu)</label>
     <select id="model">
       <option value="@cf/meta/llama-3.1-8b-instruct-fp8">Cloudflare Workers AI · Llama 3.1 8B (zdarma, rychlý — doporučeno)</option>
       <option value="@cf/meta/llama-3.3-70b-instruct-fp8-fast">Cloudflare Workers AI · Llama 3.3 70B (zdarma, silnější, pomalejší)</option>
       <option value="@cf/openai/gpt-oss-120b">Cloudflare Workers AI · gpt-oss 120B (zdarma, nejsilnější, latence kolísá)</option>
       <option value="claude" disabled>Anthropic Claude (nejlepší kvalita — vyžaduje API klíč, zatím nedostupné)</option>
     </select>
-    <div class="hint">Primárně běží <b>zdarma</b> na Cloudflare Workers AI. Claude se zapne, až bude nastaven API klíč (max kvalita/spolehlivost). Nastavení se ukládá v prohlížeči.</div>
+    <label>Odvození požadavků z inzerátu (jednorázově — může být silnější)</label>
+    <select id="modelDerive"></select>
+    <label>Čtení obrázků / screenshotů (OCR)</label>
+    <select id="visionMethod">
+      <option value="toMarkdown">Cloudflare toMarkdown (doporučeno — lepší OCR hustého textu)</option>
+      <option value="llava">LLaVA 1.5 7B (vision model, hustý text jen odhaduje)</option>
+    </select>
+    <div class="hint">Každá úloha může běžet na <b>jiném</b> modelu. Primárně <b>zdarma</b> na Cloudflare Workers AI; Claude se zapne s API klíčem. Volby se ukládají v prohlížeči. Aktivní extrakční model + jeho dostupnost vidíš v horní liště.</div>
   </div>
   <div class="card">
     <h3>Váhy kritérií</h3>
@@ -658,6 +675,14 @@ $$('.tab').forEach(t=>t.onclick=()=>{$$('.tab').forEach(x=>x.classList.remove('o
 // model persist + stavová lišta
 const modelSel=$('#model'); modelSel.value=localStorage.getItem('faxx_model')||modelSel.value;
 const model=()=>modelSel.value;
+// odvození požadavků — vlastní model (klon voleb), OCR obrázků — vlastní metoda
+const deriveSel=$('#modelDerive');
+if(deriveSel){[...modelSel.options].forEach(o=>{const c=document.createElement('option');c.value=o.value;c.textContent=o.textContent;if(o.disabled)c.disabled=true;deriveSel.appendChild(c)});
+  deriveSel.value=localStorage.getItem('faxx_model_derive')||modelSel.value;deriveSel.onchange=()=>localStorage.setItem('faxx_model_derive',deriveSel.value)}
+const modelDerive=()=>deriveSel?deriveSel.value:model();
+const visSel=$('#visionMethod');
+if(visSel){visSel.value=localStorage.getItem('faxx_vision')||'toMarkdown';visSel.onchange=()=>localStorage.setItem('faxx_vision',visSel.value)}
+const visionMethod=()=>visSel?visSel.value:'toMarkdown';
 const shortModel=m=>m.split('/').pop();
 function updSb(){$('#sbModel').textContent=shortModel(model())}
 function pingAI(){
@@ -714,7 +739,7 @@ $('#deriveBtn').onclick=async()=>{
   const inz=$('#inzerat').value.trim(); if(!inz){$('#deriveMsg').textContent='Vlož nejdřív text inzerátu.';return}
   $('#deriveBtn').disabled=true;$('#deriveMsg').textContent='Odvozuji…';
   try{
-    const r=await fetch('/api/derive',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({inzerat:inz,model:model()})}).then(r=>r.json());
+    const r=await fetch('/api/derive',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({inzerat:inz,model:modelDerive()})}).then(r=>r.json());
     if(r.error){$('#deriveMsg').textContent='Chyba: '+r.error}
     else{$('#jobTitle').value=r.jobTitle||'';$('#minYears').value=r.minYears||0;$('#skills').value=(r.requiredSkills||[]).join(', ');$('#deriveMsg').textContent='Hotovo ('+(r.ms||0)+' ms) — uprav podle sebe.'}
   }catch(e){$('#deriveMsg').textContent='Chyba: '+e}
@@ -748,7 +773,7 @@ $('#evalBtn').onclick=async()=>{
   $('#err').textContent='';
   if(!files.length){$('#err').textContent='Přidej aspoň jedno CV.';return}
   const req={jobTitle:$('#jobTitle').value.trim(),minYears:+$('#minYears').value||0,requiredSkills:$('#skills').value.split(',').map(s=>s.trim().toLowerCase()).filter(Boolean),weights:getWeights()};
-  const fd=new FormData();fd.set('model',model());fd.set('requirements',JSON.stringify(req));fd.set('inzerat',$('#inzerat').value);fd.set('systemPrompt',getSysPrompt());
+  const fd=new FormData();fd.set('model',model());fd.set('requirements',JSON.stringify(req));fd.set('inzerat',$('#inzerat').value);fd.set('systemPrompt',getSysPrompt());fd.set('visionMethod',visionMethod());
   for(const f of files)fd.append('cv',f);
   $('#evalBtn').disabled=true;$('#evalMsg').textContent='';
   try{ await evaluateStream(fd); }catch(e){ $('#err').textContent='Chyba: '+e }
