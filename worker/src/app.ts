@@ -172,7 +172,7 @@ export function groupByPerson(files: { name: string; buf?: Uint8Array; visible?:
 // Zpracuje JEDNOHO kandidáta (všechny jeho dokumenty) → výsledek se skóre.
 async function scoreOne(c: CandidateInput, rubric: Rubric, ai: AiBinding, model: string, env: Env, system: string, visionMethod: string) {
   let flags: { type: string; severity: string; location: string; evidence: string; doc?: string }[] = [];
-  let hiddenChars = 0, extMs = 0, extOk = false, totalVisible = 0;
+  let hiddenChars = 0, extMs = 0, extOk = false, totalVisible = 0, extError = "";
   const notes: string[] = [];
   const docsMeta: { name: string; doc_type: string; visible_chars: number; hidden_chars: number; flags: number; note: string }[] = [];
   const quals: Qualification[] = [];
@@ -190,6 +190,7 @@ async function scoreOne(c: CandidateInput, rubric: Rubric, ai: AiBinding, model:
     if (visible.trim()) {
       const ext = await extractQualification(visible, ai, model);
       quals.push(ext.qualification); ids.push(ext.identity); dType = ext.docType; docTypes.push(ext.docType); extMs += ext.ms; extOk = extOk || ext.ok;
+      if (ext.error && !extError) extError = ext.error;
     }
     flags = flags.concat(dflags.map((f) => ({ ...f, doc: d.name })));
     hiddenChars += dhidden;
@@ -208,7 +209,7 @@ async function scoreOne(c: CandidateInput, rubric: Rubric, ai: AiBinding, model:
   return {
     name: identity.full_name || c.name, identity, score, isCandidate, docTypes,
     flags, worstSeverity: worstSeverity(flags), flagCount: flags.length,
-    qualification: merged, extract_ms: extMs, extract_ok: extOk,
+    qualification: merged, extract_ms: extMs, extract_ok: extOk, extract_error: extError,
     docs: docsMeta, visible_chars: totalVisible, hidden_chars: hiddenChars, note: notes.join(" · "),
   };
 }
@@ -221,7 +222,7 @@ function rankResults(results: OneResult[], req: Requirements, model: string) {
     breakdown: r.score.breakdown.map((b) => ({ label: b.label, score: b.score, detail: b.detail })),
     identity: r.identity, isCandidate: r.isCandidate, docTypes: r.docTypes, qualification: r.qualification,
     flags: r.flags, worstSeverity: r.worstSeverity, flagCount: r.flagCount, docs: r.docs,
-    extract_ms: r.extract_ms, extract_ok: r.extract_ok, visible_chars: r.visible_chars, hidden_chars: r.hidden_chars, note: r.note,
+    extract_ms: r.extract_ms, extract_ok: r.extract_ok, extract_error: r.extract_error, visible_chars: r.visible_chars, hidden_chars: r.hidden_chars, note: r.note,
   }));
   return { rubric: { jobTitle: req.jobTitle, minYears: req.minYears, requiredSkills: req.requiredSkills }, model, count: ranking.length, ranking };
 }
@@ -924,6 +925,9 @@ function renderResults(r){
   const hiddenN=all.length-shown.length;
   let h='<div class="card"><h3>Pořadí — '+esc(r.rubric.jobTitle)+' · model '+esc((r.model||'').split("/").pop())+(r.rescored?' · <span style="color:var(--accent)">přepočet bez AI</span>':'')+'</h3>';
   h+='<div class="hint">Gate: min. '+r.rubric.minYears+' let praxe · dovednosti: '+esc((r.rubric.requiredSkills||[]).join(", "))+(hiddenN>0?' · <span style="color:var(--amber)">skryto '+hiddenN+' ne-uchazečských dok.</span>':'')+'</div>';
+  const errs=shown.filter(c=>c.extract_ok===false&&c.extract_error);
+  if(errs.length){const e=esc(errs[0].extract_error),quota=/4006|neuron|allocation/i.test(errs[0].extract_error||'');
+    h+='<div style="margin:8px 0;padding:10px 12px;border:1px solid #5a2430;border-radius:8px;background:rgba(240,85,107,.10);color:var(--txt);font-size:13px">⛔ <b>AI extrakce selhala</b> u '+errs.length+' z '+shown.length+' kandidátů — skóre nejsou platná.<br><span class="hint">Důvod: '+e+'</span>'+(quota?'<br><b>Vyčerpaná denní free kvóta Cloudflare Workers AI (10 000 neuronů/den).</b> Reset o půlnoci UTC. Řešení: počkat na reset, přepnout model v Nastavení, nebo přejít na Workers Paid / Claude (s klíčem).':'')+'</div>';}
   h+='<table class="rank"><tr><th>#</th><th>Kandidát</th><th>Skóre</th><th>Nález</th><th></th></tr>';
   shown.forEach((c,i)=>{
     const sevB=c.disqualified?'<span class="badge dq">diskvalifikován</span>':'<span class="badge '+c.worstSeverity+'">'+(c.worstSeverity==='clean'?'čisto':(SEV[c.worstSeverity]||'')+' '+c.flagCount+'×')+'</span>';
