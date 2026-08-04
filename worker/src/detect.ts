@@ -312,6 +312,79 @@ function pdfText(buf: Uint8Array): string {
   }
   return out + " " + contentText(raw);
 }
+
+// --- glyf ↔ ToUnicode diff (V-PDF-06): displej != extrakce (edge, bez PyMuPDF) ---
+function hexToUtf16(h: string): string {
+  const b = h.match(/.{1,2}/g)?.map((x) => parseInt(x, 16)) ?? [];
+  let out = "";
+  for (let i = 0; i + 1 < b.length; i += 2) out += String.fromCharCode((b[i] << 8) | b[i + 1]);
+  if (b.length % 2) out += String.fromCharCode(b[b.length - 1]);
+  return out;
+}
+function parseToUnicodeCmap(data: Uint8Array): Record<number, string> {
+  const s = strFromU8(data, true);
+  const map: Record<number, string> = {};
+  for (const blk of s.match(/beginbfchar([\s\S]*?)endbfchar/g) || []) {
+    const re = /<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>/g; let m: RegExpExecArray | null;
+    while ((m = re.exec(blk))) map[parseInt(m[1], 16)] = hexToUtf16(m[2]);
+  }
+  for (const blk of s.match(/beginbfrange([\s\S]*?)endbfrange/g) || []) {
+    const re = /<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>/g; let m: RegExpExecArray | null;
+    while ((m = re.exec(blk))) {
+      const lo = parseInt(m[1], 16), hi = parseInt(m[2], 16), base = hexToUtf16(m[3]);
+      if (!base.length) continue;
+      for (let i = 0; i <= Math.min(hi - lo, 65535); i++)
+        map[lo + i] = base.slice(0, -1) + String.fromCharCode((base.charCodeAt(base.length - 1) + i) & 0xffff);
+    }
+  }
+  return map;
+}
+function pdfObjectStream(raw: string, buf: Uint8Array, objNum: number): Uint8Array | null {
+  const mm = new RegExp("(?:^|[^0-9])" + objNum + "\\s+0\\s+obj\\b").exec(raw);
+  if (!mm) return null;
+  const objStart = mm.index + mm[0].length;
+  const sm = /stream\r?\n/.exec(raw.slice(objStart));
+  if (!sm) return null;
+  const dictHdr = raw.slice(objStart, objStart + sm.index);
+  const dataStart = objStart + sm.index + sm[0].length;
+  const dataEnd0 = raw.indexOf("endstream", dataStart);
+  if (dataEnd0 < 0) return null;
+  let dEnd = dataEnd0;
+  while (dEnd > dataStart && (raw.charCodeAt(dEnd - 1) === 0x0a || raw.charCodeAt(dEnd - 1) === 0x0d)) dEnd--;
+  let data = buf.subarray(dataStart, dEnd);
+  if (/\/FlateDecode/.test(dictHdr)) { const inf = inflate(data); if (!inf) return null; data = inf; }
+  return data;
+}
+export interface ToUniObf { payload: string; gibberish: string; font: string }
+/** Neembedovaný simple font s /ToUnicode, který remapuje ASCII kódy na neidentické
+ *  Unicode = útok displej≠extrakce. Embedované/subset fonty (reálný Word) se přeskočí → 0 FP. */
+export function pdfToUnicodeObfuscation(buf: Uint8Array): ToUniObf[] {
+  const raw = strFromU8(buf, true);
+  const out: ToUniObf[] = [];
+  const seen = new Set<number>();
+  const objRe = /\d+\s+0\s+obj\b([\s\S]*?)endobj/g; let m: RegExpExecArray | null;
+  while ((m = objRe.exec(raw))) {
+    const body = m[1];
+    if (!/\/Type\s*\/Font/.test(body) || !/\/Subtype\s*\/(Type1|TrueType)/.test(body)) continue;
+    if (/\/FontDescriptor/.test(body)) continue;                 // embedovaný → SKIP (proti FP)
+    const tu = /\/ToUnicode\s+(\d+)\s+0\s+R/.exec(body);
+    if (!tu) continue;
+    const objNum = parseInt(tu[1], 10);
+    if (seen.has(objNum)) continue; seen.add(objNum);
+    const data = pdfObjectStream(raw, buf, objNum);
+    if (!data) continue;
+    const cmap = parseToUnicodeCmap(data);
+    const codes = Object.keys(cmap).map(Number).filter((c) => c >= 0x20 && c <= 0xff && cmap[c]);
+    const remap = codes.filter((c) => c <= 0x7e && cmap[c] !== String.fromCharCode(c));
+    if (remap.length < 3) continue;                              // pár remapů (ligatury) neřešíme
+    codes.sort((a, b) => a - b);
+    const payload = codes.map((c) => cmap[c]).join("").trim();
+    const bf = /\/BaseFont\s*\/([A-Za-z0-9+\-,.]+)/.exec(body);
+    if (payload) out.push({ payload, gibberish: codes.map((c) => String.fromCharCode(c)).join(""), font: bf ? bf[1] : "?" });
+  }
+  return out;
+}
+
 // toMarkdown přidává na začátek hlavičku "# soubor\n## Metadata\n- key=val…" —
 // pro člověka i AI je to šum, odstraníme ji (jen když je přesně v tomto tvaru).
 function stripMdMeta(md: string): string {
@@ -368,6 +441,18 @@ export async function scanDocument(fname: string, buf: Uint8Array, env: DetectEn
     } else if (ext === "pdf") {
       const { text, raw, via, err } = await extractPdfText(buf, fname, env);
       res.visible = text.trim();
+      // glyf ↔ ToUnicode diff (V-PDF-06): displej != extrakce → payload NIKDY do visible_text
+      for (const o of pdfToUnicodeObfuscation(buf)) {
+        if (o.payload && res.visible.includes(o.payload)) res.visible = res.visible.replace(o.payload, " ");
+        const hit = inj(o.payload);
+        res.flags.push({
+          type: "pdf_tounicode_mismatch", severity: hit ? "critical" : "warn",
+          location: L(lang, `neembedovaný font ${o.font} (glyf ≠ ToUnicode: člověk vidí „${o.gibberish.slice(0, 24)}…“, extraktor čte payload)`,
+            `non-embedded font ${o.font} (glyph ≠ ToUnicode: human sees “${o.gibberish.slice(0, 24)}…”, extractor reads payload)`),
+          evidence: (hit ? `${L(lang, "[shoda: ", "[match: ")}${hit}] ` : "") + o.payload.slice(0, 180), method: "deterministic",
+        });
+        res.hidden += o.payload + "\n";
+      }
       // injection hledáme ve viditelném textu I v raw extrakci (union) — ale raw už do visible NEjde
       const ctx = injectionContext(text) || (raw && raw !== text ? injectionContext(raw) : null);
       if (ctx) res.flags.push({ type: "pdf_injection_text", severity: "warn", location: L(lang, `PDF (textová vrstva, ${via})`, `PDF (text layer, ${via})`), evidence: L(lang, "nalezená pasáž: „", "found passage: “") + ctx + (lang === "en" ? "”" : "“"), method: "classifier" });

@@ -45,12 +45,14 @@ bezpečnostní a validační brány platí ihned na sdíleném jádře.**
 > *fakta*. Skrytý fact-swap (ToUnicode) je reálná díra → **dual-path diff povýšen na P0**.
 > Naopak *viditelné* nadsazené sebehodnocení je mimo scope (self-report, řeší člověk/pohovor).
 >
-> **Stav G4 (2026-08-04):** ToUnicode sub-třída (**V-PDF-06**) je **uzavřena** on-prem glyf↔ToUnicode
-> diffem (`pdf_tounicode_obfuscation`): u neembedovaného simple fontu remapujícího ASCII kódy na
-> neidentické Unicode se payload zadrží do `hidden_text` (`critical:pdf_tounicode_mismatch`),
-> nejde do `visible_text`. Regrese 24/24, 0 FP (embedované/subset fonty se přeskočí). Zbývá plný
-> **render→OCR dual-path** (display-divergence i mimo ToUnicode: render mode, off-page) — čeká na
-> OCR engine (Tesseract) v on-prem runneru.
+> **Stav G4 (2026-08-04):** ToUnicode sub-třída (**V-PDF-06**) je **uzavřena on-prem I na edge**
+> glyf↔ToUnicode diffem: neembedovaný simple font remapující ASCII kódy na neidentické Unicode →
+> payload se zadrží do `hidden_text` (`critical:pdf_tounicode_mismatch`), nejde do `visible_text`.
+> On-prem `detector/hidden_text.py` (`pdf_tounicode_obfuscation`, PyMuPDF), edge `worker/src/detect.ts`
+> (raw bytes + fflate, bez PyMuPDF; `pdfToUnicodeObfuscation`). Embedované/subset fonty se přeskočí →
+> **0 FP** (regrese 24/24 on-prem; Node test edge). Edge raw-regex parser chytá crafted vektor;
+> fonty ve compressed object streams (moderní PDF) nechytí — ale ty jsou embedované (skip). Zbývá plný
+> **render→OCR dual-path** (display-divergence i mimo ToUnicode) — čeká na OCR engine (Tesseract).
 >
 > **Stav G1 (2026-08-04):** **měřicí harness hotový** — `detector/benchmark.py` (containment /
 > detection / critical / FP proti prahům F0; `--corpus DIR` pro held-out) + protokol

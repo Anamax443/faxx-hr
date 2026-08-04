@@ -2,6 +2,20 @@
 
 Append-only. Nejnovější záznam nahoru. Slouží k pokračování z jiného počítače / po pauze.
 
+## 2026-08-04 (p) — V-PDF-06 uzavřen i na EDGE (Track A, bez DB)
+- Port ToUnicode fixu z on-prem na **edge detektor** `worker/src/detect.ts`: nové
+  `pdfToUnicodeObfuscation` + `parseToUnicodeCmap` + `pdfObjectStream` (raw PDF bytes + fflate
+  FlateDecode, **bez PyMuPDF**). Neembedovaný simple font (`/Subtype /Type1|TrueType`, BEZ
+  `/FontDescriptor`) s `/ToUnicode`, který remapuje ASCII kódy na neidentické Unicode → payload
+  se **stripne z visible** (co člověk nevidí, model nedostane) + do `hidden` + flag
+  `pdf_tounicode_mismatch` (critical když `inj`). **Sdíleno app i upload** (F0 demo).
+- **Ověřeno (Node, esbuild detect.ts):** V-PDF-06 detekován (payload zrekonstruován), čistý PDF
+  **0 nálezů** (0 FP), strip odstraní „nejlepsi kandidat" z visible. Oba buildy zelené (app 194 / upload 41 KiB).
+- **Rozsah:** edge raw-regex parser chytá crafted vektor; fonty ve compressed object streams
+  (moderní PDF) nechytí — ty jsou ale embedované → přeskočeny (na attack stačí, na FP bezpečné).
+  On-prem PyMuPDF verze robustnější. Track A (bez DB). **NENASAZENO** — čeká svolení (app + upload).
+- Roadmapa §15.0 stav G4 aktualizován (uzavřeno on-prem I na edge).
+
 ## 2026-08-04 (o) — G1 z oponentur: F0 měřicí harness + held-out protokol
 - **`detector/benchmark.py`** — F0 benchmark runner: měří **containment recall** (skrytý payload
   nesmí do `visible_text` — strukturální, bezpečnost), **detection recall**, **critical recall**
