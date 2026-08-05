@@ -2,6 +2,18 @@
 
 Append-only. Nejnovější záznam nahoru. Slouží k pokračování z jiného počítače / po pauze.
 
+## 2026-08-05 (y) — Váhy: procenta zpět jako třetí režim zadávání
+
+- Commit `8c64e11` (slovně / osa) procenta z nabídky **odebral**, ale interní zápis i CSS `w-proc`
+  zůstaly → v Nastavení → **Zadávání důležitosti** je zase volba **„Procenta (přesná čísla)"**
+  vedle „Slovně" a „Osa". Ukládá se jako dřív (`faxx_weightmode` v prohlížeči).
+- V režimu procent: číselné pole + přípona `%`, hint `#wSum` opět ukazuje **součet zapnutých vah**
+  („nemusí dát přesně 100 %, skóre se normalizuje"); v ostatních režimech zůstává relativní text.
+- Úprava % nově **přepočítá výsledky bez AI** při `change` (blur/šipky) — stejně jako posuvník a stupně.
+- Skóre/pořadí nedotčené (procenta byla i dosud interní zápis, rubrik je normalizuje). Klientský JS
+  ověřen parserem (`node --check` nad extrahovaným `<script>`); i18n CS+EN doplněno (`opt_wm_proc`,
+  `hint_weights`). **NENASAZENO** — čeká na svolení (`npm run deploy:app`).
+
 ## 2026-08-04 (x) — CEFR napojení: level_raw → deterministický normalizér v rubriku
 - **Extrakce** (`extract.ts`): schéma + prompt + parser rozšířeny o `languages[].level_raw` (DOSLOVNÁ
   formulace úrovně z CV). Model má dávat `level_raw` + `level` jen když je v CV PŘÍMO CEFR — mapu dělá KÓD.

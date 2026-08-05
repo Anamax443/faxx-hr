@@ -538,7 +538,7 @@ button:disabled{opacity:.5;cursor:not-allowed}
 #weightsCard[data-wmode=proc] .w-osa,#weightsCard[data-wmode=proc] .w-slov{display:none}
 #weightsCard[data-wmode=osa] .w-proc,#weightsCard[data-wmode=osa] .w-slov{display:none}
 #weightsCard[data-wmode=slov] .w-proc,#weightsCard[data-wmode=slov] .w-osa{display:none}
-#weightsCard input[type=range].w-osa{width:calc(100% - 28px);vertical-align:middle}.osaVal{display:inline-block;width:20px;text-align:right;color:var(--muted)}
+#weightsCard input[type=range].w-osa,#weightsCard input[type=number].w-proc{width:calc(100% - 28px);vertical-align:middle}.osaVal{display:inline-block;width:20px;text-align:right;color:var(--muted)}
 .det{background:var(--panel2);border-radius:8px;padding:10px 12px;margin-top:8px;font-size:13px;display:none}
 .det.on{display:block}
 .det .crit{margin:3px 0;color:var(--muted)}.det .crit b{color:var(--txt)}
@@ -687,6 +687,7 @@ a{color:var(--accent)}
     <select id="weightMode">
       <option value="slov" data-i18n="opt_wm_slov">Slovně (stupně důležitosti)</option>
       <option value="osa" data-i18n="opt_wm_osa">Osa (posuvník 0–5)</option>
+      <option value="proc" data-i18n="opt_wm_proc">Procenta (přesná čísla)</option>
     </select>
     <div class="row">
       <div><label><input type="checkbox" class="crit-on" id="on_roky_praxe" checked style="width:auto;margin-right:6px"><span data-i18n="w_roky_praxe">Roky praxe</span></label><input type="number" min="0" id="w_roky_praxe" value="25"></div>
@@ -701,7 +702,7 @@ a{color:var(--accent)}
     <div class="hint" id="wSum">Součet: 100 %</div>
     <div class="hint" data-i18n="hint_criton">Odškrtnuté kritérium se do skóre nezapočítá (vyřadíš ho z rubriku). Vypnutí/zapnutí přepočítá výsledky bez AI.</div>
     <button class="ghost" id="wReset" style="margin-top:10px" data-i18n="b_reset">Obnovit výchozí</button>
-    <div class="hint" style="margin-top:8px" data-i18n="hint_weights">Skóre počítá deterministický rubrik nad daty, která z CV vytáhla AI. Důležitost kritérií (slovně nebo osou) se ukládá v prohlížeči a použije se při dalším vyhodnocení; porovnává se relativně mezi kritérii (normalizuje se). Gate (min. roky praxe) nastavíš u požadavků na záložce Hodnocení.</div>
+    <div class="hint" style="margin-top:8px" data-i18n="hint_weights">Skóre počítá deterministický rubrik nad daty, která z CV vytáhla AI. Důležitost kritérií (slovně, osou nebo přímo v procentech) se ukládá v prohlížeči a použije se při dalším vyhodnocení; porovnává se relativně mezi kritérii (normalizuje se). Gate (min. roky praxe) nastavíš u požadavků na záložce Hodnocení.</div>
   </div>
   <div class="card">
     <h3 data-i18n="h_scoreview">Zobrazení hodnocení</h3>
@@ -1058,10 +1059,10 @@ var EN={
   l_model_derive:"Deriving requirements from the ad (one-off — can be stronger)", l_model_vision:"Reading images / screenshots (OCR)",
   opt_v_md:"Cloudflare toMarkdown (recommended — better OCR of dense text)", opt_v_llava:"LLaVA 1.5 7B (vision model, only guesses dense text)",
   hint_models:"Each task can run on a <b>different</b> model. Primarily <b>free</b> on Cloudflare Workers AI; Claude turns on with an API key. Choices are stored in the browser. The active extraction model and its availability are shown in the top bar.",
-  h_weights:"Criterion weights", l_weightmode:"Importance input", opt_wm_slov:"Words (importance tiers)", opt_wm_osa:"Axis (slider 0–5)", opt_wm_proc:"Percent (expert)",
+  h_weights:"Criterion weights", l_weightmode:"Importance input", opt_wm_slov:"Words (importance tiers)", opt_wm_osa:"Axis (slider 0–5)", opt_wm_proc:"Percent (exact numbers)",
   w_roky_praxe:"Years of experience", w_dovednosti:"Skill match", w_vzdelani:"Education",
   w_en:"English", w_stabilita:"Stability", w_certifikace:"Certifications", b_reset:"Reset to default",
-  hint_weights:"The score is computed by a deterministic rubric over the data the AI extracted from the CV. Criterion importance (words or an axis) is stored in the browser and applied at the next evaluation; it is compared relatively across criteria (normalised). The gate (min. years of experience) is set under Requirements on the Evaluation tab.",
+  hint_weights:"The score is computed by a deterministic rubric over the data the AI extracted from the CV. Criterion importance (words, an axis or percent directly) is stored in the browser and applied at the next evaluation; it is compared relatively across criteria (normalised). The gate (min. years of experience) is set under Requirements on the Evaluation tab.",
   h_scoreview:"Assessment display", l_scoreview:"How to display results (the score is computed the same — only the display changes)",
   opt_sv_both:"Both — dots and number (default)", opt_sv_view:"At-a-glance — dots ● ◐ ○ —, no numbers", opt_sv_num:"Numeric — score 0–100 and points",
   hint_scoreview:"At-a-glance = the candidate profile at first sight, without false precision; 'not evidenced' is not an average. Certainty axis: ◆ stated · ◇ inferred · · unknown. Stored in the browser.",
@@ -1204,10 +1205,14 @@ const WDEF={roky_praxe:25,dovednosti:30,vzdelani:15,en:10,stabilita:10,certifika
 function getWeights(){const o={};WKEYS.forEach(k=>o[k]=Math.max(0,+$('#w_'+k).value||0));return o}
 function getDisabled(){return WKEYS.filter(k=>{const c=$('#on_'+k);return c&&!c.checked})}
 function applyDisabledState(){WKEYS.forEach(k=>{const c=$('#on_'+k),inp=$('#w_'+k);if(c&&inp)inp.disabled=!c.checked})}
-function wSum(){const on=WKEYS.filter(k=>{const c=$('#on_'+k);return !c||c.checked});const el=$('#wSum');if(!el)return;el.textContent=tl('Důležitost je relativní — porovnává se mezi kritérii (normalizuje se). ','Importance is relative — compared across criteria (normalised). ')+on.length+'/'+WKEYS.length+' '+tl('zapnutých','enabled')}
+function wSum(){const on=WKEYS.filter(k=>{const c=$('#on_'+k);return !c||c.checked});const el=$('#wSum');if(!el)return;
+  const card=$('#weightsCard'),mode=(card&&card.getAttribute('data-wmode'))||'slov';
+  if(mode==='proc'){const o=getWeights();el.textContent=tl('Součet (zapnutá): ','Sum (enabled): ')+on.reduce((a,k)=>a+o[k],0)+' % · '+on.length+'/'+WKEYS.length+' '+tl('kritérií · nemusí dát přesně 100 %, skóre se normalizuje','criteria · need not total exactly 100 %, the score is normalised');return}
+  el.textContent=tl('Důležitost je relativní — porovnává se mezi kritérii (normalizuje se). ','Importance is relative — compared across criteria (normalised). ')+on.length+'/'+WKEYS.length+' '+tl('zapnutých','enabled')}
 function saveWeights(){localStorage.setItem('faxx_weights',JSON.stringify(getWeights()));localStorage.setItem('faxx_disabled',JSON.stringify(getDisabled()));applyDisabledState();wSum();if(window.__syncWctl)window.__syncWctl()}
 (function(){const s=JSON.parse(localStorage.getItem('faxx_weights')||'null')||WDEF;let dis=[];try{dis=JSON.parse(localStorage.getItem('faxx_disabled')||'[]')||[]}catch(e){}
-  WKEYS.forEach(k=>{$('#w_'+k).value=s[k]??WDEF[k];$('#w_'+k).oninput=saveWeights;const c=$('#on_'+k);if(c){c.checked=dis.indexOf(k)<0;c.onchange=()=>{saveWeights();if(typeof lastEval!=='undefined'&&lastEval)rescoreNow()}}});applyDisabledState();wSum()})();
+  WKEYS.forEach(k=>{$('#w_'+k).value=s[k]??WDEF[k];$('#w_'+k).oninput=saveWeights;
+    $('#w_'+k).onchange=()=>{saveWeights();if(typeof lastEval!=='undefined'&&lastEval)rescoreNow()};const c=$('#on_'+k);if(c){c.checked=dis.indexOf(k)<0;c.onchange=()=>{saveWeights();if(typeof lastEval!=='undefined'&&lastEval)rescoreNow()}}});applyDisabledState();wSum()})();
 $('#wReset').onclick=()=>{WKEYS.forEach(k=>{$('#w_'+k).value=WDEF[k];const c=$('#on_'+k);if(c)c.checked=true});saveWeights();if(typeof lastEval!=='undefined'&&lastEval)rescoreNow()};
 // --- zadávání důležitosti slovně / osou (procenta jsou jen neviditelný interní zápis; rubrik normalizuje) ---
 (function(){var card=$('#weightsCard');if(!card)return;
@@ -1215,6 +1220,8 @@ $('#wReset').onclick=()=>{WKEYS.forEach(k=>{$('#w_'+k).value=WDEF[k];const c=$('
   function w2tier(w){return w<=0?0:w<=15?1:w<=25?2:w<=37?3:4}
   function w2osa(w){var v=Math.round(w/10);return v<0?0:v>5?5:v}
   WKEYS.forEach(function(k){var w=$('#w_'+k);if(!w)return;w.classList.add('wctl','w-proc');var box=w.parentNode;
+    var pc=document.createElement('span');pc.id='pv_'+k;pc.className='wctl w-proc osaVal';pc.textContent='%';
+    box.insertBefore(pc,w.nextSibling);
     var sl=document.createElement('input');sl.type='range';sl.min=0;sl.max=5;sl.step=1;sl.id='s_'+k;sl.className='wctl w-osa';
     var so=document.createElement('span');so.id='sv_'+k;so.className='wctl w-osa osaVal';
     sl.oninput=function(){w.value=(+sl.value)*10;so.textContent=sl.value;saveWeights();if(typeof lastEval!=='undefined'&&lastEval)rescoreNow()};
