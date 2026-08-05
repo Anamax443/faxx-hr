@@ -314,7 +314,7 @@ tokeny a `account_id` **nejsou** v této dokumentaci (jde do public repa).
 
 **Edge propagace.** Po `wrangler deploy` se nový bundl propaguje do edge sítě Cloudflare;
 kombinovaně s browser cache stránky je proto po deployi potřeba hard-refresh (§11.6). Živé
-URL: `https://faxx-hr-app.bass443.workers.dev` (appka) a
+URL: `https://faxx-hr.maxferit.cz` (appka) a
 `https://faxx-hr-upload.bass443.workers.dev` (demo).
 
 **On-prem runner.** Realizace on-prem runneru (Beelink / EU VPS za Conduit gateway) pro

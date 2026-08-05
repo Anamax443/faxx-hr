@@ -8,7 +8,7 @@
 
 > **Implementation status (2026-08-04).** This document describes the **target architecture**
 > (e-mail ingest → R2/D1 → dual-path → Claude cascade → on-prem OCR). What actually already runs
-> is the **[evaluation app](https://faxx-hr-app.bass443.workers.dev)** (`worker/src/app.ts`),
+> is the **[evaluation app](https://faxx-hr.maxferit.cz)** (`worker/src/app.ts`),
 > which has assembled the verified core of **detection → extraction → deterministic rubric** into
 > a **batch tool at the edge** (no e-mail, no persistence yet). The app is fully
 > **bilingual (CS/EN)** and has a **light/dark theme**. Deviations from the design below: the AI backend

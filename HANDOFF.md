@@ -2,6 +2,29 @@
 
 Append-only. Nejnovější záznam nahoru. Slouží k pokračování z jiného počítače / po pauze.
 
+## 2026-08-05 (ac) — Dva pojmenované dokumenty jednoho VŘ + A4 na výšku + odkazy na maxferit
+
+- **Pojmenování** (dřív matoucí „manažerský výstup" ×2): jedno výběrové řízení = **dva dokumenty**,
+  liší se čtenářem:
+  | Dokument | Funkce | Pro koho | Obsahuje osobní údaje? |
+  |---|---|---|---|
+  | **Výstup výběrového řízení** (`buildDeck`) | souhrn, na promítání i tisk | vedení | **ne** (bez kontaktů) |
+  | **Protokol výběrového řízení** (`buildReport`) | doklad, jak se rozhodovalo | personalista, archiv | **ano** (kontakty) |
+  Tlačítka: „📊 Výstup výběrového řízení" · „🖨️ Protokol výběrového řízení" · „⬇️ Protokol jako HTML".
+  Oba dokumenty na sebe **odkazují textem** („Dokument 1 ze 2 …") — kdo dostane jeden, ví o druhém.
+  Soubory: `vystup-vyberoveho-rizeni.html` / `protokol-vyberoveho-rizeni.html` (EN `selection-outcome`
+  / `selection-record`).
+- **Orientace A4 na výšku** (dřív na šířku): `@page{size:A4 portrait}`, dlaždice 4 → **2×2**, heatmapa
+  `table-layout:fixed` + zalamování hlaviček, „proč" bloky pod sebou. Ověřeno: PDF **6 stran,
+  MediaBox 595×842 pt = A4 portrait**, nic nepřetéká (kontrola simulací tiskového CSS v šířce 690 px).
+- **Odkazy: `…workers.dev` → `faxx-hr.maxferit.cz`.** V upload appce byl odkaz „Hodnoticí appka"
+  dokonce **relativní `href="/"`** → vedl zpátky na sebe. Opraveno v `worker/src/upload.ts` + **20
+  výskytů v 11 souborech** dokumentace (README ×2, DESIGN ×2, status.html, oponentura vč. FULL mirroru).
+  Historické záznamy v tomhle deníku se nepřepisovaly. Demo detektoru nemá custom doménu → zůstává
+  na `faxx-hr-upload.bass443.workers.dev`.
+- Ověřeno: 5/5 test suit, render nad vzorovou dávkou, kontrola kontrastu buněk (bílý text až od
+  kroku 7, tj. `#2a78d6`; 6.0 = tmavý text na `#3987e5`).
+
 ## 2026-08-05 (ab) — 📊 Prezentace pro vedení (druhý výstup vedle manažerského listu)
 
 - **Proč:** `buildReport` je pracovní list personalisty — kontakty, rozpad každého kritéria, celý text

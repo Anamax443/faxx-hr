@@ -242,7 +242,7 @@ status.html     front page se stavem projektu
 DESIGN.md       plný technický návrh; HANDOFF.md deník stavu
 ```
 
-Živé nasazení: hodnoticí appka `faxx-hr-app.bass443.workers.dev`, demo detektoru
+Živé nasazení: hodnoticí appka `faxx-hr.maxferit.cz`, demo detektoru
 `faxx-hr-upload.bass443.workers.dev`. Deploy **ručně** (`npm run deploy:app` /
 `deploy:upload`), bez CI. Extraction jádro je sdílené s repem `faxx-dox`.
 

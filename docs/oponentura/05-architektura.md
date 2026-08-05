@@ -5,7 +5,7 @@ striktně oddělené, protože záměna mezi nimi je nejčastější zdroj nedor
 oponentuře. Existuje **cílová architektura** — šestifázová bezpečnostní pipeline
 s e-mailovým ingestem, perzistencí v Cloudflare R2/D1 a kaskádou AI vrstev, kterou
 popisuje `DESIGN.md` i `docs/ARCHITECTURE.md` — a existuje **reálně nasazený systém**:
-edge aplikace (`worker/src/app.ts`, živě na `faxx-hr-app.bass443.workers.dev`), která
+edge aplikace (`worker/src/app.ts`, živě na `faxx-hr.maxferit.cz`), která
 z ověřeného jádra `detect → extract → rubric` skládá **dávkový nástroj bez e-mailu
 a bez databáze**. Kapitola nejprve rozebere cílový návrh, pak co skutečně běží, pak
 komponenty a jejich rozhraní, a nakonec — bez příkras — **kde se návrh a realita

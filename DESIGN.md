@@ -8,7 +8,7 @@
 
 > **Stav implementace (2026-08-04).** Tento dokument popisuje **cílovou architekturu**
 > (e-mail ingest → R2/D1 → dual-path → Claude kaskáda → on-prem OCR). Reálně už běží
-> **[hodnoticí appka](https://faxx-hr-app.bass443.workers.dev)** (`worker/src/app.ts`),
+> **[hodnoticí appka](https://faxx-hr.maxferit.cz)** (`worker/src/app.ts`),
 > která ověřené jádro **detekce → extrakce → deterministický rubrik** poskládala do
 > **dávkového nástroje na edge** (bez e-mailu, zatím bez perzistence). Appka je plně
 > **dvojjazyčná (CS/EN)** a má **světlý/tmavý motiv**. Odchylky od návrhu níže: AI backend

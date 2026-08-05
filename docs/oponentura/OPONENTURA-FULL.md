@@ -104,7 +104,7 @@ Dvě části jsou dostupné živě:
 
 | Část | Adresa | Co dělá |
 |---|---|---|
-| Hodnoticí appka | `faxx-hr-app.bass443.workers.dev` | dávka CV → ranking proti inzerátu, rozpad po kritériích, nálezy |
+| Hodnoticí appka | `faxx-hr.maxferit.cz` | dávka CV → ranking proti inzerátu, rozpad po kritériích, nálezy |
 | Demo detektoru (F0) | `faxx-hr-upload.bass443.workers.dev` | nahraj jedno CV a uvidíš, co je v něm skryté |
 
 Repozitář je veřejný (`Anamax443/faxx-hr`). Samotný kód detekce je spustitelný i
@@ -1196,7 +1196,7 @@ striktně oddělené, protože záměna mezi nimi je nejčastější zdroj nedor
 oponentuře. Existuje **cílová architektura** — šestifázová bezpečnostní pipeline
 s e-mailovým ingestem, perzistencí v Cloudflare R2/D1 a kaskádou AI vrstev, kterou
 popisuje `DESIGN.md` i `docs/ARCHITECTURE.md` — a existuje **reálně nasazený systém**:
-edge aplikace (`worker/src/app.ts`, živě na `faxx-hr-app.bass443.workers.dev`), která
+edge aplikace (`worker/src/app.ts`, živě na `faxx-hr.maxferit.cz`), která
 z ověřeného jádra `detect → extract → rubric` skládá **dávkový nástroj bez e-mailu
 a bez databáze**. Kapitola nejprve rozebere cílový návrh, pak co skutečně běží, pak
 komponenty a jejich rozhraní, a nakonec — bez příkras — **kde se návrh a realita
@@ -4255,7 +4255,7 @@ tokeny a `account_id` **nejsou** v této dokumentaci (jde do public repa).
 
 **Edge propagace.** Po `wrangler deploy` se nový bundl propaguje do edge sítě Cloudflare;
 kombinovaně s browser cache stránky je proto po deployi potřeba hard-refresh (§11.6). Živé
-URL: `https://faxx-hr-app.bass443.workers.dev` (appka) a
+URL: `https://faxx-hr.maxferit.cz` (appka) a
 `https://faxx-hr-upload.bass443.workers.dev` (demo).
 
 **On-prem runner.** Realizace on-prem runneru (Beelink / EU VPS za Conduit gateway) pro
@@ -5058,7 +5058,7 @@ techniky zkusit.
 
 Poctivá provozní výhrada: řada funkcí je **postavená a ověřená (dry-run build, jsdom,
 wrangler dev), ale NENASAZENÁ** — čeká na svolení k deploji (deploy je outward-facing,
-ruční, bez CI). Živá appka (`faxx-hr-app.bass443.workers.dev`) tak může běžet **starší
+ruční, bez CI). Živá appka (`faxx-hr.maxferit.cz`) tak může běžet **starší
 verzi**, než je v repu. Konkrétně čekají na nasazení mimo jiné: per-doc cache extrakce,
 opravy dvou chyb v už-nasazeném kódu (evidence kotvy se nedostávaly ke klientovi;
 editovatelný systémový prompt se ignoroval), autosave relace a editor rubriku.
@@ -6065,7 +6065,7 @@ status.html     front page se stavem projektu
 DESIGN.md       plný technický návrh; HANDOFF.md deník stavu
 ```
 
-Živé nasazení: hodnoticí appka `faxx-hr-app.bass443.workers.dev`, demo detektoru
+Živé nasazení: hodnoticí appka `faxx-hr.maxferit.cz`, demo detektoru
 `faxx-hr-upload.bass443.workers.dev`. Deploy **ručně** (`npm run deploy:app` /
 `deploy:upload`), bez CI. Extraction jádro je sdílené s repem `faxx-dox`.
 

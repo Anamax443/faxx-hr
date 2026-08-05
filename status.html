@@ -98,7 +98,7 @@
 
   <h2 class="section">🌐 Živě na Cloudflare (edge demonstrátor)</h2>
   <div class="card" style="margin-bottom:16px">
-    <p style="margin:0 0 8px"><strong><a href="https://faxx-hr-app.bass443.workers.dev">hodnoticí appka</a></strong> — nahraj <strong>dávku CV ≤ 10 MB</strong> + inzerát → ranking (<strong>pohledové</strong> stavy ● ◐ ○ — nebo číselné skóre, přepínatelné), rozpad po kritériích, kontakty a nálezy skrytého obsahu. Přepínatelný AI backend (výchozí <strong>zdarma</strong> Workers AI, Claude po doplnění klíče), editovatelné váhy i prompt, export PDF/HTML. Plně <strong>CS/EN</strong> + světlý/tmavý motiv.</p>
+    <p style="margin:0 0 8px"><strong><a href="https://faxx-hr.maxferit.cz">hodnoticí appka</a></strong> — nahraj <strong>dávku CV ≤ 10 MB</strong> + inzerát → ranking (<strong>pohledové</strong> stavy ● ◐ ○ — nebo číselné skóre, přepínatelné), rozpad po kritériích, kontakty a nálezy skrytého obsahu. Přepínatelný AI backend (výchozí <strong>zdarma</strong> Workers AI, Claude po doplnění klíče), editovatelné váhy i prompt, export PDF/HTML. Plně <strong>CS/EN</strong> + světlý/tmavý motiv.</p>
     <p style="margin:0 0 8px"><strong><a href="https://faxx-hr-upload.bass443.workers.dev">demo detektoru</a></strong> — nahraj jedno CV a uvidíš skrytý text (detekce běží ve Workeru na raw bytech, funguje i při vyčerpané AI kvótě).</p>
     <p style="margin:0;color:var(--muted);font-size:14px"><strong>Dvě větve:</strong> <strong>A</strong> = tento edge demonstrátor (bezstavový, veřejný, JEN ukázková data — reálná CV nikdy). <strong>B</strong> = budoucí samostatná modifikace s DB na lokální síti (perzistence, <code>audit_log</code>, GDPR/DPIA) — teprve tam reálná CV.</p>
   </div>
@@ -183,7 +183,7 @@
 
   <h2 class="section">Vyzkoušej &amp; čti dál</h2>
   <div class="card">
-    <p style="margin:0 0 8px"><strong>🌐 Hodnoticí appka (živě):</strong> <a href="https://faxx-hr-app.bass443.workers.dev">faxx-hr-app.bass443.workers.dev</a> — dávka CV → ranking proti inzerátu · <strong>Demo detektoru (živě):</strong> <a href="https://faxx-hr-upload.bass443.workers.dev">faxx-hr-upload.bass443.workers.dev</a> — přetáhni PDF/DOCX a uvidíš skrytý text.</p>
+    <p style="margin:0 0 8px"><strong>🌐 Hodnoticí appka (živě):</strong> <a href="https://faxx-hr.maxferit.cz">faxx-hr.maxferit.cz</a> — dávka CV → ranking proti inzerátu · <strong>Demo detektoru (živě):</strong> <a href="https://faxx-hr-upload.bass443.workers.dev">faxx-hr-upload.bass443.workers.dev</a> — přetáhni PDF/DOCX a uvidíš skrytý text.</p>
     <p style="margin:0 0 8px"><strong>Demo detektoru (bez závislostí):</strong> <code>python detector/demo.py</code> — vytvoří otrávené CV a odhalí skrytou injection.</p>
     <p style="margin:0 0 8px"><strong>Regresní sada (24/24):</strong> <code>python detector/test_vectors.py</code> — DOCX 14 (9 útoků + 5 FP kontrol) + PDF 10 on-prem (vyžaduje PyMuPDF).</p>
     <p style="margin:0 0 8px"><strong>Boundary matice (edge vs. on-prem):</strong> <code>python detector/boundary_matrix.py</code> — prožene 11 hraničních PDF vektorů lokálním detektorem i živým Workerem → <a href="docs/PDF-BOUNDARY-MATRIX.md">docs/PDF-BOUNDARY-MATRIX.md</a>.</p>

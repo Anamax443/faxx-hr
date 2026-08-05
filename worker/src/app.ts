@@ -893,9 +893,10 @@ a{color:var(--accent)}
     <h4>9 · Výstupy</h4>
     <ul>
       <li><b>Ranking</b> — seřazený seznam kandidátů se skóre, kontakty, seznamem dokumentů (dokumenty jdou <b>otevřít přímo z aplikace</b> klikem na název) a nálezy skrytého obsahu.</li>
-      <li><b>Manažerský výstup (tisk / PDF)</b> — samostatný tiskový přehled se <b>zadáním (původní text inzerátu + požadavky a váhy kritérií)</b> a následným pořadím, kontakty, skóre a rozpadem, i s poznámkou o lidském dohledu. Zadání i vyhodnocení na jednom místě = <b>doklad výběrového řízení</b> pro archiv i sdílení s hiring manažerem.</li>
-      <li><b>Stáhnout HTML</b> — tentýž přehled jako soubor.</li>
-      <li><b>📊 Prezentace pro vedení</b> — samostatný HTML dokument na promítání a tisk <b>na šířku</b> (6 stránek): titulní strana, čísla dávky, užší výběr (TOP 5), srovnání kandidátů podle kritérií, integrita podkladů a metodika s odpovědností. <b>Bez kontaktů a bez rozpadu detailů</b> — je to podklad na poradu, ne pracovní list personalisty. Uvnitř má tlačítka Tisk/PDF a Uložit HTML.</li>
+      <li><b>Jedno výběrové řízení = dva dokumenty.</b> Liší se čtenářem, ne obsahem „nazdařbůh": vedení dostane souhrn bez osobních údajů, personalista a archiv úplný doklad.</li>
+      <li><b>📊 Výstup výběrového řízení</b> (dokument 1 ze 2, pro vedení) — samostatné HTML na promítání a tisk, <b>6 stran A4 na výšku</b>: titulní strana, čísla dávky, užší výběr (TOP 5), srovnání kandidátů podle kritérií, integrita podkladů a metodika s odpovědností. <b>Bez kontaktů a bez rozpadu detailů.</b> Uvnitř má tlačítka Tisk/PDF a Uložit HTML.</li>
+      <li><b>🖨️ Protokol výběrového řízení</b> (dokument 2 ze 2, pro personalistu a archiv) — tiskový přehled se <b>zadáním (původní text inzerátu + požadavky a váhy kritérií)</b> a následným pořadím, <b>kontakty</b>, skóre a rozpadem, i s poznámkou o lidském dohledu. Zadání i vyhodnocení na jednom místě = <b>doklad, jak se rozhodovalo</b>. Obsahuje osobní údaje — zachází se s ním podle toho.</li>
+      <li><b>⬇️ Protokol jako HTML</b> — tentýž protokol jako soubor.</li>
       <li><b>Uložit / načíst výsledek (JSON)</b> — vyhodnocení stáhneš jako soubor a později ho zase <b>načteš</b> (📂 u tlačítka Vyhodnotit) — vrátíš se k dávce i bez databáze. Po načtení lze měnit váhy/gate a <b>🔄 Přepočítat (bez AI)</b>, aniž bys znovu nahrával CV.</li>
     </ul>
   </div>
@@ -1035,9 +1036,10 @@ a{color:var(--accent)}
     <h4>9 · Outputs</h4>
     <ul>
       <li><b>Ranking</b> — a sorted list of candidates with scores, contacts, a list of documents (documents can be <b>opened directly from the app</b> by clicking the name) and hidden-content findings.</li>
-      <li><b>Manager output (print / PDF)</b> — a standalone printable overview with the <b>assignment (original job-ad text + requirements and criterion weights)</b> followed by the ranking, contacts, score and breakdown, including a note about human oversight. Assignment and evaluation in one place = <b>documentation of the selection procedure</b> for the archive and for sharing with the hiring manager.</li>
-      <li><b>Download HTML</b> — the same overview as a file.</li>
-      <li><b>📊 Management deck</b> — a standalone HTML document for presenting and printing in <b>landscape</b> (6 pages): cover, batch figures, shortlist (top 5), candidate comparison by criterion, integrity of the source documents, and methodology with accountability. <b>No contacts, no detailed breakdown</b> — it is material for a leadership meeting, not the recruiter's working sheet. It carries its own Print/PDF and Save HTML buttons.</li>
+      <li><b>One selection procedure = two documents.</b> They differ by reader, not by arbitrary content: management gets a summary without personal data, the recruiter and the archive get the full record.</li>
+      <li><b>📊 Selection outcome</b> (document 1 of 2, for management) — a standalone HTML document for presenting and printing, <b>6 A4 portrait pages</b>: cover, batch figures, shortlist (top 5), candidate comparison by criterion, integrity of the source documents, and methodology with accountability. <b>No contacts, no detailed breakdown.</b> It carries its own Print/PDF and Save HTML buttons.</li>
+      <li><b>🖨️ Selection record</b> (document 2 of 2, for the recruiter and the archive) — a printable overview with the <b>assignment (original job-ad text + requirements and criterion weights)</b> followed by the ranking, <b>contacts</b>, score and breakdown, including a note about human oversight. Assignment and evaluation in one place = <b>documentation of how the decision was made</b>. It contains personal data — handle it accordingly.</li>
+      <li><b>⬇️ Record as HTML</b> — the same record as a file.</li>
       <li><b>Save / load result (JSON)</b> — download the evaluation as a file and <b>load</b> it back later (📂 next to the Evaluate button) — you return to the batch even without a database. After loading you can change weights/gate and <b>🔄 Recompute (no AI)</b> without re-uploading the CVs.</li>
     </ul>
   </div>
@@ -1481,9 +1483,11 @@ function renderProgress(s,t0){
 }
 const SEV={critical:'⛔',warn:'⚠️',info:'ℹ️'};
 let lastResult=null;
-// ===== prezentace pro vedení (samostatný HTML dokument, tisk na šířku) ======
-// Proč zvlášť od buildReport(): ten je pracovní list personalisty (kontakty, rozpad, text
-// inzerátu). Tohle je podklad na poradu vedení — čísla dávky, užší výběr, rizika, metodika.
+// ===== Výstup výběrového řízení (dokument pro vedení, A4 na výšku) =========
+// Jedno výběrové řízení = DVA dokumenty:
+//   1) Výstup výběrového řízení  (buildDeck)   — pro vedení: čísla, užší výběr, rizika, metodika
+//   2) Protokol výběrového řízení (buildReport) — pro personalistu a archiv: kontakty, rozpad,
+//      původní text inzerátu (= doklad, jak se rozhodovalo)
 // Barvy dle datavizu: skóre = JEDNA sekvenční modrá škála (světlá = málo), stavy = vyhrazená
 // status paleta vždy s ikonou a slovem (nikdy jen barvou). Kontakty tu schválně NEJSOU.
 var DECK_TOP=5;
@@ -1511,10 +1515,11 @@ function buildDeck(r){
   var pos=esc(rf.jobTitle||req.jobTitle||tl('Pozice','Position'));
 
   // --- 1 · titulní ---------------------------------------------------------
-  var s1='<section class="slide cover"><div class="eyebrow">'+tl('Výběrové řízení · podklad pro vedení','Recruitment · briefing for management')+'</div>'
+  var s1='<section class="slide cover"><div class="eyebrow">'+tl('Výstup výběrového řízení','Selection outcome')+'</div>'
     +'<h1>'+pos+'</h1>'
     +'<div class="csub">'+esc(now)+' · '+all.length+tl(' posouzených kandidátů',' candidates assessed')+'</div>'
-    +'<div class="claim">'+tl('Skóre je podklad pro rozhodnutí, ne verdikt — o postupu kandidátů rozhoduje člověk.','The score is decision support, not a verdict — a human decides who advances.')+'</div></section>';
+    +'<div class="claim">'+tl('Skóre je podklad pro rozhodnutí, ne verdikt — o postupu kandidátů rozhoduje člověk.','The score is decision support, not a verdict — a human decides who advances.')+'</div>'
+    +'<div class="pair">'+tl('Dokument 1 ze 2. Druhý je <b>Protokol výběrového řízení</b> — podklad personalisty a archivu: kontakty kandidátů, rozpad hodnocení a původní text inzerátu.','Document 1 of 2. The other one is the <b>Selection record</b> — for the recruiter and the archive: candidate contacts, the scoring breakdown and the original job-ad text.')+'</div></section>';
 
   // --- 2 · přehled dávky ---------------------------------------------------
   var s2='<section class="slide"><h2>'+tl('Přehled dávky','Batch overview')+'</h2>'
@@ -1591,34 +1596,35 @@ function buildDeck(r){
   var css='*{box-sizing:border-box}body{margin:0;background:#f9f9f7;color:#0b0b0b;font:15px/1.55 system-ui,-apple-system,"Segoe UI",sans-serif}'
     +'.bar{position:sticky;top:0;display:flex;gap:8px;padding:10px 14px;background:#fff;border-bottom:1px solid #e1e0d9;z-index:9}'
     +'.bar button{font:14px system-ui,sans-serif;padding:7px 12px;border:1px solid #c3c2b7;border-radius:7px;background:#fff;cursor:pointer}'
-    +'.slide{background:#fff;max-width:1120px;margin:18px auto;padding:34px 40px;border:1px solid #e1e0d9;border-radius:10px;min-height:520px}'
-    +'h1{font-size:40px;line-height:1.15;margin:6px 0 10px}h2{font-size:22px;margin:0 0 16px;padding-bottom:8px;border-bottom:2px solid #0b0b0b}'
-    +'.cover{display:flex;flex-direction:column;justify-content:center}.eyebrow{color:#52514e;font-size:13px;letter-spacing:.14em;text-transform:uppercase}'
-    +'.csub{color:#52514e;font-size:16px}.claim{margin-top:26px;padding-left:14px;border-left:3px solid #2a78d6;color:#52514e;max-width:640px}'
-    +'.tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}.tile{border:1px solid #e1e0d9;border-radius:9px;padding:14px 16px}'
-    +'.tl{color:#52514e;font-size:13px}.tv{font-size:30px;font-weight:600;margin-top:2px}.hero .tv{font-size:54px;line-height:1.05}.tn{color:#898781;font-size:12px;margin-top:3px}'
-    +'.lede{color:#52514e;font-size:14px;max-width:900px;margin-top:18px}.hint2{color:#898781;font-size:13px;margin:-8px 0 14px}'
-    +'.brow{display:grid;grid-template-columns:minmax(260px,42%) 1fr;gap:18px;align-items:center;padding:9px 0;border-bottom:1px solid #e1e0d9}'
-    +'.bname b{font-size:17px}.bwhy{display:block;color:#898781;font-size:12.5px}'
-    +'.bmark{display:flex;align-items:center;gap:12px}.btrack{flex:1;height:14px;background:#f0efec;border-radius:3px}'
-    +'.btrack i{display:block;height:14px;background:#2a78d6;border-radius:0 4px 4px 0}.bval{font-size:19px;font-weight:600;min-width:44px;text-align:right}'
-    +'.prof{font-size:19px;letter-spacing:3px}.dqnote{margin-top:16px;color:#52514e;font-size:13px}'
-    +'.hm{border-collapse:separate;border-spacing:2px;width:100%}.hm th{font-size:12.5px;color:#52514e;font-weight:600;text-align:center;padding:4px}'
-    +'.hm th.rn{text-align:left;font-size:14px;color:#0b0b0b;white-space:nowrap;padding-right:12px}'
-    +'.hm td{text-align:center;padding:11px 6px;border-radius:4px;font-weight:600;font-variant-numeric:tabular-nums}'
+    +'.slide{background:#fff;max-width:820px;margin:16px auto;padding:32px 38px;border:1px solid #e1e0d9;border-radius:10px}'
+    +'h1{font-size:34px;line-height:1.15;margin:6px 0 10px}h2{font-size:21px;margin:0 0 16px;padding-bottom:8px;border-bottom:2px solid #0b0b0b}'
+    +'.cover{padding-top:56px;padding-bottom:56px}.eyebrow{color:#52514e;font-size:13px;letter-spacing:.14em;text-transform:uppercase}'
+    +'.csub{color:#52514e;font-size:16px}.claim{margin-top:24px;padding-left:14px;border-left:3px solid #2a78d6;color:#52514e}'
+    +'.pair{margin-top:22px;padding:12px 14px;background:#f9f9f7;border:1px solid #e1e0d9;border-radius:8px;color:#52514e;font-size:13px}'
+    +'.tiles{display:grid;grid-template-columns:repeat(2,1fr);gap:13px}.tile{border:1px solid #e1e0d9;border-radius:9px;padding:14px 16px}'
+    +'.tl{color:#52514e;font-size:13px}.tv{font-size:30px;font-weight:600;margin-top:2px}.hero .tv{font-size:48px;line-height:1.05}.tn{color:#898781;font-size:12px;margin-top:3px}'
+    +'.lede{color:#52514e;font-size:14px;margin-top:18px}.hint2{color:#898781;font-size:13px;margin:-8px 0 14px}'
+    +'.brow{display:grid;grid-template-columns:minmax(190px,44%) 1fr;gap:14px;align-items:center;padding:9px 0;border-bottom:1px solid #e1e0d9}'
+    +'.bname b{font-size:16px}.bwhy{display:block;color:#898781;font-size:12px}'
+    +'.bmark{display:flex;align-items:center;gap:11px}.btrack{flex:1;height:13px;background:#f0efec;border-radius:3px}'
+    +'.btrack i{display:block;height:13px;background:#2a78d6;border-radius:0 4px 4px 0}.bval{font-size:18px;font-weight:600;min-width:40px;text-align:right}'
+    +'.prof{font-size:18px;letter-spacing:3px}.dqnote{margin-top:16px;color:#52514e;font-size:13px}'
+    +'.hm{border-collapse:separate;border-spacing:2px;width:100%;table-layout:fixed}.hm th{font-size:11.5px;color:#52514e;font-weight:600;text-align:center;padding:3px;word-break:break-word}'
+    +'.hm th.rn{text-align:left;font-size:13px;color:#0b0b0b;padding-right:10px;width:29%}'
+    +'.hm td{text-align:center;padding:10px 4px;border-radius:4px;font-weight:600;font-size:13.5px;font-variant-numeric:tabular-nums}'
     +'.hm td.na,.lg i.na{background:#f0efec;color:#898781}.lgrow{margin-top:14px;color:#52514e;font-size:12.5px}'
     +'.lg{display:inline-flex;align-items:center;gap:5px;margin-right:12px}.lg i{width:16px;height:12px;border-radius:2px;display:inline-block}'
-    +'.chips{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px}.chip{display:inline-flex;align-items:center;gap:7px;border:1px solid #e1e0d9;border-radius:20px;padding:6px 13px;font-size:13.5px}'
+    +'.chips{display:flex;gap:9px;flex-wrap:wrap;margin-bottom:16px}.chip{display:inline-flex;align-items:center;gap:7px;border:1px solid #e1e0d9;border-radius:20px;padding:6px 12px;font-size:13px}'
     +'.chip i{width:10px;height:10px;border-radius:50%;display:inline-block}.fl2{margin:0;padding-left:20px;color:#52514e}.fl2 li{margin:4px 0}'
-    +'.meta{border-collapse:collapse;width:100%;max-width:820px}.meta th{text-align:left;color:#52514e;font-weight:600;font-size:13.5px;width:230px;padding:6px 10px 6px 0;vertical-align:top}'
-    +'.meta td{padding:6px 0;font-size:14px;border-bottom:1px solid #e1e0d9}'
-    +'.rules{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:22px}.rules div{border-top:2px solid #2a78d6;padding-top:9px;font-size:13px;color:#52514e}'
-    +'@page{size:A4 landscape;margin:11mm}'
-    +'@media print{body{background:#fff}.noprint{display:none}.slide{border:0;border-radius:0;margin:0;padding:0;min-height:auto;max-width:none;page-break-after:always;break-after:page}.slide:last-child{page-break-after:auto}h1{font-size:34px}}';
+    +'.meta{border-collapse:collapse;width:100%}.meta th{text-align:left;color:#52514e;font-weight:600;font-size:13px;width:200px;padding:6px 10px 6px 0;vertical-align:top}'
+    +'.meta td{padding:6px 0;font-size:13.5px;border-bottom:1px solid #e1e0d9}'
+    +'.rules{display:grid;gap:14px;margin-top:22px}.rules div{border-top:2px solid #2a78d6;padding-top:9px;font-size:13px;color:#52514e}'
+    +'@page{size:A4 portrait;margin:14mm}'
+    +'@media print{body{background:#fff}.noprint{display:none}.slide{border:0;border-radius:0;margin:0;padding:0;max-width:none;page-break-after:always;break-after:page}.slide:last-child{page-break-after:auto}.cover{padding-top:34mm}}';
   var acts='<div class="bar noprint"><button onclick="window.print()">🖨️ '+tl('Tisk / uložit PDF','Print / save as PDF')+'</button><button id="dl">⬇️ '+tl('Uložit HTML','Save HTML')+'</button></div>';
-  var js='<'+'script>document.getElementById("dl").onclick=function(){var h="<!DOCTYPE html>"+document.documentElement.outerHTML;var b=new Blob([h],{type:"text/html;charset=utf-8"});var a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="'+tl('prezentace-vyber','recruitment-deck')+'.html";a.click()};<'+'/script>';
+  var js='<'+'script>document.getElementById("dl").onclick=function(){var h="<!DOCTYPE html>"+document.documentElement.outerHTML;var b=new Blob([h],{type:"text/html;charset=utf-8"});var a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="'+tl('vystup-vyberoveho-rizeni','selection-outcome')+'.html";a.click()};<'+'/script>';
   return '<!DOCTYPE html><html lang='+LANG+'><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>'
-    +tl('Výběrové řízení — ','Recruitment — ')+pos+'</title><style>'+css+'</style></head><body>'+acts+s1+s2+s3+s4+s5+s6+js+'</body></html>';
+    +tl('Výstup výběrového řízení — ','Selection outcome — ')+pos+'</title><style>'+css+'</style></head><body>'+acts+s1+s2+s3+s4+s5+s6+js+'</body></html>';
 }
 
 // manažerský výstup optimalizovaný pro tisk (samostatný HTML dokument s kontakty)
@@ -1662,8 +1668,10 @@ function buildReport(r){
     +'.zt{width:100%;border-collapse:collapse;margin-bottom:6px}.zt th{width:180px;text-align:left;color:#555;font-weight:600;font-size:12px;padding:3px 8px 3px 0;vertical-align:top;border:none}.zt td{padding:3px 0;border:none;font-size:12px}'
     +'.adtext{white-space:pre-wrap;background:#f7f9fc;border:1px solid #dde3ee;border-radius:6px;padding:10px 12px;font-size:12px;line-height:1.5}.adnote{color:#999;font-size:12px;font-style:italic}'
     +'.gs{font-weight:700}.gs.good{color:#1a7f5a}.gs.mid{color:#9a6708}.gs.bad{color:#c0392b}.gs.muted{color:#999}.cert{color:#888;font-size:11px}'
-    +'</style></head><body><h1>'+tl('Vyhodnocení kandidátů — ','Candidate evaluation — ')+esc(req.jobTitle||tl('pozice','position'))+'</h1>'
+    +'.pair2{margin:0 0 16px;padding:9px 12px;background:#f7f9fc;border:1px solid #dde3ee;border-radius:6px;color:#555;font-size:11.5px}'
+    +'</style></head><body><h1>'+tl('Protokol výběrového řízení — ','Selection record — ')+esc(req.jobTitle||tl('pozice','position'))+'</h1>'
     +'<div class="sub">'+tl('Vygenerováno ','Generated ')+esc(now)+' · faxx-hr · '+list.length+tl(' kandidátů · model ',' candidates · model ')+esc((r.model||'').split('/').pop())+'</div>'
+    +'<div class="pair2">'+tl('Dokument 2 ze 2 — podklad personalisty a archivu. Obsahuje <b>osobní údaje kandidátů</b>; pro vedení slouží <b>Výstup výběrového řízení</b> (bez kontaktů).','Document 2 of 2 — for the recruiter and the archive. It contains the <b>personal data of candidates</b>; management gets the <b>Selection outcome</b> document (no contacts).')+'</div>'
     +zad
     +'<table><thead><tr><th>#</th><th>'+tl('Kandidát a kontakt','Candidate and contact')+'</th><th>'+tl('Skóre','Score')+'</th><th>'+tl('Rozpad hodnocení','Evaluation breakdown')+'</th></tr></thead><tbody>'+rows+'</tbody></table>'
     +'<div class="foot">'+tl('Rating je podpora rozhodnutí, ne automatické zamítnutí — o postupu kandidátů rozhoduje personalista (EU AI Act čl. 14, GDPR čl. 22). Skóre počítá deterministický rubrik nad daty z viditelného textu; skrytý/instrukční obsah je označen a do hodnocení nevstupuje.','The rating is decision support, not automatic rejection — the recruiter decides on advancing candidates (EU AI Act Art. 14, GDPR Art. 22). The score is computed by a deterministic rubric over data from the visible text; hidden/instruction content is flagged and does not enter scoring.')+'</div></body></html>';
@@ -1705,15 +1713,15 @@ function renderResults(r){
   h+='<div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap">'
     +'<button class="ghost" id="btnRescore" title="'+tl('Přepočítat skóre podle aktuálních vah / gate / dovedností — bez AI, okamžitě','Recompute the score with the current weights / gate / skills — no AI, instantly')+'">'+tl('🔄 Přepočítat (bez AI)','🔄 Recompute (no AI)')+'</button>'
     +'<button class="ghost" id="btnSave" title="'+tl('Uložit toto vyhodnocení jako soubor JSON — později ho načteš a vrátíš se k dávce (bez databáze)','Save this evaluation as a JSON file — load it later to return to the batch (no database)')+'">'+tl('💾 Uložit (JSON)','💾 Save (JSON)')+'</button>'
-    +'<button class="ghost" id="btnPrint" title="'+tl('Manažerský výstup s kontakty, optimalizovaný pro tisk / uložení do PDF','Manager output with contacts, optimised for printing / saving as PDF')+'">'+tl('🖨️ Manažerský výstup (tisk / PDF)','🖨️ Manager output (print / PDF)')+'</button>'
-    +'<button class="ghost" id="dlHtml" title="'+tl('Stáhnout manažerský výstup jako HTML soubor','Download the manager output as an HTML file')+'">'+tl('⬇️ Stáhnout HTML','⬇️ Download HTML')+'</button>'
-    +'<button class="ghost" id="btnDeck" title="'+tl('Prezentace pro vedení — čísla dávky, užší výběr, srovnání kritérií, rizika a metodika; bez kontaktů, tisk na šířku','Presentation for management — batch figures, shortlist, criterion comparison, risks and methodology; no contacts, landscape print')+'">'+tl('📊 Prezentace pro vedení','📊 Management deck')+'</button></div>';
+    +'<button class="ghost" id="btnPrint" title="'+tl('Dokument 2 ze 2 — podklad personalisty a archivu: zadání, pořadí, KONTAKTY a rozpad hodnocení (tisk / PDF)','Document 2 of 2 — for the recruiter and the archive: assignment, ranking, CONTACTS and scoring breakdown (print / PDF)')+'">'+tl('🖨️ Protokol výběrového řízení','🖨️ Selection record')+'</button>'
+    +'<button class="ghost" id="dlHtml" title="'+tl('Stáhnout protokol výběrového řízení jako HTML soubor','Download the selection record as an HTML file')+'">'+tl('⬇️ Protokol jako HTML','⬇️ Record as HTML')+'</button>'
+    +'<button class="ghost" id="btnDeck" title="'+tl('Dokument 1 ze 2 — pro vedení: čísla dávky, užší výběr, srovnání kritérií, integrita podkladů a metodika. Bez kontaktů, A4 na výšku','Document 1 of 2 — for management: batch figures, shortlist, criterion comparison, document integrity and methodology. No contacts, A4 portrait')+'">'+tl('📊 Výstup výběrového řízení','📊 Selection outcome')+'</button></div>';
   h+='<div class="hint" style="margin-top:8px">'+tl('Rating je podpora rozhodnutí. Postup kandidátů dál je na tobě.','The rating is decision support. Advancing candidates is up to you.')+'</div></div>';
   $('#results').innerHTML=h;
   $$('.expand').forEach(x=>x.onclick=()=>$('#det'+x.dataset.i).classList.toggle('on'));
   $$('.doclink').forEach(a=>a.onclick=e=>{e.preventDefault();openDoc(decodeURIComponent(a.dataset.fn))});
   $('#btnPrint').onclick=()=>{const w=window.open('','_blank');if(!w){$('#err').textContent=tl('Povol vyskakovací okno pro tisk.','Allow the pop-up window for printing.');return}w.document.write(buildReport(lastResult));w.document.close();w.focus();setTimeout(()=>{try{w.print()}catch(e){}},400)};
-  $('#dlHtml').onclick=()=>{const blob=new Blob([buildReport(lastResult)],{type:'text/html;charset=utf-8'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=tl('faxx-hr-vyhodnoceni.html','faxx-hr-evaluation.html');a.click()};
+  $('#dlHtml').onclick=()=>{const blob=new Blob([buildReport(lastResult)],{type:'text/html;charset=utf-8'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=tl('protokol-vyberoveho-rizeni.html','selection-record.html');a.click()};
   $('#btnDeck').onclick=()=>{const w=window.open('','_blank');if(!w){$('#err').textContent=tl('Povol vyskakovací okno pro prezentaci.','Allow the pop-up window for the presentation.');return}w.document.write(buildDeck(lastResult));w.document.close();w.focus()};
   $('#btnSave').onclick=exportResult;
   $('#btnRescore').onclick=async()=>{const b=$('#btnRescore');b.disabled=true;const old=b.textContent;b.textContent=tl('Přepočítávám…','Recomputing…');const r=await rescoreNow();if(r&&r.error)$('#err').textContent=tl('Chyba přepočtu: ','Recompute error: ')+r.error;const nb=$('#btnRescore');if(nb){nb.disabled=false;nb.textContent=old}};

@@ -147,7 +147,7 @@ techniky zkusit.
 
 Poctivá provozní výhrada: řada funkcí je **postavená a ověřená (dry-run build, jsdom,
 wrangler dev), ale NENASAZENÁ** — čeká na svolení k deploji (deploy je outward-facing,
-ruční, bez CI). Živá appka (`faxx-hr-app.bass443.workers.dev`) tak může běžet **starší
+ruční, bez CI). Živá appka (`faxx-hr.maxferit.cz`) tak může běžet **starší
 verzi**, než je v repu. Konkrétně čekají na nasazení mimo jiné: per-doc cache extrakce,
 opravy dvou chyb v už-nasazeném kódu (evidence kotvy se nedostávaly ke klientovi;
 editovatelný systémový prompt se ignoroval), autosave relace a editor rubriku.

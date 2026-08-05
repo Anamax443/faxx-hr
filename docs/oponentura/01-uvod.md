@@ -67,7 +67,7 @@ Dvě části jsou dostupné živě:
 
 | Část | Adresa | Co dělá |
 |---|---|---|
-| Hodnoticí appka | `faxx-hr-app.bass443.workers.dev` | dávka CV → ranking proti inzerátu, rozpad po kritériích, nálezy |
+| Hodnoticí appka | `faxx-hr.maxferit.cz` | dávka CV → ranking proti inzerátu, rozpad po kritériích, nálezy |
 | Demo detektoru (F0) | `faxx-hr-upload.bass443.workers.dev` | nahraj jedno CV a uvidíš, co je v něm skryté |
 
 Repozitář je veřejný (`Anamax443/faxx-hr`). Samotný kód detekce je spustitelný i
