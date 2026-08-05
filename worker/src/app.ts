@@ -385,7 +385,20 @@ export default {
         await env.AI.run(model, { messages: [{ role: "user", content: "ping" }], max_tokens: 1, temperature: 0 });
         return json({ ok: true, ...info, ms: Date.now() - t0 });
       } catch (e: unknown) {
-        return json({ ok: false, ...info, ms: Date.now() - t0, reason: String((e as { message?: string })?.message || e).slice(0, 160) });
+        const raw = String((e as { message?: string })?.message || e);
+        // Vyčerpaná denní free kvóta účtu (Workers AI, chyba 4006) — není to porucha appky.
+        // Klientovi pošleme i čas resetu, ať umí říct KDY to zas půjde, ne jen že to nejde.
+        const quota = /\b4006\b|free allocation|neuron/i.test(raw);
+        const n = new Date();
+        const resetAt = new Date(Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), n.getUTCDate() + 1, 0, 0, 0)).toISOString();
+        return json({
+          ok: false, ...info, ms: Date.now() - t0, quota,
+          ...(quota ? { resetAt, dailyNeurons: 10000 } : {}),
+          reason: quota
+            ? L(lang, "vyčerpaná denní free kvóta Workers AI (10 000 neuronů/den na celý účet)", "daily free Workers AI allocation used up (10,000 neurons/day for the whole account)")
+            : raw.slice(0, 160),
+          raw: raw.slice(0, 200),
+        });
       }
     }
 
@@ -1227,18 +1240,44 @@ function updSb(){$('#sbModel').textContent=shortModel(model())}
 // Stav dostupnosti AI se uloží, aby ho šlo překreslit v jiném jazyce BEZ nového
 // volání modelu (přepnutí CS/EN nemění dostupnost → zbytečné neurony).
 var aiState={s:'wait'};
+// Reset denní free kvóty Workers AI = půlnoc UTC. Vracíme ji v MÍSTNÍM čase, ať se
+// nemusí nikdo přepočítávat; když čas resetu neznáme, spočítáme nejbližší půlnoc UTC.
+function quotaResetDate(){
+  if(aiState.resetAt){const d=new Date(aiState.resetAt);if(!isNaN(d))return d}
+  const n=new Date();return new Date(Date.UTC(n.getUTCFullYear(),n.getUTCMonth(),n.getUTCDate()+1,0,0,0));
+}
+function hhmm(d){return d.toLocaleTimeString(LANG==='en'?'en-GB':'cs-CZ',{hour:'2-digit',minute:'2-digit'})}
+function leftTxt(ms){ // „19 h 04 min" / „7 min" / „za chvíli"
+  const m=Math.max(0,Math.round(ms/60000)),h=Math.floor(m/60),r=m%60;
+  if(m<=0)return tl('každou chvíli','any moment now');
+  return h?h+' h '+(r<10?'0':'')+r+' min':m+' min';
+}
 function renderAiStatus(){
   const dot=$('#sbDot'),lbl=$('#sbAI');if(!dot||!lbl)return;
+  lbl.title='';
   if(aiState.s==='ok'){dot.className='dot ok';lbl.textContent=tl('AI dostupná · ','AI available · ')+aiState.ms+' ms'}
+  else if(aiState.s==='bad'&&aiState.quota){ // vyčerpaná kvóta = víme, KDY to zas půjde
+    dot.className='dot bad';
+    const d=quotaResetDate(),left=d-new Date();
+    lbl.textContent=tl('AI nedostupná · vyčerpaná denní free kvóta účtu (10 000 neuronů) · reset ~','AI unavailable · account daily free allocation used up (10,000 neurons) · reset ~')
+      +hhmm(d)+' ('+tl('za ','in ')+leftTxt(left)+') · '+tl('sám to zkouším každých 10 min','re-checking every 10 min');
+    lbl.title=tl('Cloudflare Workers AI dává zdarma 10 000 neuronů/den na CELÝ účet — sdílí ho i ostatní appky. Nominálně se kvóta resetuje o půlnoci UTC, tedy v '+hhmm(d)+' místního času. Skutečné uvolnění může přijít i jindy (Cloudflare limit uvolňuje postupně), proto appka stav sama přeověřuje každých 10 minut — ↻ ověří hned. Bez AI dál funguje deterministický rubrik — skóre, přepočet vah, tisk i uložené výsledky; nejde jen extrakce dat z nových CV.',
+      'Cloudflare Workers AI includes 10,000 neurons/day for the WHOLE account — other apps share it. Nominally the allowance resets at midnight UTC, i.e. at '+hhmm(d)+' local time. The actual release can come at a different time (Cloudflare frees the limit gradually), so the app re-checks every 10 minutes — ↻ checks now. Without AI the deterministic rubric still works — scores, weight recompute, print and saved results; only extracting data from new CVs does not.');
+  }
   else if(aiState.s==='bad'){dot.className='dot bad';lbl.textContent=tl('AI nedostupná','AI unavailable')+(aiState.reason?' · '+aiState.reason:'')}
   else{dot.className='dot wait';lbl.textContent=tl('ověřuji…','checking…')}
 }
 function pingAI(){
   aiState={s:'wait'};renderAiStatus();
   fetch('/api/health?model='+encodeURIComponent(model())+'&lang='+LANG).then(r=>r.json()).then(h=>{
-    aiState=h.ok?{s:'ok',ms:h.ms}:{s:'bad',reason:h.reason||''};renderAiStatus();
+    aiState=h.ok?{s:'ok',ms:h.ms}:{s:'bad',reason:h.reason||'',quota:!!h.quota,resetAt:h.resetAt||''};renderAiStatus();
   }).catch(e=>{aiState={s:'bad',reason:String(e)};renderAiStatus()});
 }
+// Odpočet přepisujeme každou půlminutu a stav sami přeověřujeme každých 10 minut —
+// odmítnuté volání kvótu nestojí (0 neuronů), takže to nic nepálí a uživatel se dozví,
+// že je AI zpátky, aniž by musel klikat.
+setInterval(function(){if(aiState.s==='bad'&&aiState.quota)renderAiStatus()},30000);
+setInterval(function(){if(aiState.s==='bad'&&aiState.quota)pingAI()},600000);
 modelSel.onchange=()=>{localStorage.setItem('faxx_model',modelSel.value);updSb();pingAI()};
 $('#sbPing').onclick=pingAI;
 updSb();pingAI();
@@ -1497,7 +1536,7 @@ function renderResults(r){
   h+='<div class="hint">'+tl('Gate: min. ','Gate: min. ')+r.rubric.minYears+tl(' let praxe · dovednosti: ',' years · skills: ')+esc((r.rubric.requiredSkills||[]).join(", "))+' · '+tl('jazyky: ','languages: ')+(rlangs.length?esc(rlangs.join(", ")):tl('nehodnotí se','not scored'))+(hiddenN>0?' · <span style="color:var(--amber)">'+tl('skryto '+hiddenN+' ne-uchazečských dok.','hidden '+hiddenN+' non-applicant docs')+'</span>':'')+'</div>';
   const errs=shown.filter(c=>c.extract_ok===false&&c.extract_error);
   if(errs.length){const e=esc(errs[0].extract_error),quota=/4006|neuron|allocation/i.test(errs[0].extract_error||'');
-    h+='<div style="margin:8px 0;padding:10px 12px;border:1px solid #5a2430;border-radius:8px;background:rgba(240,85,107,.10);color:var(--txt);font-size:13px">⛔ <b>'+tl('AI extrakce selhala','AI extraction failed')+'</b> '+tl('u '+errs.length+' z '+shown.length+' kandidátů — skóre nejsou platná.','for '+errs.length+' of '+shown.length+' candidates — scores are not valid.')+'<br><span class="hint">'+tl('Důvod: ','Reason: ')+e+'</span>'+(quota?'<br><b>'+tl('Vyčerpaná denní free kvóta Cloudflare Workers AI (10 000 neuronů/den).','Cloudflare Workers AI daily free quota exhausted (10,000 neurons/day).')+'</b> '+tl('Reset o půlnoci UTC. Řešení: počkat na reset, přepnout model v Nastavení, nebo přejít na Workers Paid / Claude (s klíčem).','Reset at UTC midnight. Fix: wait for the reset, switch the model in Settings, or move to Workers Paid / Claude (with a key).'):'')+'</div>';}
+    h+='<div style="margin:8px 0;padding:10px 12px;border:1px solid #5a2430;border-radius:8px;background:rgba(240,85,107,.10);color:var(--txt);font-size:13px">⛔ <b>'+tl('AI extrakce selhala','AI extraction failed')+'</b> '+tl('u '+errs.length+' z '+shown.length+' kandidátů — skóre nejsou platná.','for '+errs.length+' of '+shown.length+' candidates — scores are not valid.')+'<br><span class="hint">'+tl('Důvod: ','Reason: ')+e+'</span>'+(quota?'<br><b>'+tl('Vyčerpaná denní free kvóta Cloudflare Workers AI (10 000 neuronů/den na celý účet).','Cloudflare Workers AI daily free quota exhausted (10,000 neurons/day for the whole account).')+'</b> '+tl('Reset kvóty ~','Quota resets ~')+hhmm(quotaResetDate())+' ('+tl('za ','in ')+leftTxt(quotaResetDate()-new Date())+') — '+tl('appka to sama zkouší každých 10 min a stav ukazuje v horní liště. Do té doby jde všechno bez AI: přepočet vah/gate, tisk i uložené výsledky. Alternativy: slabší (levnější) model v Nastavení, Workers Paid, nebo Claude s klíčem.','the app re-checks every 10 min and shows the state in the top bar. Until then everything without AI still works: weight/gate recompute, print and saved results. Alternatives: a smaller (cheaper) model in Settings, Workers Paid, or Claude with a key.'):'')+'</div>';}
   h+='<table class="rank"><tr><th>#</th><th>'+tl('Kandidát','Candidate')+'</th><th>'+tl('Skóre','Score')+'</th><th>'+tl('Nález','Finding')+'</th><th></th></tr>';
   shown.forEach((c,i)=>{
     const sevB=c.disqualified?'<span class="badge dq">'+tl('diskvalifikován','disqualified')+'</span>':'<span class="badge '+c.worstSeverity+'">'+(c.worstSeverity==='clean'?tl('čisto','clean'):(SEV[c.worstSeverity]||'')+' '+c.flagCount+'×')+'</span>';

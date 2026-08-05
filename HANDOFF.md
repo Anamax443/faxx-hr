@@ -2,6 +2,26 @@
 
 Append-only. Nejnovější záznam nahoru. Slouží k pokračování z jiného počítače / po pauze.
 
+## 2026-08-05 (aa) — Lišta říká, KDY bude AI zase volná (kvóta 4006 čitelně)
+
+- **Proč:** lišta ukazovala jen syrové „4006: you have used up your daily free allocation…" — z toho
+  operátor nepozná, jestli je to porucha, ani kdy to zas půjde (a restartovat se nedá nic, limit drží CF).
+- **`/api/health`** nově chybu rozpozná (`4006` / „free allocation" / „neuron") a vrací
+  `quota:true` + `resetAt` (nejbližší půlnoc UTC) + `dailyNeurons:10000`; `reason` je věta v CS/EN,
+  syrový text zůstává v `raw`.
+- **Lišta:** „AI nedostupná · vyčerpaná denní free kvóta účtu (10 000 neuronů) · **reset ~02:00 (za
+  18 h 45 min)** · sám to zkouším každých 10 min", odpočet se překresluje po 30 s. Tooltip vysvětlí, že
+  kvóta je **na celý účet** (sdílí ji job-watch, FIO-import, domlov), že skutečné uvolnění může přijít
+  jindy než nominální reset, a že **bez AI appka dál počítá** (rubrik, váhy, tisk, uložené výsledky).
+- **Auto-přeověření každých 10 min** (odmítnuté volání stojí 0 neuronů) → uživatel se dozví, že je AI
+  zpátky, aniž by klikal. Stejná informace i v červeném boxu „AI extrakce selhala" nad pořadím.
+- **Zjištěno z CF analytics** (GraphQL `aiInferenceAdaptiveGroups`): 4. 8. účet spotřeboval **10 558
+  neuronů** (357 volání), z toho `gpt-oss-120b` **8 719** (137 neuronů/volání) proti `llama-3.1-8b`
+  ~8/volání → strop padl v ~09:00 UTC. 5. 8. spotřeba 0 a přesto 4006 = limit uvolňuje CF postupně.
+  **Doporučení do provozu:** extrakce CV na 8B, 120B jen na jednorázové odvození požadavků z inzerátu.
+- Ověřeno živě (`wrangler dev` → `/api/health` vrací `quota:true`, `resetAt`), texty CS+EN odsimulované,
+  5/5 test suit. **NENASAZENO** — čeká na svolení (`npm run deploy:app`).
+
 ## 2026-08-05 (z) — Jazyk podle inzerátu (ne napevno angličtina) + oprava falešné shody jazyků
 
 - **Proč:** kritérium bylo natvrdo „Angličtina" — pozice, která chce němčinu, se tím hodnotila špatně.
