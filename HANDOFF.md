@@ -23,7 +23,12 @@ Append-only. Nejnovější záznam nahoru. Slouží k pokračování z jiného p
   (1 rok / 2–4 roky / 5+ let); používá to prezentace i hlavička pořadí v appce.
 - Ověřeno: `app.syntax.test.mjs` OK, render nad vzorovou dávkou (6 kandidátů, 1 diskvalifikovaný,
   2 s nálezem) → **tisk dá přesně 6 stránek**, nic nepřetéká; zkontrolováno i simulací tiskového CSS
-  v šířce A4 na šířku. **Zatím NENASAZENO** (`npm run deploy:app`).
+  v šířce A4 na šířku.
+- **NASAZENO** 2026-08-05 v commitu `e57ba01` (`npm run deploy:app`). Ověřeno živě: lišta i
+  `/api/health` hlásí `e57ba01`, stránka obsahuje `btnDeck`/`buildDeck`/`yearsTxt` i nový odstavec
+  v dokumentaci (CS+EN). ⚠ **Pozn. k ověřování deploye:** hned po `deploy` ještě chvíli odpovídá
+  stará verze (edge propagace) — první kontrola ukázala `edd59a3`, o pár desítek sekund později už
+  `e57ba01` na custom doméně i na `workers.dev`. Nepanikařit a zkusit znovu, ne přenasazovat.
 
 ## 2026-08-05 (aa) — Lišta říká, KDY bude AI zase volná (kvóta 4006 čitelně)
 
