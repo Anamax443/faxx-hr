@@ -1627,7 +1627,9 @@ function buildDeck(r){
     +tl('Výstup výběrového řízení — ','Selection outcome — ')+pos+'</title><style>'+css+'</style></head><body>'+acts+s1+s2+s3+s4+s5+s6+js+'</body></html>';
 }
 
-// manažerský výstup optimalizovaný pro tisk (samostatný HTML dokument s kontakty)
+// Protokol výběrového řízení (dokument 2 ze 2) — tiskový doklad s KONTAKTY, zadáním
+// (původní text inzerátu + váhy) a rozpadem hodnocení. Pro personalistu a archiv.
+// Souhrn pro vedení bez osobních údajů dělá buildDeck() výše.
 function buildReport(r){
   const now=new Date().toLocaleString(LANG==='en'?'en-GB':'cs-CZ');const req=r.rubric||{};
   const hideNC=$('#hideNonCand')?$('#hideNonCand').checked:true;
