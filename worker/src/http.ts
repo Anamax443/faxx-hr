@@ -32,7 +32,11 @@ function csp(nonce?: string): string {
   }
   return [
     "default-src 'self'",
-    `script-src 'nonce-${nonce}'`,
+    // static.cloudflareinsights.com = beacon Web Analytics, který Cloudflare sám vstřikuje
+    // do stránky na zóně maxferit.cz. Bez téhle výjimky by ho CSP zablokovala a měření
+    // návštěvnosti by na téhle doméně tiše umřelo. Data posílá na vlastní origin
+    // (/cdn-cgi/rum), takže connect-src 'self' stačí.
+    `script-src 'nonce-${nonce}' https://static.cloudflareinsights.com`,
     "style-src 'unsafe-inline'",
     "img-src 'self' data: blob:",
     "connect-src 'self'",
