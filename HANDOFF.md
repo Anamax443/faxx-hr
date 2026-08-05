@@ -24,6 +24,10 @@ Append-only. Nejnovější záznam nahoru. Slouží k pokračování z jiného p
 - **`/.well-known/security.txt`** (+ legacy `/security.txt`) na obou doménách, RFC 9116;
   `Expires` se počítá za běhu rok dopředu, aby soubor nezestárnul. Kontakt `info@maxferit.cz`.
 - **HEAD** projde stejnými cestami jako GET — dřív `curl -I` / uptime check / skener dostal **404**.
+- **Pozor na Cloudflare Web Analytics:** zóna `maxferit.cz` vstřikuje do stránky beacon
+  `static.cloudflareinsights.com` (inline část si CF přepíše naším nonce, externí skript ne).
+  Tvrdá `script-src` jen na nonce by měření tiše zabila → hostitel je v CSP vědomě povolen.
+  Data beacon posílá na vlastní origin (`/cdn-cgi/rum`), takže `connect-src 'self'` stačí.
 - Ověřeno lokálně (`wrangler dev`): hlavičky sedí, nonce se v HTML nahradil na obou stránkách,
   žádný `onclick=` ve výstupu, security.txt 200, HEAD `/` 200, 404 má hlavičky taky; 5/5 test suit.
 - **Zbývá mimo kód:** DNS **CAA záznamy** pro `maxferit.cz` (dělá se v Cloudflare DNS, ne v repu).
