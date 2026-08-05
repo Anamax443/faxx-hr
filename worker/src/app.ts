@@ -14,6 +14,7 @@ import { extractQualification, mergeQualifications, mergeIdentity, aiJson, sanit
 import { scoreCandidate, rankCandidates, type Rubric, type Qualification, type Lang } from "./rubric";
 import { normalizeLanguageName, languageLabel, normName } from "./reference/languages";
 import { aboutPage, type AboutLang } from "./about";
+import { makeNonce, securityHeaders, htmlResponse, securityTxt } from "./http";
 
 interface Env extends DetectEnv { AI: AiBinding & DetectEnv["AI"] }
 
@@ -342,16 +343,26 @@ export default {
     const url = new URL(req.url);
     // no-store: /api/health se jinak cachuje na edge → stavová lišta (a auto-přeověřování
     // kvóty po 10 min) by dlouho ukazovala starou odpověď, i když je AI dávno zpátky.
-    const json = (o: unknown, status = 200) => Response.json(o, { status, headers: { "cache-control": "no-store" } });
+    const json = (o: unknown, status = 200) => Response.json(o, { status, headers: { "cache-control": "no-store", ...securityHeaders() } });
+    // HEAD musí projít stejnými cestami jako GET (uptime checky, `curl -I`, audit skenery);
+    // tělo odpovědi zahodí runtime sám.
+    const read = req.method === "GET" || req.method === "HEAD";
 
-    if (req.method === "GET" && (url.pathname === "/" || url.pathname === "/index.html")) {
-      return new Response(PAGE, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } });
+    if (read && (url.pathname === "/" || url.pathname === "/index.html")) {
+      const n = makeNonce();
+      return htmlResponse(PAGE.replaceAll(NONCE_SLOT, n), n);
     }
 
     // Popis projektu pro netechnického čtenáře (vedení) — samostatná stránka k poslání odkazem.
-    if (req.method === "GET" && (url.pathname === "/o-projektu" || url.pathname === "/about")) {
+    if (read && (url.pathname === "/o-projektu" || url.pathname === "/about")) {
       const al: AboutLang = url.pathname === "/about" ? "en" : "cs";
-      return new Response(aboutPage(al, COMMIT, BUILT), { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } });
+      const n = makeNonce();
+      return htmlResponse(aboutPage(al, COMMIT, BUILT, n), n);
+    }
+
+    // RFC 9116 — kam poslat bezpečnostní nález (i legacy cesta bez /.well-known/).
+    if (read && (url.pathname === "/.well-known/security.txt" || url.pathname === "/security.txt")) {
+      return securityTxt(url.host);
     }
 
     if (req.method === "POST" && url.pathname === "/api/extract-text") {
@@ -500,7 +511,7 @@ export default {
               await send({ type: "error", error: String((e as { message?: string })?.message || e) });
             } finally { await w.close(); }
           })();
-          return new Response(readable, { headers: { "content-type": "application/x-ndjson; charset=utf-8", "cache-control": "no-store" } });
+          return new Response(readable, { headers: { "content-type": "application/x-ndjson; charset=utf-8", "cache-control": "no-store", ...securityHeaders() } });
         }
 
         return json(await evaluate(cands, req0, env.AI, model, env, systemPrompt || DEFAULT_EXTRACT_SYSTEM, visionMethod, lang));
@@ -531,11 +542,15 @@ export default {
       } catch (e: unknown) { return json({ error: String((e as { message?: string })?.message || e) }, 500); }
     }
 
-    return new Response("faxx-hr appka — GET / pro stránku", { status: 404 });
+    return new Response("faxx-hr appka — GET / pro stránku", { status: 404, headers: { "content-type": "text/plain; charset=utf-8", ...securityHeaders() } });
   },
 };
 
 // ===========================================================================
+// Zástupný text, který se při každém požadavku nahradí čerstvým CSP nonce
+// (viz http.ts). Bez něj by prohlížeč inline skripty stránky vůbec nespustil.
+const NONCE_SLOT = "__CSP_NONCE__";
+
 const PAGE = `<!DOCTYPE html><html lang="cs"><head><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>faxx-hr — hodnocení kandidátů</title>
@@ -650,7 +665,7 @@ h1 a{color:inherit;text-decoration:none;cursor:pointer}
 :root[data-lang=en] .lang-cs{display:none}
 :root[data-lang=en] .lang-en{display:block}
 </style>
-<script>(function(){try{var t=localStorage.getItem('faxx_theme')||((window.matchMedia&&window.matchMedia('(prefers-color-scheme: light)').matches)?'light':'dark');var l=localStorage.getItem('faxx_lang')||((navigator.language||'').toLowerCase().indexOf('en')===0?'en':'cs');var d=document.documentElement;d.setAttribute('data-theme',t);d.setAttribute('data-lang',l);d.setAttribute('lang',l);}catch(e){}})();</script>
+<script nonce="__CSP_NONCE__">(function(){try{var t=localStorage.getItem('faxx_theme')||((window.matchMedia&&window.matchMedia('(prefers-color-scheme: light)').matches)?'light':'dark');var l=localStorage.getItem('faxx_lang')||((navigator.language||'').toLowerCase().indexOf('en')===0?'en':'cs');var d=document.documentElement;d.setAttribute('data-theme',t);d.setAttribute('data-lang',l);d.setAttribute('lang',l);}catch(e){}})();</script>
 </head><body>
 <div class="statusbar"><div class="sbinner">
   <a class="sbbrand" href="/" id="sbHome" data-i18n-title="sb_home" title="Zpět na začátek (záložka Hodnocení)">🛡️ faxx-hr</a>
@@ -1083,9 +1098,12 @@ h1 a{color:inherit;text-decoration:none;cursor:pointer}
 
 <div class="foot"><span data-i18n="foot">faxx-hr · pracovní verze · skórování nevidí surový text · rozhoduje člověk</span></div>
 </div>
-<script>
+<script nonce="__CSP_NONCE__">
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 function esc(s){return (s||'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]))}
+// nonce téhle stránky (čte se z vlastní <script> značky, ne z HTML textu) — dědí ho
+// i dokument otevřený přes window.open, takže jeho tlačítka musí nonce dostat taky
+var NONCE=(document.currentScript&&document.currentScript.nonce)||'';
 
 // ===== i18n + motiv =======================================================
 var LANG=document.documentElement.getAttribute('data-lang')||'cs';
@@ -1394,6 +1412,16 @@ function renderFiles(){
   const t=$('#total');t.textContent=tl('Celkem ','Total ')+(tot/1048576).toFixed(2)+' MB / 10 MB · '+files.length+tl(' souborů',' files');
   t.classList.toggle('over',tot>10485760);
 }
+// Tlačítka v okně otevřeném přes window.open nadrátujeme odsud (stejný origin).
+// Okno dědí CSP téhle stránky; tohle je pojistka, aby Tisk/Uložit fungovaly i kdyby
+// prohlížeč zděděný nonce vyhodnotil jinak. Uložený soubor si skript nese vlastní.
+function wireDocBtns(w,name){
+  try{
+    const d=w.document, p=d.getElementById('pr'), dl=d.getElementById('dl');
+    if(p)p.onclick=()=>w.print();
+    if(dl)dl.onclick=()=>{const h='<!DOCTYPE html>'+d.documentElement.outerHTML;const b=new Blob([h],{type:'text/html;charset=utf-8'});const a=d.createElement('a');a.href=URL.createObjectURL(b);a.download=name;a.click()};
+  }catch(e){}
+}
 // otevření dokumentu přímo z appky (soubory jsou v prohlížeči po nahrání)
 function openDoc(fn){
   const f=files.find(x=>x.name===fn);
@@ -1643,8 +1671,11 @@ function buildDeck(r){
     +'.rules{display:grid;gap:14px;margin-top:22px}.rules div{border-top:2px solid #2a78d6;padding-top:9px;font-size:13px;color:#52514e}'
     +'@page{size:A4 portrait;margin:14mm}'
     +'@media print{body{background:#fff}.noprint{display:none}.slide{border:0;border-radius:0;margin:0;padding:0;max-width:none;page-break-after:always;break-after:page}.slide:last-child{page-break-after:auto}.cover{padding-top:34mm}}';
-  var acts='<div class="bar noprint"><button onclick="window.print()">🖨️ '+tl('Tisk / uložit PDF','Print / save as PDF')+'</button><button id="dl">⬇️ '+tl('Uložit HTML','Save HTML')+'</button></div>';
-  var js='<'+'script>document.getElementById("dl").onclick=function(){var h="<!DOCTYPE html>"+document.documentElement.outerHTML;var b=new Blob([h],{type:"text/html;charset=utf-8"});var a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="'+tl('vystup-vyberoveho-rizeni','selection-outcome')+'.html";a.click()};<'+'/script>';
+  // Tlačítka bez inline onclick= (CSP je nespustí). Skript uvnitř dokumentu drží
+  // nonce stránky — je potřeba, až si výstup někdo uloží a otevře jako soubor;
+  // v okně otevřeném z appky ho pro jistotu nadrátuje ještě wireDocBtns().
+  var acts='<div class="bar noprint"><button id="pr">🖨️ '+tl('Tisk / uložit PDF','Print / save as PDF')+'</button><button id="dl">⬇️ '+tl('Uložit HTML','Save HTML')+'</button></div>';
+  var js='<'+'script'+(NONCE?' nonce="'+NONCE+'"':'')+'>var p=document.getElementById("pr");if(p)p.onclick=function(){window.print()};var d=document.getElementById("dl");if(d)d.onclick=function(){var h="<!DOCTYPE html>"+document.documentElement.outerHTML;var b=new Blob([h],{type:"text/html;charset=utf-8"});var a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="'+tl('vystup-vyberoveho-rizeni','selection-outcome')+'.html";a.click()};<'+'/script>';
   return '<!DOCTYPE html><html lang='+LANG+'><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1">'+FAVICON+'<title>'
     +tl('Výstup výběrového řízení — ','Selection outcome — ')+pos+'</title><style>'+css+'</style></head><body>'+acts+s1+s2+s3+s4+s5+s6+js+'</body></html>';
 }
@@ -1746,7 +1777,7 @@ function renderResults(r){
   $$('.doclink').forEach(a=>a.onclick=e=>{e.preventDefault();openDoc(decodeURIComponent(a.dataset.fn))});
   $('#btnPrint').onclick=()=>{const w=window.open('','_blank');if(!w){$('#err').textContent=tl('Povol vyskakovací okno pro tisk.','Allow the pop-up window for printing.');return}w.document.write(buildReport(lastResult));w.document.close();w.focus();setTimeout(()=>{try{w.print()}catch(e){}},400)};
   $('#dlHtml').onclick=()=>{const blob=new Blob([buildReport(lastResult)],{type:'text/html;charset=utf-8'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=tl('protokol-vyberoveho-rizeni.html','selection-record.html');a.click()};
-  $('#btnDeck').onclick=()=>{const w=window.open('','_blank');if(!w){$('#err').textContent=tl('Povol vyskakovací okno pro prezentaci.','Allow the pop-up window for the presentation.');return}w.document.write(buildDeck(lastResult));w.document.close();w.focus()};
+  $('#btnDeck').onclick=()=>{const w=window.open('','_blank');if(!w){$('#err').textContent=tl('Povol vyskakovací okno pro prezentaci.','Allow the pop-up window for the presentation.');return}w.document.write(buildDeck(lastResult));w.document.close();wireDocBtns(w,tl('vystup-vyberoveho-rizeni','selection-outcome')+'.html');w.focus()};
   $('#btnSave').onclick=exportResult;
   $('#btnRescore').onclick=async()=>{const b=$('#btnRescore');b.disabled=true;const old=b.textContent;b.textContent=tl('Přepočítávám…','Recomputing…');const r=await rescoreNow();if(r&&r.error)$('#err').textContent=tl('Chyba přepočtu: ','Recompute error: ')+r.error;const nb=$('#btnRescore');if(nb){nb.disabled=false;nb.textContent=old}};
 }

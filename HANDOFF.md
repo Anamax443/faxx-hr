@@ -2,6 +2,32 @@
 
 Append-only. Nejnovější záznam nahoru. Slouží k pokračování z jiného počítače / po pauze.
 
+## 2026-08-05 (ae) — Bezpečnostní hlavičky (CSP s nonce), security.txt, HEAD
+
+- **Proč:** audit `faxx-hr.maxferit.cz` (skóre 79 %) — chyběla `Content-Security-Policy`,
+  `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy`, `X-XSS-Protection`, `security.txt`.
+  U appky, která vypisuje jména a útržky textu z **cizích CV**, je CSP ta vrstva, která rozhodne,
+  jestli případný kus HTML propašovaný přes dokument prohlížeč spustí, nebo ne.
+- **Nové [`worker/src/http.ts`](worker/src/http.ts)** — společné pro appku i demo detektoru:
+  `makeNonce()` (16 náhodných bajtů na požadavek), `securityHeaders()`, `htmlResponse()`,
+  `securityTxt()`. Hlavičky jdou do **všech** odpovědí včetně JSON, NDJSON streamu a 404.
+- **CSP:** `default-src 'self'; script-src 'nonce-…'; style-src 'unsafe-inline'; img-src 'self' data: blob:;
+  connect-src 'self'; object-src/frame-src 'self' blob:; base-uri/form-action 'none'; frame-ancestors 'none'`.
+  Vědomé ústupky: `'unsafe-inline'` pro styly (CSS je v HTML, kód nespustí), `data:` kvůli inline SVG
+  faviconě, `blob:` kvůli otevírání nahraného CV přes `URL.createObjectURL` (blob dokument dědí tuhle
+  politiku). U JSON/text odpovědí je politika tvrdá: `default-src 'none'`.
+- **Inline `onclick=` je z projektu pryč** (CSP by je stejně nespustila): tlačítko Tisk ve „Výstupu
+  výběrového řízení" má `id="pr"`, odkaz tisk/PDF na `/o-projektu` má `id="printLink"`.
+  Skript uvnitř generovaného výstupu si nese nonce stránky (čte se přes `document.currentScript.nonce`,
+  ne z HTML textu) — a navíc mu tlačítka po `document.write` nadrátuje `wireDocBtns()` z rodičovského
+  okna. Uložený HTML soubor běží z disku bez CSP, takže funguje tak jako dřív.
+- **`/.well-known/security.txt`** (+ legacy `/security.txt`) na obou doménách, RFC 9116;
+  `Expires` se počítá za běhu rok dopředu, aby soubor nezestárnul. Kontakt `info@maxferit.cz`.
+- **HEAD** projde stejnými cestami jako GET — dřív `curl -I` / uptime check / skener dostal **404**.
+- Ověřeno lokálně (`wrangler dev`): hlavičky sedí, nonce se v HTML nahradil na obou stránkách,
+  žádný `onclick=` ve výstupu, security.txt 200, HEAD `/` 200, 404 má hlavičky taky; 5/5 test suit.
+- **Zbývá mimo kód:** DNS **CAA záznamy** pro `maxferit.cz` (dělá se v Cloudflare DNS, ne v repu).
+
 ## 2026-08-05 (ad) — Stránka „popis projektu" pro netechnického čtenáře + vlastní doména detektoru
 
 - **Proč:** dokumentace v appce je pro toho, kdo appku používá. Chybělo něco, co pošleš odkazem

@@ -6,6 +6,7 @@
  * Deploy: wrangler deploy -c wrangler.upload.jsonc (npm run deploy:upload)
  */
 import { scanDocument, type Flag, type DetectEnv } from "./detect";
+import { makeNonce, securityHeaders, htmlResponse, securityTxt } from "./http";
 
 type Env = DetectEnv;
 
@@ -68,7 +69,7 @@ a{color:var(--accent)}
 <div class="f0">DOCX: WCAG kontrast, Unicode nosiče, hlavičky/patičky, visible/hidden split. PDF: čtení textové vrstvy (Cloudflare Workers AI) + injection sken; detekce skrytí podle barvy = on-prem F1. · <a href="https://faxx-hr.maxferit.cz" target="_blank" rel="noopener">Hodnoticí appka</a></div>
 <div class="build">faxx-hr · v2 · commit <span title="${COMMIT_FULL}">${COMMIT}</span> · build ${BUILT}</div>
 </div>
-<script>
+<script nonce="__CSP_NONCE__">
 const drop=document.getElementById('drop'),file=document.getElementById('file'),res=document.getElementById('res');
 ['dragenter','dragover'].forEach(e=>drop.addEventListener(e,ev=>{ev.preventDefault();drop.classList.add('hot')}));
 ['dragleave','drop'].forEach(e=>drop.addEventListener(e,ev=>{ev.preventDefault();drop.classList.remove('hot')}));
@@ -122,8 +123,13 @@ function render(d){
 export default {
   async fetch(req: Request, env: Env): Promise<Response> {
     const url = new URL(req.url);
-    if (req.method === "GET" && (url.pathname === "/" || url.pathname === "/index.html")) {
-      return new Response(PAGE, { headers: { "content-type": "text/html; charset=utf-8" } });
+    const read = req.method === "GET" || req.method === "HEAD";
+    if (read && (url.pathname === "/" || url.pathname === "/index.html")) {
+      const n = makeNonce();
+      return htmlResponse(PAGE.replaceAll("__CSP_NONCE__", n), n);
+    }
+    if (read && (url.pathname === "/.well-known/security.txt" || url.pathname === "/security.txt")) {
+      return securityTxt(url.host);
     }
     if (req.method === "POST" && url.pathname === "/scan") {
       const fname = decodeURIComponent(req.headers.get("X-Filename") || "upload.bin");
@@ -132,8 +138,8 @@ export default {
       const result: { filename: string; flags: Flag[]; note: string; visible_chars: number; hidden_chars: number } = {
         filename: fname, flags: r.flags, note: r.note, visible_chars: r.visibleChars, hidden_chars: r.hiddenChars,
       };
-      return Response.json(result);
+      return Response.json(result, { headers: securityHeaders() });
     }
-    return new Response("faxx-hr upload — GET / pro stránku", { status: 404 });
+    return new Response("faxx-hr upload — GET / pro stránku", { status: 404, headers: { "content-type": "text/plain; charset=utf-8", ...securityHeaders() } });
   },
 };

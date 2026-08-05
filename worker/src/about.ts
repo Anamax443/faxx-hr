@@ -11,7 +11,7 @@
 export type AboutLang = "cs" | "en";
 const L = (lang: AboutLang, cs: string, en: string): string => (lang === "en" ? en : cs);
 
-export function aboutPage(lang: AboutLang, commit: string, built: string): string {
+export function aboutPage(lang: AboutLang, commit: string, built: string, nonce = ""): string {
   const t = (cs: string, en: string) => L(lang, cs, en);
   const other = lang === "en" ? "/o-projektu" : "/about";
   const otherLabel = lang === "en" ? "Česky" : "English";
@@ -185,8 +185,10 @@ a.btn.ghost{background:#fff;color:#2a78d6;border:1px solid #2a78d6}
 <title>${t("faxx-hr — popis projektu", "faxx-hr — project overview")}</title>
 <meta name="description" content="${t("Hodnocení životopisů proti inzerátu s obranou proti skrytým instrukcím v CV.", "CV screening against a job ad with a defence against hidden instructions in the CV.")}">
 <style>${css}</style></head><body><div class="wrap">
-<div class="top noprint"><span>🛡️ faxx-hr</span><span><a href="${other}">${otherLabel}</a> · <a href="/">${t("otevřít aplikaci", "open the app")}</a> · <a href="#" onclick="window.print();return false">${t("tisk / PDF", "print / PDF")}</a></span></div>
+<div class="top noprint"><span>🛡️ faxx-hr</span><span><a href="${other}">${otherLabel}</a> · <a href="/">${t("otevřít aplikaci", "open the app")}</a> · <a href="#" id="printLink">${t("tisk / PDF", "print / PDF")}</a></span></div>
 ${lang === "en" ? en : cs}
 <div class="foot">${t("Pracovní název projektu. Vygenerováno z živé verze", "Working project name. Generated from the live version")} <code>${commit}</code> · ${built} · <a href="https://faxx-hr.maxferit.cz">faxx-hr.maxferit.cz</a></div>
-</div></body></html>`;
+</div>
+<script nonce="${nonce}">var p=document.getElementById('printLink');if(p)p.addEventListener('click',function(e){e.preventDefault();window.print()});</script>
+</body></html>`;
 }
