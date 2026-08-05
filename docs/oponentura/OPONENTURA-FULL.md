@@ -105,7 +105,7 @@ Dvě části jsou dostupné živě:
 | Část | Adresa | Co dělá |
 |---|---|---|
 | Hodnoticí appka | `faxx-hr.maxferit.cz` | dávka CV → ranking proti inzerátu, rozpad po kritériích, nálezy |
-| Demo detektoru (F0) | `faxx-hr-upload.bass443.workers.dev` | nahraj jedno CV a uvidíš, co je v něm skryté |
+| Demo detektoru (F0) | `faxx-hr-detektor.maxferit.cz` | nahraj jedno CV a uvidíš, co je v něm skryté |
 
 Repozitář je veřejný (`Anamax443/faxx-hr`). Samotný kód detekce je spustitelný i
 lokálně bez sítě (Python, standardní knihovna) — což je záměrné: bezpečnostní
@@ -687,7 +687,7 @@ změřené na held-out sadě** — jsou to cílové prahy fáze F0, ne dosažen�
 | **Detekce + flag skrytého obsahu** | DOCX plná detekce v2 (kontrast vůči skutečnému pozadí, `w:vanish`, mikropísmo, hlavičky/patičky, komentáře/metadata/alt-texty, Unicode nosiče); PDF na edge přes Workers AI `toMarkdown` + on-prem diagnóza „proč skryté" (barva/render mode 3/nulová alfa/off-mediabox/XFA) | jádro živě, regrese 24/24 (ladicí, ne held-out) |
 | **Deterministické skórování** | Rubrik v kódu: 6 typů kritérií (`numeric_scale`, `set_overlap`, `category_map`, `cefr_map`, `tenure`, `bonus`), must-have gates, evidence kotvy, total 0–100 + pořadí | prototyp živě (`rubric.ts`), /selftest 6/6 |
 | **Odvození požadavků z inzerátu** | Personalista vloží inzerát → návrh strukturovaných požadavků, které ručně upraví (inzeráty bývají marketingové) | prototyp živě (`/api/derive`) |
-| **Review personalisty** | Ranking, rozpad po kritériích, evidence kotvy, panel nálezů, přepočet po změně vah/gate **bez AI**, manažerský tiskový výstup, JSON export/import, autosave relace | prototyp živě |
+| **Review personalisty** | Ranking, rozpad po kritériích, evidence kotvy, panel nálezů, přepočet po změně vah/gate **bez AI**, protokol výběrového řízení, JSON export/import, autosave relace | prototyp živě |
 | **Audit** | Záznam lidského rozhodnutí (`decisions`) + append-only `audit_log` jako důkaz lidského dohledu | **návrh, nezapojeno** (bezstavová appka) |
 
 **Explicitně uvnitř scope, ale jako omezená verze:**
@@ -3122,7 +3122,7 @@ interface CriterionResult {
 V UI se rozpad zobrazí po kliknutí na „breakdown": u každého kritéria je počet bodů,
 `detail` (např. „3/5 klíčových dovedností (chybí: Kubernetes, Terraform)"), a u shody
 dovedností navíc evidence kotvy. Diskvalifikovaní mají navíc řádek „Diskvalifikováno:
-…" s důvody gate. Rozpad je i v manažerském tiskovém výstupu, takže rozhodnutí je
+…" s důvody gate. Rozpad je i v protokolu výběrového řízení, takže rozhodnutí je
 doložitelné mimo appku.
 
 Pořadí kandidátů určuje `rankCandidates`: nejdřív se rozdělí na nediskvalifikované a
@@ -4054,7 +4054,7 @@ job_posting / other) → ne-uchazečské dokumenty (nahraný inzerát mezi CV, c
 se v UI i tiskovém výstupu skryjí; při nejasnosti se bere jako CV (neschovávat reálné
 uchazeče).
 
-### Evidence kotvy a manažerský výstup
+### Evidence kotvy a výstupní dokumenty
 
 Rozpad kritéria **Shoda dovedností** ukazuje u každé matchnuté dovednosti **doslovný
 úryvek z viditelného textu CV** („🔎 doloženo v CV"). Kotva se bere **deterministicky
@@ -4063,10 +4063,18 @@ nedá se halucinovat. Sedí na `qualification.skills[].evidence`, takže přeži
 import i přepočet bez AI. To je zároveň regulatorní přínos — **vysvětlitelnost** je
 požadavek AI Act (transparentnost).
 
-Manažerský tiskový výstup (`buildReport`) generuje samostatné light HTML s pořadím,
-kontakty, skóre, rozpadem a **poznámkou o lidském dohledu** (Tisk/PDF v novém okně +
-Stáhnout HLTML). Appka nemá tlačítko „hromadně zamítnout" — rating ≠ rozhodnutí, postup
-kandidáta dělá vždy člověk.
+Jedno výběrové řízení má **dva výstupní dokumenty**; liší se čtenářem, ne libovůlí:
+
+| Dokument | Funkce | Čtenář | Osobní údaje |
+|---|---|---|---|
+| **Výstup výběrového řízení** (`buildDeck`, 1 ze 2) | souhrn — čísla dávky, užší výběr, srovnání podle kritérií, integrita podkladů, metodika | vedení | **ne** (bez kontaktů) |
+| **Protokol výběrového řízení** (`buildReport`, 2 ze 2) | doklad, jak se rozhodovalo — zadání i s původním textem inzerátu, pořadí, kontakty, rozpad | personalista, archiv | **ano** |
+
+Obojí je samostatné light HTML (Tisk/PDF v novém okně + uložení souboru), obojí nese
+**poznámku o lidském dohledu** a oba dokumenty na sebe textově odkazují, takže příjemce
+jednoho ví o existenci druhého. Rozdělení je zároveň **minimalizace údajů** podle GDPR —
+vedení k rozhodnutí kontakty kandidátů nepotřebuje. Appka nemá tlačítko „hromadně
+zamítnout" — rating ≠ rozhodnutí, postup kandidáta dělá vždy člověk.
 
 ### Gate praxe: defaultně VYPNUTÝ (HR zásada)
 
@@ -4203,7 +4211,7 @@ a volba se ukládá v prohlížeči (`faxx_lang`, `faxx_theme`).
   `/api/health`). Lokalizují se: popisky kritérií a důvod gate (`buildRubric`), detaily
   rozpadu (`rubric.ts`), poznámky a labely nálezů (`detect.ts` — `scanDocx`/`scanDocument`
   mají parametr `lang` s defaultem „cs", takže `upload.ts` beze změny), hlášky appky i
-  manažerský tiskový výstup.
+  protokol výběrového řízení.
 - **Přepnutí jazyka nad hotovou dávkou** spustí tichý **rescore bez AI**, aby se přeložil
   i rozpad kritérií a detaily nálezů — ne jen statické popisky.
 
@@ -4256,7 +4264,7 @@ tokeny a `account_id` **nejsou** v této dokumentaci (jde do public repa).
 **Edge propagace.** Po `wrangler deploy` se nový bundl propaguje do edge sítě Cloudflare;
 kombinovaně s browser cache stránky je proto po deployi potřeba hard-refresh (§11.6). Živé
 URL: `https://faxx-hr.maxferit.cz` (appka) a
-`https://faxx-hr-upload.bass443.workers.dev` (demo).
+`https://faxx-hr-detektor.maxferit.cz` (demo).
 
 **On-prem runner.** Realizace on-prem runneru (Beelink / EU VPS za Conduit gateway) pro
 hloubkovou PDF detekci a OCR skenů je **otevřená otázka** ([`DESIGN.md`](../../DESIGN.md)
@@ -5387,7 +5395,7 @@ Body, které nejsou na kritické cestě, ale patří do backlogu:
   reuse; extrakce → pevné schéma je společný vzor, ale bezpečnostní invariant (zádrž
   skrytého textu) je specifický pro HR screening.
 - **Export shortlistu pro hiring manažera** (PDF / sdílený odkaz) — navazuje na F2/F3
-  a manažerský tiskový výstup, který už existuje.
+  a protokol výběrového řízení, který už existuje.
 - **JS/OpenAction flag na on-prem** — dnes se JavaScript v PDF jen zadrží (neextrahuje),
   jistí ho jen edge; volitelný flag „dokument obsahuje JavaScript" je drobný follow-up.
 
@@ -6066,7 +6074,7 @@ DESIGN.md       plný technický návrh; HANDOFF.md deník stavu
 ```
 
 Živé nasazení: hodnoticí appka `faxx-hr.maxferit.cz`, demo detektoru
-`faxx-hr-upload.bass443.workers.dev`. Deploy **ručně** (`npm run deploy:app` /
+`faxx-hr-detektor.maxferit.cz`. Deploy **ručně** (`npm run deploy:app` /
 `deploy:upload`), bez CI. Extraction jádro je sdílené s repem `faxx-dox`.
 
 ---
@@ -6086,10 +6094,11 @@ Registr je poctivý — stav „prototyp" a „nezapojené" se neskrývá.
 | 2026-08-04 | **On-prem PDF hardening** — render mode 3 / XFA / offpage / ToUnicode; regrese **24/24** (DOCX 14 + PDF 10) | invariant zádrže testován |
 | 2026-08-04 (b) | **VERIFY-CORE spike** — extrakce (free 8B) → rubrik → ranking **funguje**; injection empiricky ignorována | jádro stojí; 8b-fp8 = default |
 | 2026-08-04 (c) | **Appka skeleton** — záložky, dávka CV, inzerát→požadavky, ranking (F1/F2/F3 v1) | sdílený `detect.ts` |
-| 2026-08-04 (d) | **Velká UX vlna** — kandidát=osoba, streamovaný průběh, váhy, manažerský tiskový výstup | živě |
+| 2026-08-04 (d) | **Velká UX vlna** — kandidát=osoba, streamovaný průběh, váhy, protokol výběrového řízení | živě |
 | 2026-08-04 (e) | přepočet **bez AI**, filtr ne-uchazečů, gate off default, kvóta free AI hlášena | rescore bez tokenů |
 | 2026-08-04 (f) | **Dvojjazyčnost CS/EN + světlý/tmavý motiv**; veškerá dokumentace aktualizována | i18n slovník + SSR default |
 | 2026-08-04 (g–l) | chudá perzistence (JSON export/import), **evidence kotvy**, editor rubriku + šablony, autosave relace, **per-doc cache extrakce** | vše NENASAZENO čeká svolení / dílem živě |
+| 2026-08-05 (ab–ac) | **Dva pojmenované dokumenty jednoho VŘ** — *Výstup* (pro vedení, bez kontaktů, 6 stran A4 na výšku) a *Protokol* (personalista/archiv, s kontakty); vlastní doména i pro demo detektoru | živě; minimalizace údajů dle GDPR |
 
 **Zbývá (poctivě):** held-out sada (sestaví někdo jiný než autor detektoru) + externí
 red-team → **F0 exit: recall ≥ 98 % na otrávených, FP ≤ 5–10 % na čistých, přesnost

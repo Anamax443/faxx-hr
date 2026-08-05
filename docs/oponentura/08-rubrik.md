@@ -276,7 +276,7 @@ interface CriterionResult {
 V UI se rozpad zobrazí po kliknutí na „breakdown": u každého kritéria je počet bodů,
 `detail` (např. „3/5 klíčových dovedností (chybí: Kubernetes, Terraform)"), a u shody
 dovedností navíc evidence kotvy. Diskvalifikovaní mají navíc řádek „Diskvalifikováno:
-…" s důvody gate. Rozpad je i v manažerském tiskovém výstupu, takže rozhodnutí je
+…" s důvody gate. Rozpad je i v protokolu výběrového řízení, takže rozhodnutí je
 doložitelné mimo appku.
 
 Pořadí kandidátů určuje `rankCandidates`: nejdřív se rozdělí na nediskvalifikované a

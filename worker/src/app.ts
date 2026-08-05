@@ -13,6 +13,7 @@ import { scanDocument, injectionContext, type DetectEnv } from "./detect";
 import { extractQualification, mergeQualifications, mergeIdentity, aiJson, sanitizeQualification, sanitizeIdentity, EXTRACT_MODEL_DEFAULT, DEFAULT_EXTRACT_SYSTEM, type AiBinding, type Identity } from "./extract";
 import { scoreCandidate, rankCandidates, type Rubric, type Qualification, type Lang } from "./rubric";
 import { normalizeLanguageName, languageLabel, normName } from "./reference/languages";
+import { aboutPage, type AboutLang } from "./about";
 
 interface Env extends DetectEnv { AI: AiBinding & DetectEnv["AI"] }
 
@@ -345,6 +346,12 @@ export default {
 
     if (req.method === "GET" && (url.pathname === "/" || url.pathname === "/index.html")) {
       return new Response(PAGE, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } });
+    }
+
+    // Popis projektu pro netechnického čtenáře (vedení) — samostatná stránka k poslání odkazem.
+    if (req.method === "GET" && (url.pathname === "/o-projektu" || url.pathname === "/about")) {
+      const al: AboutLang = url.pathname === "/about" ? "en" : "cs";
+      return new Response(aboutPage(al, COMMIT, BUILT), { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } });
     }
 
     if (req.method === "POST" && url.pathname === "/api/extract-text") {
@@ -787,6 +794,7 @@ a{color:var(--accent)}
   <div class="lang-cs">
   <div class="card doc">
     <h3>Dokumentace</h3>
+    <p style="margin:0 0 12px"><b>Potřebuješ projekt někomu představit?</b> <a href="/o-projektu" target="_blank" rel="noopener">📄 Popis projektu pro vedení</a> — samostatná stránka bez žargonu (co to řeší, jak to funguje, v jakém je to stavu, co to stojí). Dá se poslat odkazem nebo vytisknout.</p>
     <div class="toc">
       <a href="#d-uvod">1 · Co faxx-hr dělá</a>
       <a href="#d-pipe">2 · Jak to funguje (pipeline)</a>
@@ -826,7 +834,7 @@ a{color:var(--accent)}
       <li><b>Pevné schéma bez skóre.</b> Extrakční model plní jen předdefinovaná pole (roky, dovednosti…). Nemá kam zapsat skóre ani doporučení, takže je nemůže ovlivnit.</li>
       <li><b>Deterministické skórování.</b> O pořadí rozhoduje kód nad strukturovanými daty, ne model, který by šlo přemluvit. Surový text CV se do skórování nikdy nedostane.</li>
     </ol>
-    <p>Detekci skrytého textu si můžeš vyzkoušet i samostatně na <a href="https://faxx-hr-upload.bass443.workers.dev" target="_blank" rel="noopener">demu detektoru</a> (nahraješ jedno CV a uvidíš, co je skryté).</p>
+    <p>Detekci skrytého textu si můžeš vyzkoušet i samostatně na <a href="https://faxx-hr-detektor.maxferit.cz" target="_blank" rel="noopener">demu detektoru</a> (nahraješ jedno CV a uvidíš, co je skryté).</p>
   </div>
 
   <div class="card doc" id="d-detek">
@@ -929,6 +937,7 @@ a{color:var(--accent)}
   <div class="lang-en">
   <div class="card doc">
     <h3>Documentation</h3>
+    <p style="margin:0 0 12px"><b>Need to introduce the project to someone?</b> <a href="/about" target="_blank" rel="noopener">📄 Project overview for management</a> — a standalone page without jargon (what it solves, how it works, where it stands, what it costs). Send it as a link or print it.</p>
     <div class="toc">
       <a href="#en-uvod">1 · What faxx-hr does</a>
       <a href="#en-pipe">2 · How it works (pipeline)</a>
@@ -968,7 +977,7 @@ a{color:var(--accent)}
       <li><b>Fixed schema without a score.</b> The extraction model fills only predefined fields (years, skills…). It has nowhere to write a score or recommendation, so it cannot influence them.</li>
       <li><b>Deterministic scoring.</b> Ranking is decided by code over structured data, not by a model that could be talked into it. The raw CV text never reaches the scoring.</li>
     </ol>
-    <p>You can also try the hidden-text detection on its own at the <a href="https://faxx-hr-upload.bass443.workers.dev" target="_blank" rel="noopener">detector demo</a> (upload one CV and see what is hidden).</p>
+    <p>You can also try the hidden-text detection on its own at the <a href="https://faxx-hr-detektor.maxferit.cz" target="_blank" rel="noopener">detector demo</a> (upload one CV and see what is hidden).</p>
   </div>
 
   <div class="card doc" id="en-detek">

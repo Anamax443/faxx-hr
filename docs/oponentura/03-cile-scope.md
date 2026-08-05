@@ -81,7 +81,7 @@ změřené na held-out sadě** — jsou to cílové prahy fáze F0, ne dosažen�
 | **Detekce + flag skrytého obsahu** | DOCX plná detekce v2 (kontrast vůči skutečnému pozadí, `w:vanish`, mikropísmo, hlavičky/patičky, komentáře/metadata/alt-texty, Unicode nosiče); PDF na edge přes Workers AI `toMarkdown` + on-prem diagnóza „proč skryté" (barva/render mode 3/nulová alfa/off-mediabox/XFA) | jádro živě, regrese 24/24 (ladicí, ne held-out) |
 | **Deterministické skórování** | Rubrik v kódu: 6 typů kritérií (`numeric_scale`, `set_overlap`, `category_map`, `cefr_map`, `tenure`, `bonus`), must-have gates, evidence kotvy, total 0–100 + pořadí | prototyp živě (`rubric.ts`), /selftest 6/6 |
 | **Odvození požadavků z inzerátu** | Personalista vloží inzerát → návrh strukturovaných požadavků, které ručně upraví (inzeráty bývají marketingové) | prototyp živě (`/api/derive`) |
-| **Review personalisty** | Ranking, rozpad po kritériích, evidence kotvy, panel nálezů, přepočet po změně vah/gate **bez AI**, manažerský tiskový výstup, JSON export/import, autosave relace | prototyp živě |
+| **Review personalisty** | Ranking, rozpad po kritériích, evidence kotvy, panel nálezů, přepočet po změně vah/gate **bez AI**, protokol výběrového řízení, JSON export/import, autosave relace | prototyp živě |
 | **Audit** | Záznam lidského rozhodnutí (`decisions`) + append-only `audit_log` jako důkaz lidského dohledu | **návrh, nezapojeno** (bezstavová appka) |
 
 **Explicitně uvnitř scope, ale jako omezená verze:**

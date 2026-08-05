@@ -13,7 +13,8 @@ personalistovi **viditelně vlajkovány**, ne tiše odfiltrovány.
 
 > **🌐 Živě:**
 > **[hodnoticí appka](https://faxx-hr.maxferit.cz)** (dávka CV → ranking proti inzerátu, CS/EN + světlý/tmavý motiv) ·
-> **[demo detektoru](https://faxx-hr-upload.bass443.workers.dev)** (nahraj jedno CV a uvidíš skrytý text).
+> **[demo detektoru](https://faxx-hr-detektor.maxferit.cz)** (nahraj jedno CV a uvidíš skrytý text) ·
+> **[popis projektu](https://faxx-hr.maxferit.cz/o-projektu)** (netechnicky, k poslání nadřízenému / k tisku).
 
 > **Pokračuješ v práci? Začni u [`HANDOFF.md`](HANDOFF.md).**
 > Stav projektu: [`status.html`](status.html) · Plný návrh: [`DESIGN.md`](DESIGN.md) · Regulatorika: [`docs/AI-ACT.md`](docs/AI-ACT.md)
@@ -83,7 +84,7 @@ vlajkuje. Nasazení ručně: `npm run deploy:app` (bez CI). Sdílený detektor: 
 
 **🌐 Živě:**
 - **Hodnoticí appka:** https://faxx-hr.maxferit.cz — dávka CV proti inzerátu, ranking, CS/EN + motiv.
-- **Detektor (F0 upload):** https://faxx-hr-upload.bass443.workers.dev — přetáhni PDF/DOCX a uvidíš skrytý text.
+- **Detektor (F0 upload):** https://faxx-hr-detektor.maxferit.cz — přetáhni PDF/DOCX a uvidíš skrytý text.
 
 ```bash
 # 0) Hodnoticí appka lokálně (reálný Workers AI, účet bass443 → může účtovat neurony)

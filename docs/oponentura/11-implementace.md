@@ -113,7 +113,7 @@ job_posting / other) → ne-uchazečské dokumenty (nahraný inzerát mezi CV, c
 se v UI i tiskovém výstupu skryjí; při nejasnosti se bere jako CV (neschovávat reálné
 uchazeče).
 
-### Evidence kotvy a manažerský výstup
+### Evidence kotvy a výstupní dokumenty
 
 Rozpad kritéria **Shoda dovedností** ukazuje u každé matchnuté dovednosti **doslovný
 úryvek z viditelného textu CV** („🔎 doloženo v CV"). Kotva se bere **deterministicky
@@ -122,10 +122,18 @@ nedá se halucinovat. Sedí na `qualification.skills[].evidence`, takže přeži
 import i přepočet bez AI. To je zároveň regulatorní přínos — **vysvětlitelnost** je
 požadavek AI Act (transparentnost).
 
-Manažerský tiskový výstup (`buildReport`) generuje samostatné light HTML s pořadím,
-kontakty, skóre, rozpadem a **poznámkou o lidském dohledu** (Tisk/PDF v novém okně +
-Stáhnout HLTML). Appka nemá tlačítko „hromadně zamítnout" — rating ≠ rozhodnutí, postup
-kandidáta dělá vždy člověk.
+Jedno výběrové řízení má **dva výstupní dokumenty**; liší se čtenářem, ne libovůlí:
+
+| Dokument | Funkce | Čtenář | Osobní údaje |
+|---|---|---|---|
+| **Výstup výběrového řízení** (`buildDeck`, 1 ze 2) | souhrn — čísla dávky, užší výběr, srovnání podle kritérií, integrita podkladů, metodika | vedení | **ne** (bez kontaktů) |
+| **Protokol výběrového řízení** (`buildReport`, 2 ze 2) | doklad, jak se rozhodovalo — zadání i s původním textem inzerátu, pořadí, kontakty, rozpad | personalista, archiv | **ano** |
+
+Obojí je samostatné light HTML (Tisk/PDF v novém okně + uložení souboru), obojí nese
+**poznámku o lidském dohledu** a oba dokumenty na sebe textově odkazují, takže příjemce
+jednoho ví o existenci druhého. Rozdělení je zároveň **minimalizace údajů** podle GDPR —
+vedení k rozhodnutí kontakty kandidátů nepotřebuje. Appka nemá tlačítko „hromadně
+zamítnout" — rating ≠ rozhodnutí, postup kandidáta dělá vždy člověk.
 
 ### Gate praxe: defaultně VYPNUTÝ (HR zásada)
 
@@ -262,7 +270,7 @@ a volba se ukládá v prohlížeči (`faxx_lang`, `faxx_theme`).
   `/api/health`). Lokalizují se: popisky kritérií a důvod gate (`buildRubric`), detaily
   rozpadu (`rubric.ts`), poznámky a labely nálezů (`detect.ts` — `scanDocx`/`scanDocument`
   mají parametr `lang` s defaultem „cs", takže `upload.ts` beze změny), hlášky appky i
-  manažerský tiskový výstup.
+  protokol výběrového řízení.
 - **Přepnutí jazyka nad hotovou dávkou** spustí tichý **rescore bez AI**, aby se přeložil
   i rozpad kritérií a detaily nálezů — ne jen statické popisky.
 
@@ -315,7 +323,7 @@ tokeny a `account_id` **nejsou** v této dokumentaci (jde do public repa).
 **Edge propagace.** Po `wrangler deploy` se nový bundl propaguje do edge sítě Cloudflare;
 kombinovaně s browser cache stránky je proto po deployi potřeba hard-refresh (§11.6). Živé
 URL: `https://faxx-hr.maxferit.cz` (appka) a
-`https://faxx-hr-upload.bass443.workers.dev` (demo).
+`https://faxx-hr-detektor.maxferit.cz` (demo).
 
 **On-prem runner.** Realizace on-prem runneru (Beelink / EU VPS za Conduit gateway) pro
 hloubkovou PDF detekci a OCR skenů je **otevřená otázka** ([`DESIGN.md`](../../DESIGN.md)

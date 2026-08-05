@@ -243,7 +243,7 @@ DESIGN.md       plný technický návrh; HANDOFF.md deník stavu
 ```
 
 Živé nasazení: hodnoticí appka `faxx-hr.maxferit.cz`, demo detektoru
-`faxx-hr-upload.bass443.workers.dev`. Deploy **ručně** (`npm run deploy:app` /
+`faxx-hr-detektor.maxferit.cz`. Deploy **ručně** (`npm run deploy:app` /
 `deploy:upload`), bez CI. Extraction jádro je sdílené s repem `faxx-dox`.
 
 ---
@@ -267,6 +267,7 @@ Registr je poctivý — stav „prototyp" a „nezapojené" se neskrývá.
 | 2026-08-04 (e) | přepočet **bez AI**, filtr ne-uchazečů, gate off default, kvóta free AI hlášena | rescore bez tokenů |
 | 2026-08-04 (f) | **Dvojjazyčnost CS/EN + světlý/tmavý motiv**; veškerá dokumentace aktualizována | i18n slovník + SSR default |
 | 2026-08-04 (g–l) | chudá perzistence (JSON export/import), **evidence kotvy**, editor rubriku + šablony, autosave relace, **per-doc cache extrakce** | vše NENASAZENO čeká svolení / dílem živě |
+| 2026-08-05 (ab–ac) | **Dva pojmenované dokumenty jednoho VŘ** — *Výstup* (pro vedení, bez kontaktů, 6 stran A4 na výšku) a *Protokol* (personalista/archiv, s kontakty); vlastní doména i pro demo detektoru | živě; minimalizace údajů dle GDPR |
 
 **Zbývá (poctivě):** held-out sada (sestaví někdo jiný než autor detektoru) + externí
 red-team → **F0 exit: recall ≥ 98 % na otrávených, FP ≤ 5–10 % na čistých, přesnost

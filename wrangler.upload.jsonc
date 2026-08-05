@@ -6,5 +6,10 @@
   "account_id": "a37a36270aa2db7382f62912ba5a0130",
   "workers_dev": true,
   "observability": { "enabled": true },
-  "ai": { "binding": "AI" }
+  "ai": { "binding": "AI" },
+  // Vlastní doména — aby se odkazovalo na maxferit, ne na …workers.dev (= pracovní prostor).
+  // CF vyrobí DNS + TLS; workers_dev zůstává true, takže stará URL dál funguje.
+  "routes": [
+    { "pattern": "faxx-hr-detektor.maxferit.cz", "custom_domain": true }
+  ]
 }

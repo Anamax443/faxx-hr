@@ -30,7 +30,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import adversarial_pdf as adv  # noqa: E402
 import hidden_text as ht  # noqa: E402
 
-WORKER = "https://faxx-hr-upload.bass443.workers.dev/scan"
+WORKER = "https://faxx-hr-detektor.maxferit.cz/scan"
 # Cloudflare (Bot Fight Mode) blokuje Python-urllib UA → 403. Prohlížečový UA projde.
 _UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
        "(KHTML, like Gecko) Chrome/120.0 Safari/537.36")

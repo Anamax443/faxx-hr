@@ -2,6 +2,26 @@
 
 Append-only. Nejnovější záznam nahoru. Slouží k pokračování z jiného počítače / po pauze.
 
+## 2026-08-05 (ad) — Stránka „popis projektu" pro netechnického čtenáře + vlastní doména detektoru
+
+- **Proč:** dokumentace v appce je pro toho, kdo appku používá. Chybělo něco, co pošleš odkazem
+  nadřízenému, který appku nikdy neotevře.
+- **Nové [`worker/src/about.ts`](worker/src/about.ts)** → servíruje se na **`/o-projektu`** (CS)
+  a **`/about`** (EN). Bez žargonu: problém (ukázka skryté instrukce v CV) → tři vrstvy obrany jako
+  číslované kroky → co appka umí dnes → dva výstupní dokumenty → přínos pro firmu → právní rámec
+  (AI Act příloha III bod 4, GDPR čl. 22) → **stav po částech včetně toho, co ještě NENÍ** → náklady
+  (free tier) → odkazy na živé ukázky. Tisknutelné (A4, `@page`), přepínač CS/EN, bez externích
+  závislostí. Odkaz na ni je v záložce Dokumentace (CS i EN).
+- **Vlastní doména i pro demo detektoru:** `wrangler.upload.jsonc` dostal custom domain
+  **`faxx-hr-detektor.maxferit.cz`** (CF vyrobil DNS + TLS, hned HTTP 200). Důvod: odkazy z appky
+  i z dokumentace vedly na `…workers.dev`, což je pracovní prostor, ne prezentovatelná adresa.
+- **Doksweep:** všechny odkazy `faxx-hr-upload.bass443.workers.dev` → `faxx-hr-detektor.maxferit.cz`
+  (README ×2, status.html, oponentura vč. FULL mirroru, `detector/boundary_matrix.py`). Názvosloví
+  „manažerský tiskový výstup" → **Protokol výběrového řízení** v oponentuře (03, 08, 11, 15 + FULL),
+  kapitola 11 má nově **tabulku dvou výstupních dokumentů** (kdo je čte, kdo v nich má osobní údaje,
+  minimalizace dle GDPR), changelog v 17-prilohy doplněn. Historické záznamy v tomhle deníku se
+  nepřepisují.
+
 ## 2026-08-05 (ac) — Dva pojmenované dokumenty jednoho VŘ + A4 na výšku + odkazy na maxferit
 
 - **Pojmenování** (dřív matoucí „manažerský výstup" ×2): jedno výběrové řízení = **dva dokumenty**,

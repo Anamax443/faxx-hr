@@ -199,7 +199,7 @@ Body, které nejsou na kritické cestě, ale patří do backlogu:
   reuse; extrakce → pevné schéma je společný vzor, ale bezpečnostní invariant (zádrž
   skrytého textu) je specifický pro HR screening.
 - **Export shortlistu pro hiring manažera** (PDF / sdílený odkaz) — navazuje na F2/F3
-  a manažerský tiskový výstup, který už existuje.
+  a protokol výběrového řízení, který už existuje.
 - **JS/OpenAction flag na on-prem** — dnes se JavaScript v PDF jen zadrží (neextrahuje),
   jistí ho jen edge; volitelný flag „dokument obsahuje JavaScript" je drobný follow-up.
 
