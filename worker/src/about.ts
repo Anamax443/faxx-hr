@@ -14,7 +14,8 @@ const L = (lang: AboutLang, cs: string, en: string): string => (lang === "en" ? 
 export function aboutPage(lang: AboutLang, commit: string, built: string): string {
   const t = (cs: string, en: string) => L(lang, cs, en);
   const other = lang === "en" ? "/o-projektu" : "/about";
-  const otherLabel = lang === "en" ? "🇨🇿 Česky" : "🇬🇧 English";
+  // Windows vlajková emoji nerenderuje (ukáže „GB"/„CZ") → neutrální glóbus.
+  const otherLabel = lang === "en" ? "🌐 Česky" : "🌐 English";
 
   const css = `*{box-sizing:border-box}
 body{margin:0;background:#f9f9f7;color:#0b0b0b;font:16px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif}
