@@ -794,7 +794,7 @@ a{color:var(--accent)}
   <div class="lang-cs">
   <div class="card doc">
     <h3>Dokumentace</h3>
-    <p style="margin:0 0 12px"><b>Potřebuješ projekt někomu představit?</b> <a href="/o-projektu" target="_blank" rel="noopener">📄 Popis projektu pro vedení</a> — samostatná stránka bez žargonu (co to řeší, jak to funguje, v jakém je to stavu, co to stojí). Dá se poslat odkazem nebo vytisknout.</p>
+    <p style="margin:0 0 12px"><b>Potřebuješ projekt někomu představit?</b> <a href="/o-projektu" target="_blank" rel="noopener">📄 Popis projektu</a> — samostatná stránka bez žargonu (co to řeší, jak to funguje, v jakém je to stavu, co to stojí). Dá se poslat odkazem nebo vytisknout.</p>
     <div class="toc">
       <a href="#d-uvod">1 · Co faxx-hr dělá</a>
       <a href="#d-pipe">2 · Jak to funguje (pipeline)</a>
@@ -937,7 +937,7 @@ a{color:var(--accent)}
   <div class="lang-en">
   <div class="card doc">
     <h3>Documentation</h3>
-    <p style="margin:0 0 12px"><b>Need to introduce the project to someone?</b> <a href="/about" target="_blank" rel="noopener">📄 Project overview for management</a> — a standalone page without jargon (what it solves, how it works, where it stands, what it costs). Send it as a link or print it.</p>
+    <p style="margin:0 0 12px"><b>Need to introduce the project to someone?</b> <a href="/about" target="_blank" rel="noopener">📄 Project overview</a> — a standalone page without jargon (what it solves, how it works, where it stands, what it costs). Send it as a link or print it.</p>
     <div class="toc">
       <a href="#en-uvod">1 · What faxx-hr does</a>
       <a href="#en-pipe">2 · How it works (pipeline)</a>
