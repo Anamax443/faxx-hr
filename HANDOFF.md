@@ -2,6 +2,32 @@
 
 Append-only. Nejnovější záznam nahoru. Slouží k pokračování z jiného počítače / po pauze.
 
+## 2026-08-05 (z) — Jazyk podle inzerátu (ne napevno angličtina) + oprava falešné shody jazyků
+
+- **Proč:** kritérium bylo natvrdo „Angličtina" — pozice, která chce němčinu, se tím hodnotila špatně.
+  Zobecnění na „cizí jazyky" by bylo horší (C2 španělština na německou pozici = falešně vysoké skóre),
+  takže se hodnotí **jazyk(y), které požaduje inzerát**.
+- **Nová referenční vrstva** [`worker/src/reference/languages.ts`](worker/src/reference/languages.ts)
+  (ISO 639-1, stejný princip jako `cefr.ts` — mapuje KÓD, ne model): `normalizeLanguageName()` /
+  `sameLanguage()` / `languageLabel()` znají „angličtina / AJ / anglický jazyk / English / en" atd.
+  (30 jazyků, CS+EN názvy, zkratky AJ/NJ/RJ). Regrese `languages.test.mjs` **45/45**.
+- **CHYBA OPRAVENA:** `rubric.ts` pároval jazyk podřetězcem (`n.includes("en")`) → norm("slovenština")
+  = „slovenstina" **obsahuje „en"** → rodilý Slovák dostával 10/10 za angličtinu. Teď shoda přes ISO kód.
+- **Rubrik** (`cefr_map`): nové pole `languages: string[]` (staré `language` funguje dál). Víc jazyků =
+  **průměr** přes ně, chybějící požadovaný jazyk = 0 bodů (ne diskvalifikace), detail rozepisuje každý
+  jazyk zvlášť. Regrese `rubric.lang.test.mjs` (nový soubor).
+- **Appka:** požadavky mají pole **„Požadované jazyky"** (default `angličtina`) — odvození z inzerátu ho
+  vyplní samo (DERIVE prompt + schéma rozšířeno o `languages`, s instrukcí NEdomýšlet angličtinu).
+  **Prázdné pole = jazyk se nehodnotí vůbec** (kritérium vypadne z rubriku, váhy se normalizují).
+  Popisek kritéria je dynamický („Jazyk: němčina" / „Jazyky: angličtina, němčina"), v Nastavení se váha
+  jmenuje **Jazyky**. Propsáno do šablon pozic, JSON exportu/importu, autosave relace, tiskového dokladu
+  (řádek „Požadované jazyky") a shrnutí nad pořadím. i18n CS+EN, in-app Dokumentace (tabulka kritérií).
+- **Úklid:** trojí ruční parsování požadavků v endpointech → jedna funkce `parseReq()`.
+- **Ověřeno živě** (`wrangler dev` + `/api/rescore`): požadavek němčina → „Jazyk: němčina · C1 → 9,0/10";
+  rodilá slovenština při požadavku angličtina → 0 „neuvedeno" (dřív 10); AJ C1 + NJ B1 → 6,5; prázdné
+  požadavky → kritérium jazyka v rubriku vůbec není. Build 218,78 KiB, všech 5 test suit zeleně.
+- **NENASAZENO** — čeká na svolení (`npm run deploy:app`).
+
 ## 2026-08-05 (y) — Váhy: procenta zpět jako třetí režim zadávání
 
 - Commit `8c64e11` (slovně / osa) procenta z nabídky **odebral**, ale interní zápis i CSS `w-proc`

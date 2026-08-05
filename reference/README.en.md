@@ -39,6 +39,12 @@ non-discriminatory (EU AI Act Art. 14, GDPR Art. 22; US EEOC Uniform Guidelines)
   deterministic `normalizeLanguageLevel()`; regression [`cefr.test.mjs`](../worker/src/reference/cefr.test.mjs)
   **23/23**. **Wired into scoring** (`rubric.ts` → `cefr_map`): extraction emits `languages[].level_raw`
   (the verbatim phrase), the code maps it to CEFR → `stated`/`inferred` + evidence in breakdown and print.
+- ✅ **ISO 639-1 — language names** (WIRED): [`worker/src/reference/languages.ts`](../worker/src/reference/languages.ts) —
+  `normalizeLanguageName()` / `sameLanguage()` map free-form spellings ("angličtina", "AJ", "English", "en")
+  to an ISO code; regression [`languages.test.mjs`](../worker/src/reference/languages.test.mjs) **45/45**.
+  **Wired into scoring** (`rubric.ts` → `cefr_map`): languages are matched by CODE, never by substring —
+  this killed the false match "slovenština" ⊃ "en" (a native Slovak speaker used to score for English).
+  The criterion scores the languages **the job ad requires** (English used to be hard-coded).
 - ⚪ **ESCO — skills / seniority** (roadmap): taxonomy + fuzzy match of `skills.name`.
 - ⚪ **EQF / NSK — education** (roadmap): map `education.level` and Czech fields.
 

@@ -12,6 +12,7 @@
 import { scanDocument, injectionContext, type DetectEnv } from "./detect";
 import { extractQualification, mergeQualifications, mergeIdentity, aiJson, sanitizeQualification, sanitizeIdentity, EXTRACT_MODEL_DEFAULT, DEFAULT_EXTRACT_SYSTEM, type AiBinding, type Identity } from "./extract";
 import { scoreCandidate, rankCandidates, type Rubric, type Qualification, type Lang } from "./rubric";
+import { normalizeLanguageName, languageLabel, normName } from "./reference/languages";
 
 interface Env extends DetectEnv { AI: AiBinding & DetectEnv["AI"] }
 
@@ -36,7 +37,34 @@ const str = (x: unknown): string => (typeof x === "string" ? x : x == null ? "" 
 const num = (x: unknown): number => (typeof x === "number" && Number.isFinite(x) ? x : Number(x) || 0);
 const arr = (x: unknown): unknown[] => (Array.isArray(x) ? x : []);
 
-interface Requirements { jobTitle: string; minYears: number; requiredSkills: string[]; weights?: Record<string, number>; disabled?: string[] }
+interface Requirements { jobTitle: string; minYears: number; requiredSkills: string[]; languages?: string[]; weights?: Record<string, number>; disabled?: string[] }
+
+/** Jazyky z formuláře/inzerátu: „angličtina, němčina" → ["angličtina","němčina"] (bez duplicit dle ISO kódu). */
+function parseLangs(x: unknown): string[] {
+  const raw = Array.isArray(x) ? x.map((s) => str(s)) : str(x).split(/[,;/]+/);
+  const out: string[] = [], seen = new Set<string>();
+  for (const s of raw) {
+    const t = s.trim(); if (!t) continue;
+    const e = normalizeLanguageName(t), k = e ? e.code : normName(t);
+    if (seen.has(k)) continue;
+    seen.add(k); out.push(e ? e.cs : t);
+    if (out.length >= 5) break; // víc jazyků než 5 už není požadavek, ale seznam přání
+  }
+  return out;
+}
+
+/** Požadavky z těla requestu (JSON i multipart) — jedno místo pro všechny endpointy. */
+function parseReq(x: unknown): Requirements {
+  const r = obj(x);
+  return {
+    jobTitle: str(r.jobTitle),
+    minYears: Math.max(0, Math.round(num(r.minYears))),
+    requiredSkills: arr(r.requiredSkills).map((s) => str(s).toLowerCase().trim()).filter(Boolean),
+    languages: parseLangs(r.languages),
+    weights: obj(r.weights) as Record<string, number>,
+    disabled: arr(r.disabled).map((s) => str(s)),
+  };
+}
 
 // výchozí váhy (v %); rubric.ts je stejně normalizuje podle součtu, takže stačí kladná čísla
 export const DEFAULT_WEIGHTS: Record<string, number> = { roky_praxe: 25, dovednosti: 30, vzdelani: 15, en: 10, stabilita: 10, certifikace: 10 };
@@ -45,11 +73,19 @@ function buildRubric(r: Requirements, lang: Lang = "cs"): Rubric {
   const w = r.weights || {};
   const wv = (k: string) => (typeof w[k] === "number" && w[k] >= 0 ? w[k] : DEFAULT_WEIGHTS[k]);
   const off = new Set(r.disabled || []); // kritéria vypnutá personalistou (editor rubriku)
+  // Jazyk NEHODNOTÍME napevno (dřív vždy angličtina) — bere se ten, který požaduje
+  // inzerát/formulář. Když pozice žádný jazyk nepožaduje, kritérium do rubriku nejde.
+  const wantLangs = (r.languages || []).map((s) => String(s || "").trim()).filter(Boolean);
+  if (!wantLangs.length) off.add("en");
+  const langNames = wantLangs.map((x) => languageLabel(x, lang));
+  const langLabel = langNames.length > 1
+    ? L(lang, "Jazyky: ", "Languages: ") + langNames.join(", ")
+    : L(lang, "Jazyk: ", "Language: ") + (langNames[0] || L(lang, "neurčen", "unspecified"));
   const allCriteria: Rubric["criteria"] = [
     { key: "roky_praxe", label: L(lang, "Roky praxe", "Years of experience"), type: "numeric_scale", weight: wv("roky_praxe"), min: 0, max: Math.max(8, r.minYears + 3) },
     { key: "dovednosti", label: L(lang, "Shoda klíčových dovedností", "Key-skill match"), type: "set_overlap", weight: wv("dovednosti"), required: r.requiredSkills },
     { key: "vzdelani", label: L(lang, "Vzdělání", "Education"), type: "category_map", weight: wv("vzdelani"), aggregate: "max", map: { secondary: 5, bachelor: 7, master: 10, phd: 10, course: 4, other: 2 } },
-    { key: "en", label: L(lang, "Angličtina", "English"), type: "cefr_map", weight: wv("en"), language: "EN", map: { A1: 0, A2: 0, B1: 4, B2: 7, C1: 9, C2: 10, native: 10 } },
+    { key: "en", label: langLabel, type: "cefr_map", weight: wv("en"), languages: wantLangs, map: { A1: 0, A2: 0, B1: 4, B2: 7, C1: 9, C2: 10, native: 10 } },
     { key: "stabilita", label: L(lang, "Stabilita zaměstnání", "Employment stability"), type: "tenure", weight: wv("stabilita"), penaltyBelowMonths: 6 },
     { key: "certifikace", label: L(lang, "Relevantní certifikace", "Relevant certifications"), type: "bonus", weight: wv("certifikace"), pointsEach: 2, cap: 10 },
   ];
@@ -57,12 +93,13 @@ function buildRubric(r: Requirements, lang: Lang = "cs"): Rubric {
   return {
     jobTitle: r.jobTitle || L(lang, "Pozice", "Position"),
     gates: r.minYears > 0 ? [{ key: "min_praxe", field: "years_total_experience", op: ">=", value: r.minYears, reason: L(lang, `Méně než ${r.minYears} let praxe = diskvalifikace.`, `Fewer than ${r.minYears} years of experience = disqualified.`) }] : [],
-    criteria: criteria.length ? criteria : allCriteria, // nikdy prázdný rubrik (fallback na vše)
+    // nikdy prázdný rubrik (fallback na vše) — ale bez jazyka, když ho pozice nepožaduje
+    criteria: criteria.length ? criteria : allCriteria.filter((c) => c.key !== "en" || wantLangs.length > 0),
   };
 }
 
-const DERIVE_SYS = 'Jsi HR asistent. Z textu pracovního inzerátu vytáhni strukturované požadavky a vrať VÝHRADNĚ JSON: {"jobTitle": string, "minYears": number, "requiredSkills": [string]}. minYears = minimální požadované roky praxe jako číslo (0 když neuvedeno). requiredSkills = klíčové technické dovednosti/technologie malými písmeny, 3 až 8 položek. Bez markdownu, bez komentářů.';
-const DERIVE_SCHEMA = { type: "object", properties: { jobTitle: { type: "string" }, minYears: { type: "number" }, requiredSkills: { type: "array", items: { type: "string" } } }, required: ["jobTitle", "minYears", "requiredSkills"] };
+const DERIVE_SYS = 'Jsi HR asistent. Z textu pracovního inzerátu vytáhni strukturované požadavky a vrať VÝHRADNĚ JSON: {"jobTitle": string, "minYears": number, "requiredSkills": [string], "languages": [string]}. minYears = minimální požadované roky praxe jako číslo (0 když neuvedeno). requiredSkills = klíčové technické dovednosti/technologie malými písmeny, 3 až 8 položek. languages = jazyky, které inzerát POŽADUJE, česky a malými písmeny (např. ["angličtina","němčina"]); prázdné pole, když inzerát žádný jazyk nepožaduje — nedomýšlej angličtinu, když v textu není. Bez markdownu, bez komentářů.';
+const DERIVE_SCHEMA = { type: "object", properties: { jobTitle: { type: "string" }, minYears: { type: "number" }, requiredSkills: { type: "array", items: { type: "string" } }, languages: { type: "array", items: { type: "string" } } }, required: ["jobTitle", "minYears", "requiredSkills"] };
 
 async function deriveRequirements(inzerat: string, ai: AiBinding, model: string): Promise<{ req: Requirements; requestedYears: number; ok: boolean; ms: number; error?: string }> {
   const r = await aiJson(ai, model, [{ role: "system", content: DERIVE_SYS }, { role: "user", content: inzerat.slice(0, 8000) }], DERIVE_SCHEMA, 500);
@@ -72,6 +109,7 @@ async function deriveRequirements(inzerat: string, ai: AiBinding, model: string)
     jobTitle: str(o.jobTitle) || "Pozice",
     minYears: 0, // gate (tvrdé vyřazení) defaultně VYPNUTÝ — roky se z CV spolehlivě nevytáhnou, nepenalizovat
     requiredSkills: arr(o.requiredSkills).map((s) => str(s).toLowerCase().trim()).filter(Boolean).slice(0, 12),
+    languages: parseLangs(o.languages), // jazyk bere z inzerátu; prázdné = pozice jazyk nepožaduje
   };
   return { req, requestedYears, ok: r.ok, ms: r.ms, error: r.error };
 }
@@ -287,7 +325,7 @@ function rankResults(results: OneResult[], req: Requirements, model: string) {
   // per-dokument extrakce pro klientskou cache (klíč = jméno souboru); rescore je nemá → prázdné
   const docExtracts: Record<string, CachedDoc> = {};
   for (const r of results) for (const de of (r as { docExtracts?: CachedDoc[] }).docExtracts || []) docExtracts[de.name] = de;
-  return { rubric: { jobTitle: req.jobTitle, minYears: req.minYears, requiredSkills: req.requiredSkills }, model, count: ranking.length, ranking, docExtracts };
+  return { rubric: { jobTitle: req.jobTitle, minYears: req.minYears, requiredSkills: req.requiredSkills, languages: req.languages || [] }, model, count: ranking.length, ranking, docExtracts };
 }
 
 async function evaluate(cands: CandidateInput[], req: Requirements, ai: AiBinding, model: string, env: Env, system: string, visionMethod: string, lang: Lang = "cs") {
@@ -382,7 +420,7 @@ export default {
           systemPrompt = str(b.systemPrompt);
           visionMethod = str(b.visionMethod) || visionMethod;
           lang = asLang(b.lang);
-          if (b.requirements) { const r = obj(b.requirements); req0 = { jobTitle: str(r.jobTitle), minYears: Math.max(0, Math.round(num(r.minYears))), requiredSkills: arr(r.requiredSkills).map((s) => str(s).toLowerCase().trim()).filter(Boolean), weights: obj(r.weights) as Record<string, number>, disabled: arr(r.disabled).map((s) => str(s)) }; }
+          if (b.requirements) req0 = parseReq(b.requirements);
           for (const c of arr(b.candidates)) { const o = obj(c); files.push({ name: str(o.name) || "kandidát", visible: str(o.visible_text) }); }
           for (const cd of arr(b.cached)) { const cc = asCachedDoc(cd); if (cc) files.push({ name: cc.name, cached: cc }); }
         } else {
@@ -393,7 +431,7 @@ export default {
           visionMethod = str(form.get("visionMethod")) || visionMethod;
           lang = asLang(form.get("lang"));
           const rq = form.get("requirements");
-          if (typeof rq === "string" && rq) { const r = obj(JSON.parse(rq)); req0 = { jobTitle: str(r.jobTitle), minYears: Math.max(0, Math.round(num(r.minYears))), requiredSkills: arr(r.requiredSkills).map((s) => str(s).toLowerCase().trim()).filter(Boolean), weights: obj(r.weights) as Record<string, number>, disabled: arr(r.disabled).map((s) => str(s)) }; }
+          if (typeof rq === "string" && rq) req0 = parseReq(JSON.parse(rq));
           let total = 0;
           for (const f of form.getAll("cv")) {
             if (typeof f === "string") continue;
@@ -453,8 +491,7 @@ export default {
       try {
         const b = obj(await req.json());
         const lang = asLang(b.lang);
-        const r0 = obj(b.requirements);
-        const req0: Requirements = { jobTitle: str(r0.jobTitle), minYears: Math.max(0, Math.round(num(r0.minYears))), requiredSkills: arr(r0.requiredSkills).map((s) => str(s).toLowerCase().trim()).filter(Boolean), weights: obj(r0.weights) as Record<string, number>, disabled: arr(r0.disabled).map((s) => str(s)) };
+        const req0: Requirements = parseReq(b.requirements);
         const rubric = buildRubric(req0, lang);
         const results = arr(b.candidates).map((c) => {
           const o = obj(c);
@@ -628,6 +665,9 @@ a{color:var(--accent)}
     </div>
     <label data-i18n="l_skills">Klíčové dovednosti (oddělené čárkou)</label>
     <input type="text" id="skills" placeholder="python, sql, git, docker, rest api">
+    <label data-i18n="l_langs">Požadované jazyky (oddělené čárkou)</label>
+    <input type="text" id="reqLangs" value="angličtina" data-i18n-ph="ph_langs" placeholder="angličtina, němčina" data-i18n-title="t_langs" title="Jazyky, které pozice požaduje — hodnotí se jen ty. Prázdné pole = jazyk se nehodnotí vůbec.">
+    <div class="hint" data-i18n-html="hint_langs">Hodnotí se <b>jazyk, který požaduje inzerát</b>, ne napevno angličtina. Prázdné pole = kritérium jazyka se do skóre nezapočítá (váhy se přepočítají). Víc jazyků = průměr přes ně; chybějící požadovaný jazyk = 0 bodů.</div>
     <div class="hint" data-i18n-html="hint_gate">Gate (min. roky praxe) = tvrdé vyřazení. <b>Výchozí 0 = vypnuto.</b> Roky se z CV spolehlivě nevytáhnou (málokdo píše „celkem X let"), proto se defaultně nepenalizují — počítají se jen jako jedno z kritérií. Zadej číslo jen když chceš tvrdý limit; kdo má roky neznámé, se ani pak nediskvalifikuje (rozhodne se dle ostatních kritérií).</div>
   </div>
   <div class="card" id="tplCard">
@@ -695,7 +735,7 @@ a{color:var(--accent)}
       <div><label><input type="checkbox" class="crit-on" id="on_vzdelani" checked style="width:auto;margin-right:6px"><span data-i18n="w_vzdelani">Vzdělání</span></label><input type="number" min="0" id="w_vzdelani" value="15"></div>
     </div>
     <div class="row">
-      <div><label><input type="checkbox" class="crit-on" id="on_en" checked style="width:auto;margin-right:6px"><span data-i18n="w_en">Angličtina</span></label><input type="number" min="0" id="w_en" value="10"></div>
+      <div><label><input type="checkbox" class="crit-on" id="on_en" checked style="width:auto;margin-right:6px"><span data-i18n="w_en" title="Jazyky požadované inzerátem (nastavíš je u požadavků)">Jazyky</span></label><input type="number" min="0" id="w_en" value="10"></div>
       <div><label><input type="checkbox" class="crit-on" id="on_stabilita" checked style="width:auto;margin-right:6px"><span data-i18n="w_stabilita">Stabilita</span></label><input type="number" min="0" id="w_stabilita" value="10"></div>
       <div><label><input type="checkbox" class="crit-on" id="on_certifikace" checked style="width:auto;margin-right:6px"><span data-i18n="w_certifikace">Certifikace</span></label><input type="number" min="0" id="w_certifikace" value="10"></div>
     </div>
@@ -803,7 +843,7 @@ a{color:var(--accent)}
         <tr><td>Roky praxe</td><td>lineární škála 0 → max (odvozeno od gate)</td><td>25 %</td></tr>
         <tr><td>Shoda klíčových dovedností</td><td>podíl požadovaných dovedností, které uchazeč má</td><td>30 %</td></tr>
         <tr><td>Vzdělání</td><td>nejvyšší dosažené (SŠ→Bc.→Mgr./Ph.D.)</td><td>15 %</td></tr>
-        <tr><td>Angličtina</td><td>úroveň CEFR (A1–C2 / rodilý)</td><td>10 %</td></tr>
+        <tr><td>Jazyky</td><td>úroveň CEFR (A1–C2 / rodilý) v <b>jazycích, které požaduje inzerát</b> (víc jazyků = průměr; žádný požadovaný jazyk = kritérium se nepočítá)</td><td>10 %</td></tr>
         <tr><td>Stabilita zaměstnání</td><td>průměrná délka setrvání v pozicích</td><td>10 %</td></tr>
         <tr><td>Relevantní certifikace</td><td>počet × body, se stropem</td><td>10 %</td></tr>
       </tbody>
@@ -943,7 +983,7 @@ a{color:var(--accent)}
         <tr><td>Years of experience</td><td>linear scale 0 → max (derived from the gate)</td><td>25 %</td></tr>
         <tr><td>Key-skill match</td><td>share of required skills the applicant has</td><td>30 %</td></tr>
         <tr><td>Education</td><td>highest attained (secondary→Bc.→Mgr./Ph.D.)</td><td>15 %</td></tr>
-        <tr><td>English</td><td>CEFR level (A1–C2 / native)</td><td>10 %</td></tr>
+        <tr><td>Languages</td><td>CEFR level (A1–C2 / native) in the <b>languages the ad requires</b> (several languages = the average; no required language = the criterion is left out)</td><td>10 %</td></tr>
         <tr><td>Employment stability</td><td>average tenure in positions</td><td>10 %</td></tr>
         <tr><td>Relevant certifications</td><td>count × points, capped</td><td>10 %</td></tr>
       </tbody>
@@ -1048,6 +1088,9 @@ var EN={
   t_derive:"AI suggests requirements from the ad, which you can then edit", b_derive:"✨ Derive requirements from the ad",
   h_req:"2 · Requirements (adjust as needed)", l_jobtitle:"Position title", ph_jobtitle:"Backend developer",
   l_minyears:"Min. years of experience (gate)", l_skills:"Key skills (comma-separated)",
+  l_langs:"Required languages (comma-separated)", ph_langs:"English, German",
+  t_langs:"Languages the position requires — only those are scored. Empty field = language is not scored at all.",
+  hint_langs:"The score uses the <b>language the ad requires</b>, not English by default. An empty field means the language criterion is left out of the score (weights are renormalised). Several languages = the average across them; a missing required language = 0 points.",
   hint_gate:"The gate (min. years of experience) = a hard cut-off. <b>Default 0 = off.</b> Years are not reliably extractable from a CV (few write 'X years total'), so by default they are not penalised — they count only as one of the criteria. Enter a number only if you want a hard limit; someone with unknown years is still not disqualified (decided by the other criteria).",
   h_cv:"3 · CVs", drop_text:"<b>Drag CVs here</b> or click (multiple files) · PDF/DOCX (images only warn) · ≤ 10 MB total", b_eval:"Evaluate candidates",
   b_import:"📂 Load saved result", t_import:"Load a previously saved evaluation (JSON) — restores the ranking and requirements without re-uploading CVs",
@@ -1061,7 +1104,7 @@ var EN={
   hint_models:"Each task can run on a <b>different</b> model. Primarily <b>free</b> on Cloudflare Workers AI; Claude turns on with an API key. Choices are stored in the browser. The active extraction model and its availability are shown in the top bar.",
   h_weights:"Criterion weights", l_weightmode:"Importance input", opt_wm_slov:"Words (importance tiers)", opt_wm_osa:"Axis (slider 0–5)", opt_wm_proc:"Percent (exact numbers)",
   w_roky_praxe:"Years of experience", w_dovednosti:"Skill match", w_vzdelani:"Education",
-  w_en:"English", w_stabilita:"Stability", w_certifikace:"Certifications", b_reset:"Reset to default",
+  w_en:"Languages", w_stabilita:"Stability", w_certifikace:"Certifications", b_reset:"Reset to default",
   hint_weights:"The score is computed by a deterministic rubric over the data the AI extracted from the CV. Criterion importance (words, an axis or percent directly) is stored in the browser and applied at the next evaluation; it is compared relatively across criteria (normalised). The gate (min. years of experience) is set under Requirements on the Evaluation tab.",
   h_scoreview:"Assessment display", l_scoreview:"How to display results (the score is computed the same — only the display changes)",
   opt_sv_both:"Both — dots and number (default)", opt_sv_view:"At-a-glance — dots ● ◐ ○ —, no numbers", opt_sv_num:"Numeric — score 0–100 and points",
@@ -1097,7 +1140,8 @@ function setLang(l){LANG=l;document.documentElement.setAttribute('data-lang',l);
 $$('[data-lang-btn]').forEach(b=>b.onclick=()=>setLang(b.getAttribute('data-lang-btn')));
 function afterLangChange(){try{tickClock()}catch(e){}try{wSum()}catch(e){}try{renderAiStatus()}catch(e){}try{refreshTplSel()}catch(e){}
   if(typeof lastEval!=='undefined'&&lastEval){rescoreForLang()}else if(typeof lastResult!=='undefined'&&lastResult){renderResults(lastResult)}}
-function reqFromForm(){return {jobTitle:$('#jobTitle').value.trim(),minYears:+$('#minYears').value||0,requiredSkills:$('#skills').value.split(',').map(s=>s.trim().toLowerCase()).filter(Boolean),weights:getWeights(),disabled:getDisabled()}}
+function langsFromForm(){var el=$('#reqLangs');return el?el.value.split(/[,;\\/]+/).map(s=>s.trim()).filter(Boolean):[]}
+function reqFromForm(){return {jobTitle:$('#jobTitle').value.trim(),minYears:+$('#minYears').value||0,requiredSkills:$('#skills').value.split(',').map(s=>s.trim().toLowerCase()).filter(Boolean),languages:langsFromForm(),weights:getWeights(),disabled:getDisabled()}}
 // Přepočet BEZ AI nad už načtenou dávkou (funguje i po importu, bez nahraných CV).
 async function rescoreNow(){
   if(typeof lastEval==='undefined'||!lastEval)return null;
@@ -1124,6 +1168,7 @@ async function importResult(file){
     if(!data||data.kind!=='evaluation'||!data.result||!Array.isArray(data.result.ranking))throw new Error(tl('Neplatný soubor výsledku.','Invalid result file.'));
     const req=data.requirements||{};
     $('#jobTitle').value=req.jobTitle||'';$('#minYears').value=req.minYears||0;$('#skills').value=(req.requiredSkills||[]).join(', ');
+    if($('#reqLangs'))$('#reqLangs').value=(req.languages||[]).join(', ');
     if(data.result&&data.result.inzerat!=null)$('#inzerat').value=data.result.inzerat;
     if(req.weights)WKEYS.forEach(k=>{if(typeof req.weights[k]==='number')$('#w_'+k).value=req.weights[k]});
     if(req.disabled)WKEYS.forEach(k=>{const c=$('#on_'+k);if(c)c.checked=(req.disabled||[]).indexOf(k)<0});
@@ -1140,7 +1185,7 @@ const SESSION_KEY='faxx_session';
 function slimResult(r){if(!r)return null;const o={...r};delete o.docExtracts;return o} // docExtracts patří jen do klientské cache, ne do úložiště
 function saveSession(){
   try{
-    const snap={version:1,savedAt:new Date().toISOString(),inzerat:$('#inzerat').value,jobTitle:$('#jobTitle').value,minYears:$('#minYears').value,skills:$('#skills').value,result:(typeof lastEval!=='undefined'&&lastEval)?slimResult(lastEval.result):null};
+    const snap={version:1,savedAt:new Date().toISOString(),inzerat:$('#inzerat').value,jobTitle:$('#jobTitle').value,minYears:$('#minYears').value,skills:$('#skills').value,langs:($('#reqLangs')?$('#reqLangs').value:''),result:(typeof lastEval!=='undefined'&&lastEval)?slimResult(lastEval.result):null};
     localStorage.setItem(SESSION_KEY,JSON.stringify(snap));
   }catch(e){/* kvóta / soukromý režim → tichý fail (příště jen bez výsledku) */}
 }
@@ -1152,6 +1197,7 @@ function restoreSession(){
   if(snap.jobTitle!=null)$('#jobTitle').value=snap.jobTitle;
   if(snap.minYears!=null)$('#minYears').value=snap.minYears;
   if(snap.skills!=null)$('#skills').value=snap.skills;
+  if(snap.langs!=null&&$('#reqLangs'))$('#reqLangs').value=snap.langs;
   if(snap.result&&snap.result.ranking){
     curSig=evalSig();lastEval={sig:curSig,result:snap.result};
     renderResults(snap.result);
@@ -1239,8 +1285,9 @@ $('#wReset').onclick=()=>{WKEYS.forEach(k=>{$('#w_'+k).value=WDEF[k];const c=$('
 function loadTpls(){try{return JSON.parse(localStorage.getItem('faxx_templates')||'{}')||{}}catch(e){return {}}}
 function saveTpls(o){localStorage.setItem('faxx_templates',JSON.stringify(o))}
 function refreshTplSel(){const o=loadTpls(),sel=$('#tplSel');if(!sel)return;const cur=sel.value,keys=Object.keys(o).sort();sel.innerHTML=keys.length?keys.map(n=>'<option>'+esc(n)+'</option>').join(''):'<option value="" disabled>'+tl('(žádné šablony)','(no templates)')+'</option>';if(cur&&o[cur])sel.value=cur}
-function currentTpl(){return {jobTitle:$('#jobTitle').value.trim(),minYears:+$('#minYears').value||0,requiredSkills:$('#skills').value.split(',').map(s=>s.trim()).filter(Boolean),weights:getWeights(),disabled:getDisabled()}}
-function applyTpl(t){if(!t)return;$('#jobTitle').value=t.jobTitle||'';$('#minYears').value=t.minYears||0;$('#skills').value=(t.requiredSkills||[]).join(', ');const w=t.weights||{};WKEYS.forEach(k=>{if(typeof w[k]==='number')$('#w_'+k).value=w[k];const c=$('#on_'+k);if(c)c.checked=(t.disabled||[]).indexOf(k)<0});saveWeights();if(typeof lastEval!=='undefined'&&lastEval)rescoreNow()}
+function currentTpl(){return {jobTitle:$('#jobTitle').value.trim(),minYears:+$('#minYears').value||0,requiredSkills:$('#skills').value.split(',').map(s=>s.trim()).filter(Boolean),languages:langsFromForm(),weights:getWeights(),disabled:getDisabled()}}
+function applyTpl(t){if(!t)return;$('#jobTitle').value=t.jobTitle||'';$('#minYears').value=t.minYears||0;$('#skills').value=(t.requiredSkills||[]).join(', ');
+  if($('#reqLangs'))$('#reqLangs').value=(t.languages||[]).join(', ');const w=t.weights||{};WKEYS.forEach(k=>{if(typeof w[k]==='number')$('#w_'+k).value=w[k];const c=$('#on_'+k);if(c)c.checked=(t.disabled||[]).indexOf(k)<0});saveWeights();if(typeof lastEval!=='undefined'&&lastEval)rescoreNow()}
 if($('#tplSave'))$('#tplSave').onclick=()=>{const n=$('#tplName').value.trim();if(!n){$('#tplMsg').textContent=tl('Zadej název šablony.','Enter a template name.');return}const o=loadTpls();o[n]=currentTpl();saveTpls(o);refreshTplSel();$('#tplSel').value=n;$('#tplMsg').textContent=tl('Uloženo: ','Saved: ')+n};
 if($('#tplLoad'))$('#tplLoad').onclick=()=>{const n=$('#tplSel').value,o=loadTpls();if(o[n]){applyTpl(o[n]);$('#tplName').value=n;$('#tplMsg').textContent=tl('Načteno: ','Loaded: ')+n}};
 if($('#tplDel'))$('#tplDel').onclick=()=>{const n=$('#tplSel').value,o=loadTpls();if(o[n]){delete o[n];saveTpls(o);refreshTplSel();$('#tplMsg').textContent=tl('Smazáno: ','Deleted: ')+n}};
@@ -1297,6 +1344,7 @@ $('#deriveBtn').onclick=async()=>{
     const r=await fetch('/api/derive',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({inzerat:inz,model:modelDerive(),lang:LANG})}).then(r=>r.json());
     if(r.error){$('#deriveMsg').textContent=tl('Chyba: ','Error: ')+r.error}
     else{$('#jobTitle').value=r.jobTitle||'';$('#skills').value=(r.requiredSkills||[]).join(', ');$('#minYears').value=0;
+      if($('#reqLangs'))$('#reqLangs').value=(r.languages||[]).join(', ');
       const ry=r.requestedYears||0;
       $('#deriveMsg').textContent=tl('Hotovo (','Done (')+(r.ms||0)+' ms). '+(ry
         ?tl('Inzerát zmiňuje ~'+ry+' let praxe, ale gate (tvrdé vyřazení) nechávám VYPNUTÝ — roky se z CV spolehlivě nečtou, tak se nepenalizují. Chceš tvrdý limit? Zadej ho do „Min. roky praxe".','The ad mentions ~'+ry+' years of experience, but the gate (hard cut-off) stays OFF — years are not read reliably from CVs, so they are not penalised. Want a hard limit? Enter it under “Min. years of experience”.')
@@ -1406,7 +1454,7 @@ function buildReport(r){
     return '<tr class="'+(c.disqualified?'dq':'')+'"><td class="rk">'+(idx+1)+'</td><td><div class="nm">'+esc(c.name)+'</div><div class="ct">'+contact+'</div><div class="dc">'+docs+'</div></td><td class="sc">'+status+gate+'</td><td class="bd">'+bd+fl+'</td></tr>';
   }).join('');
   const rf=r.requirementsFull||req; const inz=(r.inzerat||'').trim();
-  const WL={roky_praxe:tl('Roky praxe','Years of experience'),dovednosti:tl('Dovednosti','Skills'),vzdelani:tl('Vzdělání','Education'),en:tl('Angličtina','English'),stabilita:tl('Stabilita','Stability'),certifikace:tl('Certifikace','Certifications')};
+  const WL={roky_praxe:tl('Roky praxe','Years of experience'),dovednosti:tl('Dovednosti','Skills'),vzdelani:tl('Vzdělání','Education'),en:tl('Jazyky','Languages'),stabilita:tl('Stabilita','Stability'),certifikace:tl('Certifikace','Certifications')};
   const wg=rf.weights||{},dis=rf.disabled||[];
   const wtxt=Object.keys(WL).filter(k=>dis.indexOf(k)<0&&wg[k]!=null).map(k=>esc(WL[k])+' '+(wg[k]||0)+'%').join(' · ')||'—';
   const zad='<div class="zad"><h2>'+tl('Zadání výběrového řízení','Selection criteria')+'</h2>'
@@ -1414,6 +1462,7 @@ function buildReport(r){
     +'<tr><th>'+tl('Pozice','Position')+'</th><td>'+(esc(rf.jobTitle||req.jobTitle||'')||'—')+'</td></tr>'
     +'<tr><th>'+tl('Min. roky praxe (gate)','Min. years (gate)')+'</th><td>'+(rf.minYears||0)+'</td></tr>'
     +'<tr><th>'+tl('Klíčové dovednosti','Key skills')+'</th><td>'+(esc((rf.requiredSkills||[]).join(', '))||'—')+'</td></tr>'
+    +'<tr><th>'+tl('Požadované jazyky','Required languages')+'</th><td>'+(esc((rf.languages||[]).join(', '))||tl('— (jazyk se nehodnotí)','— (language not scored)'))+'</td></tr>'
     +'<tr><th>'+tl('Váhy kritérií','Criterion weights')+'</th><td>'+wtxt+'</td></tr>'
     +'</tbody></table>'
     +'<h3>'+tl('Původní text inzerátu','Original job ad')+'</h3>'
@@ -1444,7 +1493,8 @@ function renderResults(r){
   const shown=hideNC?all.filter(c=>c.isCandidate!==false):all;
   const hiddenN=all.length-shown.length;
   let h='<div class="card"><h3>'+tl('Pořadí — ','Ranking — ')+esc(r.rubric.jobTitle)+tl(' · model ',' · model ')+esc((r.model||'').split("/").pop())+(r.rescored?' · <span style="color:var(--accent)">'+tl('přepočet bez AI','recomputed without AI')+'</span>':'')+'</h3>';
-  h+='<div class="hint">'+tl('Gate: min. ','Gate: min. ')+r.rubric.minYears+tl(' let praxe · dovednosti: ',' years · skills: ')+esc((r.rubric.requiredSkills||[]).join(", "))+(hiddenN>0?' · <span style="color:var(--amber)">'+tl('skryto '+hiddenN+' ne-uchazečských dok.','hidden '+hiddenN+' non-applicant docs')+'</span>':'')+'</div>';
+  const rlangs=(r.rubric.languages||[]);
+  h+='<div class="hint">'+tl('Gate: min. ','Gate: min. ')+r.rubric.minYears+tl(' let praxe · dovednosti: ',' years · skills: ')+esc((r.rubric.requiredSkills||[]).join(", "))+' · '+tl('jazyky: ','languages: ')+(rlangs.length?esc(rlangs.join(", ")):tl('nehodnotí se','not scored'))+(hiddenN>0?' · <span style="color:var(--amber)">'+tl('skryto '+hiddenN+' ne-uchazečských dok.','hidden '+hiddenN+' non-applicant docs')+'</span>':'')+'</div>';
   const errs=shown.filter(c=>c.extract_ok===false&&c.extract_error);
   if(errs.length){const e=esc(errs[0].extract_error),quota=/4006|neuron|allocation/i.test(errs[0].extract_error||'');
     h+='<div style="margin:8px 0;padding:10px 12px;border:1px solid #5a2430;border-radius:8px;background:rgba(240,85,107,.10);color:var(--txt);font-size:13px">⛔ <b>'+tl('AI extrakce selhala','AI extraction failed')+'</b> '+tl('u '+errs.length+' z '+shown.length+' kandidátů — skóre nejsou platná.','for '+errs.length+' of '+shown.length+' candidates — scores are not valid.')+'<br><span class="hint">'+tl('Důvod: ','Reason: ')+e+'</span>'+(quota?'<br><b>'+tl('Vyčerpaná denní free kvóta Cloudflare Workers AI (10 000 neuronů/den).','Cloudflare Workers AI daily free quota exhausted (10,000 neurons/day).')+'</b> '+tl('Reset o půlnoci UTC. Řešení: počkat na reset, přepnout model v Nastavení, nebo přejít na Workers Paid / Claude (s klíčem).','Reset at UTC midnight. Fix: wait for the reset, switch the model in Settings, or move to Workers Paid / Claude (with a key).'):'')+'</div>';}
@@ -1484,6 +1534,6 @@ function renderResults(r){
   $('#btnRescore').onclick=async()=>{const b=$('#btnRescore');b.disabled=true;const old=b.textContent;b.textContent=tl('Přepočítávám…','Recomputing…');const r=await rescoreNow();if(r&&r.error)$('#err').textContent=tl('Chyba přepočtu: ','Recompute error: ')+r.error;const nb=$('#btnRescore');if(nb){nb.disabled=false;nb.textContent=old}};
 }
 // --- autosave relace: ulož při změně formuláře, obnov po startu (přežije obnovu prohlížeče) ---
-['#inzerat','#jobTitle','#minYears','#skills'].forEach(sel=>{const el=$(sel);if(el)el.addEventListener('change',saveSession)});
+['#inzerat','#jobTitle','#minYears','#skills','#reqLangs'].forEach(sel=>{const el=$(sel);if(el)el.addEventListener('change',saveSession)});
 restoreSession();
 </script></body></html>`;

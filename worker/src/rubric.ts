@@ -15,6 +15,7 @@
  */
 
 import { normalizeLanguageLevel } from "./reference/cefr";
+import { languageLabel, sameLanguage } from "./reference/languages";
 
 // --- vstupní data (podmnožina extraction schématu) -------------------------
 export interface QSkill { name: string; category?: string; level?: string | null; evidence?: string }
@@ -55,7 +56,8 @@ export interface Criterion {
   required?: string[];                         // set_overlap
   map?: Record<string, number>;                // category_map / cefr_map (0..10)
   aggregate?: "max" | "avg";                   // category_map
-  language?: string;                           // cefr_map — který jazyk
+  language?: string;                           // cefr_map — který jazyk (zpětná kompatibilita)
+  languages?: string[];                        // cefr_map — jazyky požadované inzerátem (víc = průměr)
   penaltyBelowMonths?: number;                 // tenure
   pointsEach?: number; cap?: number;           // bonus (cap ve výsledných bodech 0..10)
 }
@@ -144,29 +146,39 @@ function criterionScore(c: Criterion, q: Qualification, lang: Lang): ScoreParts 
       return { score: s, known: true, basis: "stated", detail: L(lang, `nejvyšší: ${best?.level ?? "?"} → ${s.toFixed(1)}/10`, `highest: ${best?.level ?? "?"} → ${s.toFixed(1)}/10`) };
     }
     case "cefr_map": {
-      const want = norm(c.language ?? "en");
-      const langs = (q.languages ?? []).filter((l) => {
-        const n = norm(l.language);
-        return n === want || n.includes(want) || (want === "en" && (n.includes("angl") || n.includes("english") || n === "aj"));
+      // Které jazyky pozice požaduje (z inzerátu / z formuláře). `language` je starý
+      // jednojazyčný zápis (zpětná kompatibilita). Víc jazyků = průměr přes ně.
+      const wants = (Array.isArray(c.languages) ? c.languages : c.language ? [c.language] : ["en"]).map((x) => String(x ?? "").trim()).filter(Boolean);
+      if (!wants.length) return { score: 0, known: false, basis: "unknown", detail: L(lang, "v požadavcích není žádný jazyk", "no language in the requirements") };
+      const evidence: EvidenceItem[] = [];
+      const parts = wants.map((want) => {
+        // Shoda jazyka podle ISO kódu (reference/languages.ts), NE podřetězcem —
+        // jinak by „slovenština" (obsahuje „en") prošla jako angličtina.
+        const langs = (q.languages ?? []).filter((l) => sameLanguage(l.language, want));
+        // Úroveň mapuje DETERMINISTICKY náš normalizér podle citovaného CEFR standardu
+        // (reference/cefr.ts), ne model. level_raw (doslovná fráze z CV) má přednost.
+        const cand = langs.map((l) => {
+          const src = l.level_raw ?? l.level ?? "";
+          const m = normalizeLanguageLevel(src);
+          const key = (m.level ?? "").toUpperCase();
+          const pts = m.level ? (c.map?.[key] ?? c.map?.[m.level] ?? 0) : 0;
+          return { l, m, pts, src };
+        }).filter((x) => x.m.level);
+        if (!cand.length) return { want, pts: 0, known: false, stated: false, src: "", level: null as string | null };
+        const best = cand.reduce((a, b) => (b.pts > a.pts ? b : a));
+        // odvozená úroveň nese jako evidenci doslovnou frázi z CV (personalista ověří/přepíše)
+        if (!best.m.stated && best.src) evidence.push({ label: languageLabel(best.l.language || want, lang), text: best.src });
+        return { want, pts: best.pts, known: true, stated: best.m.stated, src: best.src, level: best.m.level as string | null };
       });
-      // Úroveň mapuje DETERMINISTICKY náš normalizér podle citovaného CEFR standardu
-      // (reference/cefr.ts), ne model. level_raw (doslovná fráze z CV) má přednost.
-      const cand = langs.map((l) => {
-        const src = l.level_raw ?? l.level ?? "";
-        const m = normalizeLanguageLevel(src);
-        const key = (m.level ?? "").toUpperCase();
-        const pts = m.level ? (c.map?.[key] ?? c.map?.[m.level] ?? 0) : 0;
-        return { l, m, pts, src };
-      });
-      if (!cand.length || cand.every((x) => !x.m.level)) {
-        return { score: 0, known: false, basis: "unknown", detail: L(lang, `${c.language ?? "EN"}: neuvedeno`, `${c.language ?? "EN"}: not stated`) };
-      }
-      const best = cand.reduce((a, b) => (b.pts > a.pts ? b : a));
-      const basis: "stated" | "inferred" = best.m.stated ? "stated" : "inferred";
-      // odvozená úroveň nese jako evidenci doslovnou frázi z CV (personalista ověří/přepíše)
-      const evidence = (!best.m.stated && best.src) ? [{ label: best.l.language || (c.language ?? "EN"), text: best.src }] : undefined;
-      const tag = best.m.stated ? "" : L(lang, ` (odvozeno z „${best.src}“)`, ` (inferred from “${best.src}”)`);
-      return { score: best.pts, known: true, basis, detail: `${c.language ?? "EN"}: ${best.m.level}${tag} → ${best.pts.toFixed(1)}/10`, evidence };
+      const known = parts.some((p) => p.known);
+      const basis: "stated" | "inferred" | "unknown" = !known ? "unknown" : parts.filter((p) => p.known).every((p) => p.stated) ? "stated" : "inferred";
+      const detail = parts.map((p) => {
+        const nm = languageLabel(p.want, lang);
+        if (!p.known) return `${nm}: ` + L(lang, "neuvedeno", "not stated");
+        const tag = p.stated ? "" : L(lang, ` (odvozeno z „${p.src}“)`, ` (inferred from “${p.src}”)`);
+        return `${nm}: ${p.level}${tag} → ${p.pts.toFixed(1)}/10`;
+      }).join(" · ");
+      return { score: parts.reduce((a, p) => a + p.pts, 0) / parts.length, known, basis, detail, evidence: evidence.length ? evidence : undefined };
     }
     case "tenure": {
       const months = (q.experience ?? []).map((e) => e.months).filter(isNum) as number[];

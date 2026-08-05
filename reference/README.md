@@ -39,6 +39,12 @@ vždy s doložením a možností přepisu.** Posudek musí být *job-related* a 
   deterministický `normalizeLanguageLevel()`; regrese [`cefr.test.mjs`](../worker/src/reference/cefr.test.mjs)
   **23/23**. **Napojeno do skórování** (`rubric.ts` → `cefr_map`): extrakce dává `languages[].level_raw`
   (doslovná fráze), mapu na CEFR dělá kód → `stated`/`inferred` + evidence v rozpadu i tisku.
+- ✅ **ISO 639-1 — jména jazyků** (NAPOJENO): [`worker/src/reference/languages.ts`](../worker/src/reference/languages.ts) —
+  `normalizeLanguageName()` / `sameLanguage()` mapují volný zápis („angličtina", „AJ", „anglický jazyk",
+  „English", „en") na ISO kód; regrese [`languages.test.mjs`](../worker/src/reference/languages.test.mjs) **45/45**.
+  **Napojeno do skórování** (`rubric.ts` → `cefr_map`): jazyk se páruje podle KÓDU, ne podřetězcem —
+  tím padla falešná shoda „slovenština" ⊃ „en" (rodilý Slovák dřív dostal body za angličtinu).
+  Hodnotí se jazyky, které **požaduje inzerát** (dřív napevno angličtina).
 - ⚪ **ESCO — dovednosti / seniorita** (roadmap): taxonomie + fuzzy match `skills.name`.
 - ⚪ **EQF / NSK — vzdělání** (roadmap): mapa `education.level` a českých oborů.
 
