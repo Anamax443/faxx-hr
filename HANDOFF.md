@@ -20,7 +20,7 @@ Append-only. Nejnovější záznam nahoru. Slouží k pokračování z jiného p
   ~8/volání → strop padl v ~09:00 UTC. 5. 8. spotřeba 0 a přesto 4006 = limit uvolňuje CF postupně.
   **Doporučení do provozu:** extrakce CV na 8B, 120B jen na jednorázové odvození požadavků z inzerátu.
 - Ověřeno živě (`wrangler dev` → `/api/health` vrací `quota:true`, `resetAt`), texty CS+EN odsimulované,
-  5/5 test suit. **NENASAZENO** — čeká na svolení (`npm run deploy:app`).
+  5/5 test suit. **NASAZENO** 2026-08-05 v commitu `edd59a3` (`npm run deploy:app`).
 
 ## 2026-08-05 (z) — Jazyk podle inzerátu (ne napevno angličtina) + oprava falešné shody jazyků
 
@@ -46,7 +46,7 @@ Append-only. Nejnovější záznam nahoru. Slouží k pokračování z jiného p
 - **Ověřeno živě** (`wrangler dev` + `/api/rescore`): požadavek němčina → „Jazyk: němčina · C1 → 9,0/10";
   rodilá slovenština při požadavku angličtina → 0 „neuvedeno" (dřív 10); AJ C1 + NJ B1 → 6,5; prázdné
   požadavky → kritérium jazyka v rubriku vůbec není. Build 218,78 KiB, všech 5 test suit zeleně.
-- **NENASAZENO** — čeká na svolení (`npm run deploy:app`).
+- **NASAZENO** 2026-08-05 v commitu `edd59a3` (`npm run deploy:app`).
 
 ## 2026-08-05 (y) — Váhy: procenta zpět jako třetí režim zadávání
 
@@ -58,7 +58,7 @@ Append-only. Nejnovější záznam nahoru. Slouží k pokračování z jiného p
 - Úprava % nově **přepočítá výsledky bez AI** při `change` (blur/šipky) — stejně jako posuvník a stupně.
 - Skóre/pořadí nedotčené (procenta byla i dosud interní zápis, rubrik je normalizuje). Klientský JS
   ověřen parserem (`node --check` nad extrahovaným `<script>`); i18n CS+EN doplněno (`opt_wm_proc`,
-  `hint_weights`). **NENASAZENO** — čeká na svolení (`npm run deploy:app`).
+  `hint_weights`). **NASAZENO** 2026-08-05 v commitu `edd59a3` (`npm run deploy:app`).
 
 ## 2026-08-04 (x) — CEFR napojení: level_raw → deterministický normalizér v rubriku
 - **Extrakce** (`extract.ts`): schéma + prompt + parser rozšířeny o `languages[].level_raw` (DOSLOVNÁ
