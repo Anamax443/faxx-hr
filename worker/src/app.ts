@@ -626,7 +626,9 @@ button:disabled{opacity:.5;cursor:not-allowed}
 a{color:var(--accent)}
 .statusbar{position:sticky;top:0;z-index:30;background:#0a1120;border-bottom:1px solid var(--line)}
 .sbinner{max-width:960px;margin:0 auto;padding:7px 22px;display:flex;gap:6px 16px;flex-wrap:wrap;align-items:center;font-size:12px;color:var(--muted);font-family:ui-monospace,Consolas,monospace}
-.sbbrand{font-weight:700;color:var(--txt)}
+.sbbrand{font-weight:700;color:var(--txt);text-decoration:none;cursor:pointer}
+.sbbrand:hover,h1 a:hover{opacity:.75}
+h1 a{color:inherit;text-decoration:none;cursor:pointer}
 .sbitem b{color:var(--txt)}.sbitem b#sbModel{color:var(--accent)}
 .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--muted);margin-right:5px;vertical-align:middle}
 .dot.ok{background:var(--accent)}.dot.bad{background:var(--red)}.dot.wait{background:var(--amber)}
@@ -651,7 +653,7 @@ a{color:var(--accent)}
 <script>(function(){try{var t=localStorage.getItem('faxx_theme')||((window.matchMedia&&window.matchMedia('(prefers-color-scheme: light)').matches)?'light':'dark');var l=localStorage.getItem('faxx_lang')||((navigator.language||'').toLowerCase().indexOf('en')===0?'en':'cs');var d=document.documentElement;d.setAttribute('data-theme',t);d.setAttribute('data-lang',l);d.setAttribute('lang',l);}catch(e){}})();</script>
 </head><body>
 <div class="statusbar"><div class="sbinner">
-  <span class="sbbrand">🛡️ faxx-hr</span>
+  <a class="sbbrand" href="/" id="sbHome" data-i18n-title="sb_home" title="Zpět na začátek (záložka Hodnocení)">🛡️ faxx-hr</a>
   <span class="sbitem" data-i18n-title="sb_version" title="verze nasazení (commit · čas buildu)">⎇ <b title="${COMMIT_FULL}">${COMMIT}</b> · ${BUILT}</span>
   <span class="sbitem" data-i18n-title="sb_time" title="aktuální čas">🕒 <b id="sbClock">--:--:--</b></span>
   <span class="sbitem" data-i18n-title="sb_model" title="AI model použitý na extrakci z CV">🧠 <b id="sbModel">—</b></span>
@@ -660,7 +662,7 @@ a{color:var(--accent)}
   <span class="sblang" data-i18n-title="sb_lang" title="Přepnout jazyk (čeština / angličtina)">🌐 <b data-lang-btn="cs">CS</b>/<b data-lang-btn="en">EN</b></span>
 </div></div>
 <div class="wrap">
-<h1>🛡️ faxx-hr</h1>
+<h1><a href="/" id="h1Home" data-i18n-title="sb_home" title="Zpět na začátek (záložka Hodnocení)">🛡️ faxx-hr</a></h1>
 <p class="lead" data-i18n="lead">Hodnocení kandidátů proti inzerátu s obranou proti skrytým instrukcím v CV. Skóre počítá pevný rubrik nad extrahovanými daty — rozhoduješ ty.</p>
 <div class="tabs">
   <div class="tab on" data-v="hod" data-i18n="tab_hod">Hodnocení</div>
@@ -1109,6 +1111,7 @@ var EN={
   sb_version:"deploy version (commit · build time)", sb_time:"current time",
   sb_model:"AI model used for CV extraction", sb_ai:"AI communication availability",
   sb_recheck:"check again", sb_theme:"Switch light / dark theme", sb_lang:"Switch language (Czech / English)",
+  sb_home:"Back to the top (Evaluation tab)",
   lead:"Evaluate candidates against a job ad, with defence against hidden instructions in the CV. The score is computed by a fixed rubric over extracted data — you decide.",
   tab_hod:"Evaluation", tab_nast:"Settings", tab_dok:"Documentation",
   h_inzerat:"1 · Job ad", ph_inzerat:"Paste the job-ad text, upload it from a file (📎), or paste a screenshot here (Ctrl+V) — the image is read by vision…",
@@ -1237,6 +1240,13 @@ function restoreSession(){
 
 // tabs
 $$('.tab').forEach(t=>t.onclick=()=>{$$('.tab').forEach(x=>x.classList.remove('on'));$$('.view').forEach(x=>x.classList.remove('on'));t.classList.add('on');$('#'+t.dataset.v).classList.add('on')});
+// Klik na název appky (lišta i nadpis) = zpět na začátek. Schválně BEZ reloadu stránky:
+// nahrané soubory drží prohlížeč v paměti a reload by je zahodil. href="/" zůstává jako fallback.
+function goHome(e){ if(e&&e.preventDefault)e.preventDefault();
+  const t=document.querySelector('.tab[data-v="hod"]'); if(t)t.click();
+  if(location.hash) history.replaceState(null,'',location.pathname);
+  window.scrollTo({top:0,behavior:'smooth'}); return false }
+['sbHome','h1Home'].forEach(id=>{const el=document.getElementById(id); if(el)el.onclick=goHome});
 // model persist + stavová lišta
 const modelSel=$('#model'); modelSel.value=localStorage.getItem('faxx_model')||modelSel.value;
 const model=()=>modelSel.value;
