@@ -339,7 +339,9 @@ async function evaluate(cands: CandidateInput[], req: Requirements, ai: AiBindin
 export default {
   async fetch(req: Request, env: Env): Promise<Response> {
     const url = new URL(req.url);
-    const json = (o: unknown, status = 200) => Response.json(o, { status });
+    // no-store: /api/health se jinak cachuje na edge → stavová lišta (a auto-přeověřování
+    // kvóty po 10 min) by dlouho ukazovala starou odpověď, i když je AI dávno zpátky.
+    const json = (o: unknown, status = 200) => Response.json(o, { status, headers: { "cache-control": "no-store" } });
 
     if (req.method === "GET" && (url.pathname === "/" || url.pathname === "/index.html")) {
       return new Response(PAGE, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } });
@@ -1269,7 +1271,7 @@ function renderAiStatus(){
 }
 function pingAI(){
   aiState={s:'wait'};renderAiStatus();
-  fetch('/api/health?model='+encodeURIComponent(model())+'&lang='+LANG).then(r=>r.json()).then(h=>{
+  fetch('/api/health?model='+encodeURIComponent(model())+'&lang='+LANG,{cache:'no-store'}).then(r=>r.json()).then(h=>{
     aiState=h.ok?{s:'ok',ms:h.ms}:{s:'bad',reason:h.reason||'',quota:!!h.quota,resetAt:h.resetAt||''};renderAiStatus();
   }).catch(e=>{aiState={s:'bad',reason:String(e)};renderAiStatus()});
 }
