@@ -14,8 +14,7 @@ const L = (lang: AboutLang, cs: string, en: string): string => (lang === "en" ? 
 export function aboutPage(lang: AboutLang, commit: string, built: string): string {
   const t = (cs: string, en: string) => L(lang, cs, en);
   const other = lang === "en" ? "/o-projektu" : "/about";
-  // Windows vlajková emoji nerenderuje (ukáže „GB"/„CZ") → neutrální glóbus.
-  const otherLabel = lang === "en" ? "🌐 Česky" : "🌐 English";
+  const otherLabel = lang === "en" ? "Česky" : "English";
 
   const css = `*{box-sizing:border-box}
 body{margin:0;background:#f9f9f7;color:#0b0b0b;font:16px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif}
@@ -182,6 +181,7 @@ a.btn.ghost{background:#fff;color:#2a78d6;border:1px solid #2a78d6}
 
   return `<!DOCTYPE html><html lang="${lang}"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='88'>🛡️</text></svg>">
 <title>${t("faxx-hr — popis projektu", "faxx-hr — project overview")}</title>
 <meta name="description" content="${t("Hodnocení životopisů proti inzerátu s obranou proti skrytým instrukcím v CV.", "CV screening against a job ad with a defence against hidden instructions in the CV.")}">
 <style>${css}</style></head><body><div class="wrap">

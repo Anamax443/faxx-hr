@@ -659,7 +659,7 @@ h1 a{color:inherit;text-decoration:none;cursor:pointer}
   <span class="sbitem" data-i18n-title="sb_model" title="AI model použitý na extrakci z CV">🧠 <b id="sbModel">—</b></span>
   <span class="sbitem" data-i18n-title="sb_ai" title="dostupnost komunikace s AI"><i id="sbDot" class="dot wait"></i><span id="sbAI" data-i18n="sb_checking">ověřuji…</span><a class="sbre" id="sbPing" data-i18n-title="sb_recheck" title="ověřit znovu">↻</a></span>
   <a class="sbtog" id="sbTheme" data-i18n-title="sb_theme" title="Přepnout světlý / tmavý motiv"><span id="sbThemeIcon">🌙</span></a>
-  <span class="sblang" data-i18n-title="sb_lang" title="Přepnout jazyk (čeština / angličtina)">🌐 <b data-lang-btn="cs">CS</b>/<b data-lang-btn="en">EN</b></span>
+  <span class="sblang" data-i18n-title="sb_lang" title="Přepnout jazyk (čeština / angličtina)"><b data-lang-btn="cs">CS</b>/<b data-lang-btn="en">EN</b></span>
 </div></div>
 <div class="wrap">
 <h1><a href="/" id="h1Home" data-i18n-title="sb_home" title="Zpět na začátek (záložka Hodnocení)">🛡️ faxx-hr</a></h1>
@@ -1509,6 +1509,9 @@ let lastResult=null;
 //      původní text inzerátu (= doklad, jak se rozhodovalo)
 // Barvy dle datavizu: skóre = JEDNA sekvenční modrá škála (světlá = málo), stavy = vyhrazená
 // status paleta vždy s ikonou a slovem (nikdy jen barvou). Kontakty tu schválně NEJSOU.
+// Favicon do generovaných dokumentů — bez něj má panel prohlížeče jen obecný globus.
+// Apostrofy v data URI jsou jako %27, aby se to vešlo do JS řetězce v jednoduchých uvozovkách.
+var FAVICON='<link rel="icon" href="data:image/svg+xml,<svg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 100 100%27><text y=%27.9em%27 font-size=%2788%27>🛡️</text></svg>">';
 var DECK_TOP=5;
 var DECK_SEQ=['#cde2fb','#b7d3f6','#9ec5f4','#86b6ef','#6da7ec','#5598e7','#3987e5','#2a78d6','#256abf','#1c5cab','#184f95'];
 function deckFill(v){return DECK_SEQ[Math.max(0,Math.min(10,Math.round(v||0)))]}
@@ -1642,7 +1645,7 @@ function buildDeck(r){
     +'@media print{body{background:#fff}.noprint{display:none}.slide{border:0;border-radius:0;margin:0;padding:0;max-width:none;page-break-after:always;break-after:page}.slide:last-child{page-break-after:auto}.cover{padding-top:34mm}}';
   var acts='<div class="bar noprint"><button onclick="window.print()">🖨️ '+tl('Tisk / uložit PDF','Print / save as PDF')+'</button><button id="dl">⬇️ '+tl('Uložit HTML','Save HTML')+'</button></div>';
   var js='<'+'script>document.getElementById("dl").onclick=function(){var h="<!DOCTYPE html>"+document.documentElement.outerHTML;var b=new Blob([h],{type:"text/html;charset=utf-8"});var a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="'+tl('vystup-vyberoveho-rizeni','selection-outcome')+'.html";a.click()};<'+'/script>';
-  return '<!DOCTYPE html><html lang='+LANG+'><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>'
+  return '<!DOCTYPE html><html lang='+LANG+'><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1">'+FAVICON+'<title>'
     +tl('Výstup výběrového řízení — ','Selection outcome — ')+pos+'</title><style>'+css+'</style></head><body>'+acts+s1+s2+s3+s4+s5+s6+js+'</body></html>';
 }
 
@@ -1678,7 +1681,7 @@ function buildReport(r){
     +'<h3>'+tl('Původní text inzerátu','Original job ad')+'</h3>'
     +(inz?'<div class="adtext">'+esc(inz)+'</div>':'<div class="adnote">'+tl('Inzerát nebyl vložen jako text (požadavky zadány ručně nebo z obrázku/šablony).','The job ad was not provided as text (requirements entered manually or from an image/template).')+'</div>')
     +'</div>';
-  return '<!DOCTYPE html><html lang='+LANG+'><head><meta charset=utf-8><title>'+tl('Vyhodnocení kandidátů','Candidate evaluation')+'</title><style>'
+  return '<!DOCTYPE html><html lang='+LANG+'><head><meta charset=utf-8>'+FAVICON+'<title>'+tl('Protokol výběrového řízení','Selection record')+'</title><style>'
     +'body{font:13px/1.5 Arial,Helvetica,sans-serif;color:#111;margin:26px;background:#fff}h1{font-size:20px;margin:0 0 2px}.sub{color:#555;font-size:12px;margin:0 0 14px}'
     +'.req{background:#f4f6fa;border:1px solid #dde3ee;border-radius:8px;padding:10px 12px;margin-bottom:16px;font-size:12px}table{width:100%;border-collapse:collapse}'
     +'th{text-align:left;font-size:11px;color:#555;border-bottom:2px solid #333;padding:6px 8px}td{padding:9px 8px;border-bottom:1px solid #ddd;vertical-align:top}'
