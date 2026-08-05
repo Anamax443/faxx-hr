@@ -45,7 +45,8 @@ Kolem ověřeného jádra (`detect` → `extract` → `rubric`) stojí **zálož
   editovatelné váhy kritérií i systémový prompt extrakce.
 - **Dokumentace** — princip, bezpečnost, skóre, regulatorika (in-app, plně CS + EN).
 - **CS / EN přepínač** i **světlý / tmavý motiv** (v horní liště, ukládá se v prohlížeči).
-- Výstup: ranking + **manažerský tiskový výstup (PDF/HTML)**. Žádné „hromadně zamítnout".
+- Výstup: ranking + **manažerský tiskový výstup (PDF/HTML)** + **prezentace pro vedení**
+  (6 stránek na šířku, bez kontaktů). Žádné „hromadně zamítnout".
 
 Skórovací cesta i tady **nikdy nevidí surový text CV** — skrytý/injection text se jen
 vlajkuje. Nasazení ručně: `npm run deploy:app` (bez CI). Sdílený detektor: `worker/src/detect.ts`.

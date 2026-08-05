@@ -2,6 +2,29 @@
 
 Append-only. Nejnovější záznam nahoru. Slouží k pokračování z jiného počítače / po pauze.
 
+## 2026-08-05 (ab) — 📊 Prezentace pro vedení (druhý výstup vedle manažerského listu)
+
+- **Proč:** `buildReport` je pracovní list personalisty — kontakty, rozpad každého kritéria, celý text
+  inzerátu. Na poradu vedení je to špatný formát: moc detailu, moc osobních údajů, žádný příběh.
+- **Nové `buildDeck(r)`** v [`worker/src/app.ts`](worker/src/app.ts) + tlačítko **📊 Prezentace pro vedení**
+  vedle stávajících. Samostatný HTML dokument, **6 stránek A4 na šířku** (`@page size: A4 landscape`,
+  `page-break-after` na každé sekci): (1) titulní s pozicí a větou o lidském rozhodnutí, (2) čísla dávky
+  (posouzeno / bez diskvalifikace / diskvalifikováno / dokumenty s nálezem), (3) užší výběr TOP 5 s pruhy
+  skóre a dvěma nejsilnějšími kritérii, (4) **srovnání kandidátů podle kritérií jako heatmapa**,
+  (5) integrita podkladů (nálezy skrytého/instrukčního textu), (6) metodika + odpovědnost (váhy, gate,
+  model, GDPR čl. 22, „nedoloženo ≠ nula"). Uvnitř dokumentu tlačítka Tisk/PDF a Uložit HTML (`.noprint`).
+- **Vědomě BEZ kontaktů** (e-maily/telefony zůstávají v pracovním listu) a bez rozpadu detailů.
+- **Respektuje pohledové hodnocení** (`VIEWMODE==='view'` → místo čísel profil kritérií) i filtr
+  ne-uchazečských dokumentů. „Nedoloženo" je šedá buňka, ne nula.
+- **Barvy podle datavizu:** skóre = jedna sekvenční modrá škála (světlá = málo, bílý text až od kroku,
+  kde projde kontrast), stavy (kritické/varování/bez nálezu) = vyhrazená status paleta **vždy s ikonou
+  a slovem**, nikdy jen barvou.
+- **Opraveno při té příležitosti:** „3 **let** praxe" → `yearsTxt()` dělá správné české tvary
+  (1 rok / 2–4 roky / 5+ let); používá to prezentace i hlavička pořadí v appce.
+- Ověřeno: `app.syntax.test.mjs` OK, render nad vzorovou dávkou (6 kandidátů, 1 diskvalifikovaný,
+  2 s nálezem) → **tisk dá přesně 6 stránek**, nic nepřetéká; zkontrolováno i simulací tiskového CSS
+  v šířce A4 na šířku. **Zatím NENASAZENO** (`npm run deploy:app`).
+
 ## 2026-08-05 (aa) — Lišta říká, KDY bude AI zase volná (kvóta 4006 čitelně)
 
 - **Proč:** lišta ukazovala jen syrové „4006: you have used up your daily free allocation…" — z toho
