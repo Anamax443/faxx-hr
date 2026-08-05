@@ -2,6 +2,23 @@
 
 Append-only. Nejnovější záznam nahoru. Slouží k pokračování z jiného počítače / po pauze.
 
+## 2026-08-05 (af) — Doladění CSP: upgrade-insecure-requests, reporting, užší object-src
+
+- **`upgrade-insecure-requests`** — stránka nic přes `http:` nenačítá, direktiva je pojistka
+  proti budoucímu překlepu v odkazu na zdroj.
+- **Reporting porušení CSP** míří na sběrné místo `https://maxferit.cz/api/report-csp`
+  (Pages Function, sdílená s ostatními weby): `report-uri` pro starší prohlížeče,
+  `report-to csp` + hlavička `Reporting-Endpoints` pro Reporting API. Endpoint kvůli tomu
+  dostal podporu obou tvarů těla (Reporting API posílá **pole** reportů) a `OPTIONS`
+  preflight — bez něj cross-origin reporty prohlížeč zahodí.
+- **`object-src 'self' blob:` → `object-src blob:`** — same-origin `<object>/<embed>` appka
+  nepoužívá. `'none'` ale **nejde**: dokument otevřený z `blob:` URL dědí CSP téhle stránky
+  a Chrome pod `object-src 'none'` nespustí ani vlastní PDF prohlížeč
+  ([chromium 40328564](https://issues.chromium.org/issues/40328564)) — tím by se rozbilo
+  otevírání nahraného CV z appky. Auditní WARN u téhle direktivy tedy zůstává **vědomě**.
+- Ověřeno lokálně (`wrangler dev`): hlavička obsahuje nové direktivy i `Reporting-Endpoints`,
+  nonce se dál nahrazuje, JSON odpovědi mají dál tvrdé `default-src 'none'`.
+
 ## 2026-08-05 (ae) — Bezpečnostní hlavičky (CSP s nonce), security.txt, HEAD
 
 - **Proč:** audit `faxx-hr.maxferit.cz` (skóre 79 %) — chyběla `Content-Security-Policy`,

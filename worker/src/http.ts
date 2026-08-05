@@ -18,6 +18,9 @@
  *     blob dokument dědí politiku téhle stránky, takže mu ji nesmíme zavřít.
  */
 
+// Sběrné místo pro porušení CSP — Pages Function na maxferit.cz (sdílené s ostatními weby).
+const CSP_REPORT_URI = "https://maxferit.cz/api/report-csp";
+
 /** Náhodný nonce pro jeden požadavek (base64 z 16 bajtů). */
 export function makeNonce(): string {
   const b = new Uint8Array(16);
@@ -40,11 +43,21 @@ function csp(nonce?: string): string {
     "style-src 'unsafe-inline'",
     "img-src 'self' data: blob:",
     "connect-src 'self'",
-    "object-src 'self' blob:",
+    // object-src by měl být 'none', ale prohlížeč jím zavírá i vlastní PDF prohlížeč:
+    // dokument otevřený z blob: URL dědí CSP téhle stránky a Chrome jeho PDF viewer
+    // pod 'none' nespustí (chromium issue 40328564). Appka takhle otevírá nahrané CV,
+    // takže je povolené jen schéma blob: — same-origin <object>/<embed> nepoužíváme.
+    "object-src blob:",
     "frame-src 'self' blob:",
     "base-uri 'none'",
     "form-action 'none'",
     "frame-ancestors 'none'",
+    // stránka nic přes http: nenačítá; direktiva je pojistka proti budoucímu překlepu
+    "upgrade-insecure-requests",
+    // porušení CSP se hlásí na sběrné místo na maxferit.cz (report-uri = starší
+    // prohlížeče, report-to = Reporting API; endpoint umí oba tvary)
+    `report-uri ${CSP_REPORT_URI}`,
+    "report-to csp",
   ].join("; ");
 }
 
@@ -61,6 +74,9 @@ export function securityHeaders(nonce?: string): Record<string, string> {
     "x-xss-protection": "0",
     "permissions-policy":
       "accelerometer=(), autoplay=(), camera=(), display-capture=(), encrypted-media=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), midi=(), payment=(), usb=(), xr-spatial-tracking=()",
+    // cíl pro `report-to csp` v CSP výše (Reporting API); bez téhle hlavičky se skupina
+    // „csp" nikam nepřeloží a moderní prohlížeč report zahodí
+    "reporting-endpoints": `csp="${CSP_REPORT_URI}"`,
     // popupy (tisk protokolu / výstupu) musí zůstat spojené s otvírající stránkou,
     // proto -allow-popups a ne tvrdé same-origin
     "cross-origin-opener-policy": "same-origin-allow-popups",
