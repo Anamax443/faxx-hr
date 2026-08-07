@@ -36,6 +36,13 @@ loses its attack surface.
 Around the verified core (`detect` → `extract` → `rubric`) sits a **tabbed web app**
 [`faxx-hr-app`](https://faxx-hr.maxferit.cz) (`worker/src/app.ts`):
 
+- **A selection = its own address.** Each selection gets a timestamp when created, and with it
+  a subpage `/YYYYMMDD-HHMM` (the bare `/` is always a clean start). **🔒 Close and save** stores
+  all values (job ad, requirements, weights, result) and clears the workspace, **📂 Saved selections**
+  restores them completely. An open selection has a **validity** (Settings, 30 days by default);
+  once it expires it **locks to read-only** (printing and export keep working), and **⏳ Extend
+  validity** brings it back. Everything lives in the browser only — the server knows nothing
+  about the selection's content.
 - **Evaluation** — paste the job ad (text / file / screenshot via vision) → "✨ Derive
   requirements", upload a **batch of CVs ≤ 10 MB**, "Evaluate" → ranking with an **at-a-glance
   assessment** (states `● ◐ ○ —` + certainty axis ◆ stated / ◇ inferred) **or numeric** (toggleable),

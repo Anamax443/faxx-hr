@@ -36,6 +36,12 @@ tím ztrácí attack surface.
 Kolem ověřeného jádra (`detect` → `extract` → `rubric`) stojí **záložkový web**
 [`faxx-hr-app`](https://faxx-hr.maxferit.cz) (`worker/src/app.ts`):
 
+- **Výběrové řízení = vlastní adresa.** Každé řízení dostane při založení razítko a s ním
+  podstránku `/RRRRMMDD-HHMM` (holé `/` je vždy čistý start). **🔒 Uzavřít a uložit** uloží
+  všechny hodnoty (inzerát, požadavky, váhy, výsledek) a vyklidí plochu, **📂 Uložená řízení**
+  je zase kompletně natáhne. Otevřené řízení má **platnost** (Nastavení, výchozí 30 dní);
+  po vypršení se **zamkne jen pro čtení** (tisk a export fungují dál), **⏳ Prodloužit platnost**
+  ho vrátí. Vše leží jen v prohlížeči — server o obsahu řízení neví.
 - **Hodnocení** — vlož inzerát (text / soubor / printscreen přes vision) → „✨ Odvodit
   požadavky", nahraj **dávku CV ≤ 10 MB**, „Vyhodnotit" → ranking s **pohledovým hodnocením**
   (stavy `● ◐ ○ —` + osa jistoty ◆ doloženo / ◇ odvozeno) **nebo číselně** (přepínatelné), rozpad

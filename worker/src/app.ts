@@ -338,6 +338,10 @@ async function evaluate(cands: CandidateInput[], req: Requirements, ai: AiBindin
 }
 
 // ---------------------------------------------------------------------------
+// Adresa jednoho výběrového řízení: /RRRRMMDD-HHMM (+ pořadí, když jich v minutě vznikne víc).
+// Exportováno kvůli regresi `vr.test.mjs` (aby se tvar adresy testoval, ne opisoval).
+export const VR_PATH = /^\/\d{8}-\d{4}(?:-\d{1,2})?$/;
+
 export default {
   async fetch(req: Request, env: Env): Promise<Response> {
     const url = new URL(req.url);
@@ -348,7 +352,11 @@ export default {
     // tělo odpovědi zahodí runtime sám.
     const read = req.method === "GET" || req.method === "HEAD";
 
-    if (read && (url.pathname === "/" || url.pathname === "/index.html")) {
+    // `/` = prázdný start, `/20260807-1432` = vlastní podstránka jednoho výběrového řízení.
+    // Server servíruje v obou případech STEJNOU stránku a o obsahu řízení nic neví —
+    // leží v prohlížeči (localStorage), adresa je jen jeho klíč. Tvar razítka je přísný
+    // (číslice + pomlčky), takže nemůže kolidovat s /o-projektu, /about, /api/* ani /security.txt.
+    if (read && (url.pathname === "/" || url.pathname === "/index.html" || VR_PATH.test(url.pathname))) {
       const n = makeNonce();
       return htmlResponse(PAGE.replaceAll(NONCE_SLOT, n), n);
     }
@@ -551,7 +559,9 @@ export default {
 // (viz http.ts). Bez něj by prohlížeč inline skripty stránky vůbec nespustil.
 const NONCE_SLOT = "__CSP_NONCE__";
 
-const PAGE = `<!DOCTYPE html><html lang="cs"><head><meta charset="UTF-8">
+// export = aby regrese (`vr.test.mjs`) parsovala PŘESNĚ ten JS, který dostane prohlížeč
+// (syntax-test čte jen surový zdroj, kde je escapování o úroveň jinak).
+export const PAGE = `<!DOCTYPE html><html lang="cs"><head><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>faxx-hr — hodnocení kandidátů</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='88'>🛡️</text></svg>">
@@ -648,7 +658,7 @@ h1 a{color:inherit;text-decoration:none;cursor:pointer}
 .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--muted);margin-right:5px;vertical-align:middle}
 .dot.ok{background:var(--accent)}.dot.bad{background:var(--red)}.dot.wait{background:var(--amber)}
 .sbre{cursor:pointer;color:var(--accent);margin-left:5px;text-decoration:none}
-@media print{.statusbar,.tabs,.drop,.files,button,#inzeratCard,#reqCard,.foot{display:none!important}.view{display:block!important}}
+@media print{.statusbar,.tabs,.drop,.files,button,#vrCard,#inzeratCard,#reqCard,.foot{display:none!important}.view{display:block!important}}
 /* světlý motiv (přepíná se data-theme na <html>) */
 :root[data-theme=light]{--bg:#eef1f7;--panel:#ffffff;--panel2:#f3f6fb;--line:#d3dbe9;
 --txt:#16203a;--muted:#586a88;--accent:#0f9d74;--amber:#9a6708;--red:#d23b52;--blue:#2664c9}
@@ -660,6 +670,18 @@ h1 a{color:inherit;text-decoration:none;cursor:pointer}
 .sbtog b{color:var(--txt)}
 .sblang b{cursor:pointer;padding:0 2px;color:var(--muted);font-weight:700}
 .sblang b.on{color:var(--accent)}
+/* výběrové řízení = pojmenovaná relace s vlastní adresou */
+.vrnow{font-size:13px;color:var(--muted)}.vrnow b{color:var(--txt)}
+.vrid{font-family:ui-monospace,Consolas,monospace;color:var(--accent)}
+.vrbox{margin-top:8px;padding:9px 11px;border:1px solid var(--line);border-radius:8px;background:var(--panel2);font-size:13px}
+.vrbox.warn{border-color:#5a4a18;background:rgba(240,180,41,.09)}
+.vrbox.stop{border-color:#5a2430;background:rgba(240,85,107,.09)}
+table.vrt{width:100%;border-collapse:collapse;margin-top:10px;font-size:13px}
+table.vrt th{text-align:left;color:var(--muted);font-size:11px;text-transform:uppercase;padding:6px 8px;border-bottom:1px solid var(--line)}
+table.vrt td{padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+table.vrt tr.cur td{background:rgba(63,214,160,.07)}
+.vra{color:var(--accent);cursor:pointer;text-decoration:none;border-bottom:1px dotted}
+.vra:hover{border-bottom-style:solid}.vra.del{color:var(--red)}
 /* přepínání jazyka dokumentace čistě přes CSS (data-lang na <html>) */
 :root .lang-en{display:none}
 :root[data-lang=en] .lang-cs{display:none}
@@ -687,6 +709,19 @@ h1 a{color:inherit;text-decoration:none;cursor:pointer}
 
 <!-- HODNOCENÍ -->
 <div class="view on" id="hod">
+  <div class="card" id="vrCard">
+    <h3 data-i18n="h_vr">0 · Výběrové řízení</h3>
+    <div id="vrNow"></div>
+    <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <button class="ghost" id="vrNew" data-i18n-title="t_vrnew" title="Založit nové výběrové řízení — dostane vlastní adresu s časovým razítkem. Rozpracované se předtím uloží."><span data-i18n="b_vrnew">➕ Nové řízení</span></button>
+      <button class="ghost" id="vrCloseBtn" data-i18n-title="t_vrclose" title="Uložit VŠECHNY hodnoty tohoto řízení (inzerát, požadavky, váhy, výsledek) a vyklidit plochu — vrátíš se k němu z přehledu níž"><span data-i18n="b_vrclose">🔒 Uzavřít a uložit</span></button>
+      <button class="ghost" id="vrExtendBtn" data-i18n-title="t_vrextend" title="Prodloužit platnost o nastavený počet dní (a znovu otevřít uzavřené řízení k úpravám)"><span data-i18n="b_vrextend">⏳ Prodloužit platnost</span></button>
+      <button class="ghost" id="vrListBtn" data-i18n-title="t_vrlist" title="Zobrazit / skrýt přehled uložených výběrových řízení v tomhle prohlížeči"><span data-i18n="b_vrlist">📂 Uložená řízení</span></button>
+      <span class="hint" id="vrMsg"></span>
+    </div>
+    <div id="vrTable"></div>
+    <div class="hint" data-i18n-html="hint_vr">Jedno výběrové řízení = jedna adresa (<span class="vrid">/20260807-1432</span>). Prázdná adresa <span class="vrid">/</span> je vždy čistý start. Obsah řízení leží <b>jen v tomhle prohlížeči</b> (nahrané soubory se neukládají — pro otevírání originálů je nahraj znovu). Po vypršení platnosti se řízení <b>zamkne jen pro čtení</b>; tisk, export i přehled fungují dál.</div>
+  </div>
   <div class="card" id="inzeratCard">
     <h3 data-i18n="h_inzerat">1 · Inzerát</h3>
     <textarea id="inzerat" data-i18n-ph="ph_inzerat" placeholder="Vlož text inzerátu, nahraj ho ze souboru (📎), nebo sem vlož printscreen (Ctrl+V) — obrázek přečte vision…"></textarea>
@@ -798,6 +833,18 @@ h1 a{color:inherit;text-decoration:none;cursor:pointer}
     <label data-i18n-html="l_sysprompt">Systémový prompt — přesně to, co se říká modelu, jak číst CV a co vytáhnout. Uprav opatrně: <b>zachovej seznam polí schématu</b> (identity, years_total_experience, skills…), jinak přestane extrakce fungovat.</label>
     <textarea id="sysPrompt" style="min-height:240px;font-family:ui-monospace,Consolas,monospace;font-size:12px"></textarea>
     <div style="margin-top:8px"><button class="ghost" id="sysReset" data-i18n="b_reset">Obnovit výchozí</button> <span class="hint" id="sysMsg" data-i18n="sys_saved">Ukládá se v prohlížeči a použije se při vyhodnocení.</span></div>
+  </div>
+  <div class="card">
+    <h3 data-i18n="h_vrset">Výběrová řízení (relace)</h3>
+    <label data-i18n="l_vrttl">Platnost otevřeného řízení</label>
+    <select id="vrTtl">
+      <option value="7" data-i18n="opt_ttl_7">7 dní</option>
+      <option value="14" data-i18n="opt_ttl_14">14 dní</option>
+      <option value="30" selected data-i18n="opt_ttl_30">30 dní (výchozí)</option>
+      <option value="90" data-i18n="opt_ttl_90">90 dní</option>
+      <option value="365" data-i18n="opt_ttl_365">1 rok</option>
+    </select>
+    <div class="hint" data-i18n-html="hint_vrttl">Po uplynutí této doby se řízení <b>zamkne jen pro čtení</b> — nejde do něj přidávat CV ani přepočítávat, dokud platnost ručně neprodloužíš. Nic se nesmaže: tisk protokolu, export JSON i prohlížení výsledků fungují dál. Změna se týká <b>nově zakládaných</b> řízení; u otevřených použij „⏳ Prodloužit platnost". Smysl: aby výběrové řízení nezůstalo otevřené donekonečna a bylo poznat, co je ještě živé.</div>
   </div>
   <div class="card">
     <h3 data-i18n="h_display">Zobrazení</h3>
@@ -917,6 +964,7 @@ h1 a{color:inherit;text-decoration:none;cursor:pointer}
   <div class="card doc" id="d-vystup">
     <h4>9 · Výstupy</h4>
     <ul>
+      <li><b>Výběrové řízení má vlastní adresu.</b> Každé řízení dostane při založení razítko a s ním adresu (<span class="vrid">/20260807-1432</span>), na kterou se dá odkázat záložkou; holá adresa <span class="vrid">/</span> je vždy čistý start. Tlačítko <b>🔒 Uzavřít a uložit</b> uloží všechny hodnoty (inzerát, požadavky, váhy, výsledek) a vyklidí plochu, <b>📂 Uložená řízení</b> je zase kompletně natáhne zpět. Otevřené řízení má <b>platnost</b> (Nastavení, výchozí 30 dní) — po jejím uplynutí se zamkne jen pro čtení, aby nezůstalo viset donekonečna; <b>⏳ Prodloužit platnost</b> ho vrátí do hry. Vše leží jen v tomhle prohlížeči.</li>
       <li><b>Ranking</b> — seřazený seznam kandidátů se skóre, kontakty, seznamem dokumentů (dokumenty jdou <b>otevřít přímo z aplikace</b> klikem na název) a nálezy skrytého obsahu.</li>
       <li><b>Jedno výběrové řízení = dva dokumenty.</b> Liší se čtenářem, ne obsahem „nazdařbůh": vedení dostane souhrn bez osobních údajů, personalista a archiv úplný doklad.</li>
       <li><b>📊 Výstup výběrového řízení</b> (dokument 1 ze 2, pro vedení) — samostatné HTML na promítání a tisk, <b>6 stran A4 na výšku</b>: titulní strana, čísla dávky, užší výběr (TOP 5), srovnání kandidátů podle kritérií, integrita podkladů a metodika s odpovědností. <b>Bez kontaktů a bez rozpadu detailů.</b> Uvnitř má tlačítka Tisk/PDF a Uložit HTML.</li>
@@ -944,7 +992,7 @@ h1 a{color:inherit;text-decoration:none;cursor:pointer}
       <li><b>Kvalita zdarma modelu kolísá.</b> Llama 3.1 8B může u téhož CV dát mírně jiné pořadí. Pro stabilnější výsledky přepni na silnější model (a Claude, až bude klíč).</li>
       <li><b>Vision OCR není dokonalý.</b> U obrázkových CV / screenshotů může chybět či být nepřesné. Doporučeno dodávat CV jako PDF/DOCX s textovou vrstvou.</li>
       <li><b>PDF — hloubka detekce.</b> Přesné určení „proč skrytý“ (barva/render mód/XFA) běží na on-prem runneru; webová verze u PDF zachytí instrukční text v textové vrstvě.</li>
-      <li><b>Ukládání v prohlížeči, ne na serveru.</b> Dokumenty se zpracují v paměti a na server se neukládají. Rozpracovaná relace (inzerát, požadavky a poslední výsledek) se <b>automaticky ukládá v prohlížeči a po obnově stránky se sama natáhne</b>; výsledek si můžeš i <b>stáhnout jako JSON a jinde načíst</b>. Nahrané soubory ale refresh nepřežijí — pro otevírání originálů je nahraj znovu. Sdílené úložiště dávek se stavem kandidáta (osloven/postupuje/odmítnut) teprve přijde — perzistence D1/R2 je na roadmapě.</li>
+      <li><b>Ukládání v prohlížeči, ne na serveru.</b> Dokumenty se zpracují v paměti a na server se neukládají. Celé výběrové řízení (inzerát, požadavky, váhy i poslední výsledek) se <b>automaticky ukládá v prohlížeči pod svou adresou</b> a po obnově stránky se samo natáhne; výsledek si můžeš i <b>stáhnout jako JSON a jinde načíst</b>. Nahrané soubory ale refresh nepřežijí — pro otevírání originálů je nahraj znovu. <b>Adresa řízení funguje jen v prohlížeči, kde vzniklo</b> (na jiném PC bude prázdná — přenos řeší export/import JSON). Sdílené úložiště dávek se stavem kandidáta (osloven/postupuje/odmítnut) teprve přijde — perzistence D1/R2 je na roadmapě.</li>
       <li><b>Skóre = podklad.</b> Vždy si projdi rozpad a nálezy; konečné rozhodnutí je tvoje.</li>
     </ul>
     <p style="font-size:12px;color:var(--muted)">Verze aplikace (commit + čas nasazení) je v horní liště.</p>
@@ -1061,6 +1109,7 @@ h1 a{color:inherit;text-decoration:none;cursor:pointer}
   <div class="card doc" id="en-vystup">
     <h4>9 · Outputs</h4>
     <ul>
+      <li><b>A selection has its own address.</b> Each selection gets a timestamp when created and with it an address (<span class="vrid">/20260807-1432</span>) you can bookmark; the bare address <span class="vrid">/</span> is always a clean start. <b>🔒 Close and save</b> stores all values (job ad, requirements, weights, result) and clears the workspace, <b>📂 Saved selections</b> restores them completely. An open selection has a <b>validity</b> (Settings, 30 days by default) — once it passes, the selection locks to read-only so it does not hang around forever; <b>⏳ Extend validity</b> brings it back. Everything lives in this browser only.</li>
       <li><b>Ranking</b> — a sorted list of candidates with scores, contacts, a list of documents (documents can be <b>opened directly from the app</b> by clicking the name) and hidden-content findings.</li>
       <li><b>One selection procedure = two documents.</b> They differ by reader, not by arbitrary content: management gets a summary without personal data, the recruiter and the archive get the full record.</li>
       <li><b>📊 Selection outcome</b> (document 1 of 2, for management) — a standalone HTML document for presenting and printing, <b>6 A4 portrait pages</b>: cover, batch figures, shortlist (top 5), candidate comparison by criterion, integrity of the source documents, and methodology with accountability. <b>No contacts, no detailed breakdown.</b> It carries its own Print/PDF and Save HTML buttons.</li>
@@ -1088,7 +1137,7 @@ h1 a{color:inherit;text-decoration:none;cursor:pointer}
       <li><b>Free-model quality varies.</b> Llama 3.1 8B may give a slightly different order for the same CV. For more stable results switch to a stronger model (and Claude, once there is a key).</li>
       <li><b>Vision OCR is not perfect.</b> For image CVs / screenshots it may be missing or inaccurate. Prefer supplying CVs as PDF/DOCX with a text layer.</li>
       <li><b>PDF — detection depth.</b> Determining exactly "why hidden" (colour/render mode/XFA) runs on the on-prem runner; the web version catches instruction text in the PDF text layer.</li>
-      <li><b>Stored in the browser, not on the server.</b> Documents are processed in memory and not stored on the server. Your working session (job ad, requirements and the last result) is <b>auto-saved in the browser and restored after a page reload</b>; you can also <b>download the result as JSON and load it elsewhere</b>. Uploaded files do not survive a reload, though — re-upload them to open the originals. A shared batch store with candidate status (contacted/advancing/rejected) is still to come — D1/R2 persistence is on the roadmap.</li>
+      <li><b>Stored in the browser, not on the server.</b> Documents are processed in memory and not stored on the server. The whole selection (job ad, requirements, weights and the last result) is <b>auto-saved in the browser under its own address</b> and restored after a page reload; you can also <b>download the result as JSON and load it elsewhere</b>. Uploaded files do not survive a reload, though — re-upload them to open the originals. <b>A selection address only works in the browser where it was created</b> (on another PC it will be empty — use the JSON export/import to move it). A shared batch store with candidate status (contacted/advancing/rejected) is still to come — D1/R2 persistence is on the roadmap.</li>
       <li><b>The score is a basis.</b> Always review the breakdown and findings; the final decision is yours.</li>
     </ul>
     <p style="font-size:12px;color:var(--muted)">The application version (commit + deploy time) is in the top bar.</p>
@@ -1132,6 +1181,14 @@ var EN={
   sb_home:"Back to the top (Evaluation tab)",
   lead:"Evaluate candidates against a job ad, with defence against hidden instructions in the CV. The score is computed by a fixed rubric over extracted data — you decide.",
   tab_hod:"Evaluation", tab_nast:"Settings", tab_dok:"Documentation",
+  h_vr:"0 · Selection", b_vrnew:"➕ New selection", t_vrnew:"Create a new selection — it gets its own address with a timestamp. Work in progress is saved first.",
+  b_vrclose:"🔒 Close and save", t_vrclose:"Save ALL values of this selection (job ad, requirements, weights, result) and clear the workspace — return to it from the list below",
+  b_vrextend:"⏳ Extend validity", t_vrextend:"Extend the validity by the configured number of days (and reopen a closed selection for edits)",
+  b_vrlist:"📂 Saved selections", t_vrlist:"Show / hide the list of selections stored in this browser",
+  hint_vr:"One selection = one address (<span class='vrid'>/20260807-1432</span>). The bare address <span class='vrid'>/</span> is always a clean start. The content lives <b>only in this browser</b> (uploaded files are not stored — re-upload them to open the originals). When the validity expires the selection <b>locks to read-only</b>; printing, export and the list keep working.",
+  h_vrset:"Selections (sessions)", l_vrttl:"Validity of an open selection",
+  opt_ttl_7:"7 days", opt_ttl_14:"14 days", opt_ttl_30:"30 days (default)", opt_ttl_90:"90 days", opt_ttl_365:"1 year",
+  hint_vrttl:"After this period the selection <b>locks to read-only</b> — no adding CVs and no recomputation until you extend it manually. Nothing is deleted: printing the record, JSON export and browsing the results all keep working. The setting applies to <b>newly created</b> selections; for open ones use “⏳ Extend validity”. The point: so a selection does not stay open forever and you can tell what is still live.",
   h_inzerat:"1 · Job ad", ph_inzerat:"Paste the job-ad text, upload it from a file (📎), or paste a screenshot here (Ctrl+V) — the image is read by vision…",
   t_filebtn:"Upload the job ad as TXT, PDF, DOCX or an image (PNG/JPG via vision)", b_filebtn:"📎 Insert from file",
   t_derive:"AI suggests requirements from the ad, which you can then edit", b_derive:"✨ Derive requirements from the ad",
@@ -1187,13 +1244,14 @@ $('#sbTheme').onclick=()=>setTheme(THEME==='light'?'dark':'light');
 function syncLangBtns(){$$('[data-lang-btn]').forEach(b=>b.classList.toggle('on',b.getAttribute('data-lang-btn')===LANG))}
 function setLang(l){LANG=l;document.documentElement.setAttribute('data-lang',l);document.documentElement.setAttribute('lang',l);try{localStorage.setItem('faxx_lang',l)}catch(e){}applyI18n();syncLangBtns();afterLangChange();}
 $$('[data-lang-btn]').forEach(b=>b.onclick=()=>setLang(b.getAttribute('data-lang-btn')));
-function afterLangChange(){try{tickClock()}catch(e){}try{wSum()}catch(e){}try{renderAiStatus()}catch(e){}try{refreshTplSel()}catch(e){}
+function afterLangChange(){try{tickClock()}catch(e){}try{wSum()}catch(e){}try{renderAiStatus()}catch(e){}try{refreshTplSel()}catch(e){}try{renderVr()}catch(e){}
   if(typeof lastEval!=='undefined'&&lastEval){rescoreForLang()}else if(typeof lastResult!=='undefined'&&lastResult){renderResults(lastResult)}}
 function langsFromForm(){var el=$('#reqLangs');return el?el.value.split(/[,;\\/]+/).map(s=>s.trim()).filter(Boolean):[]}
 function reqFromForm(){return {jobTitle:$('#jobTitle').value.trim(),minYears:+$('#minYears').value||0,requiredSkills:$('#skills').value.split(',').map(s=>s.trim().toLowerCase()).filter(Boolean),languages:langsFromForm(),weights:getWeights(),disabled:getDisabled()}}
 // Přepočet BEZ AI nad už načtenou dávkou (funguje i po importu, bez nahraných CV).
 async function rescoreNow(){
   if(typeof lastEval==='undefined'||!lastEval)return null;
+  if(typeof vrLocked==='function'&&vrLocked())return null;   // uzavřené/vypršelé řízení = jen pro čtení
   try{
     const r=await fetch('/api/rescore',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({requirements:reqFromForm(),model:model(),candidates:lastEval.result.ranking,lang:LANG})}).then(x=>x.json());
     if(!r.error){renderResults(r);lastEval={sig:(typeof curSig!=='undefined'&&curSig)?curSig:evalSig(),result:r};saveSession()}
@@ -1229,32 +1287,196 @@ async function importResult(file){
     $('#evalMsg').textContent=tl('Načteno z uloženého souboru'+when+'. Přepočet vah/gate běží bez AI.','Loaded from a saved file'+when+'. Weight/gate recompute runs without AI.');
   }catch(e){$('#err').textContent=tl('Chyba načtení: ','Load error: ')+((e&&e.message)||e)}
 }
-// ---- autosave kompletní relace do localStorage → přežije obnovu prohlížeče (bez DB) ----
-const SESSION_KEY='faxx_session';
+// ---- výběrové řízení = pojmenovaná relace s vlastní adresou (localStorage, bez DB) ----
+// Adresa /20260807-1432 je jen KLÍČ do tohohle prohlížeče — obsah řízení (inzerát,
+// požadavky, váhy, výsledek) se nikam neposílá, server o něm neví. Prázdné „/" je proto
+// vždy čistý start. Platnost (TTL) řízení po vypršení ZAMKNE jen pro čtení, nemaže:
+// ztratit rozdělanou práci jen proto, že uběhl čas, by bylo horší než držet ji navíc.
+const VR_PREFIX='faxx_vr_';          // faxx_vr_<id> = celý snímek jednoho řízení
+const VR_INDEX='faxx_vr_index';      // přehled řízení (adresa, pozice, počet, stav)
+const VR_TTLKEY='faxx_vr_ttl';       // platnost ve dnech (Nastavení)
+const SESSION_KEY='faxx_session';    // JEDINÁ relace ze starší verze → převede se na řízení
+const DAY=86400000;
+var VR=null;                         // metadata otevřeného řízení; null = prázdný start
 function slimResult(r){if(!r)return null;const o={...r};delete o.docExtracts;return o} // docExtracts patří jen do klientské cache, ne do úložiště
+function vrTtlDays(){var n=0;try{n=+(localStorage.getItem(VR_TTLKEY)||30)}catch(e){}return n>0?n:30}
+function vrIdx(){try{var o=JSON.parse(localStorage.getItem(VR_INDEX)||'{}');return (o&&typeof o==='object')?o:{}}catch(e){return {}}}
+function vrIdxSave(o){try{localStorage.setItem(VR_INDEX,JSON.stringify(o))}catch(e){}}
+function pad2(n){return (n<10?'0':'')+n}
+function vrStamp(d){return ''+d.getFullYear()+pad2(d.getMonth()+1)+pad2(d.getDate())+'-'+pad2(d.getHours())+pad2(d.getMinutes())}
+function vrFreeId(base){var idx=vrIdx(),id=base,i=2;while(idx[id]){id=base+'-'+i;i++}return id}
+function vrValidId(s){return /^\\d{8}-\\d{4}(-\\d{1,2})?$/.test(s||'')}
+function vrIdFromUrl(){var p=location.pathname||'/';if(p.charAt(0)==='/')p=p.slice(1);return vrValidId(p)?p:null}
+function vrExpired(m){return !!(m&&m.expiresAt&&Date.now()>m.expiresAt)}
+function vrLocked(){return !!(VR&&(VR.closed||vrExpired(VR)))}
+function vrGo(id){try{history.pushState(null,'',id?'/'+id:'/')}catch(e){}}
+function vrMsgSet(t){var m=$('#vrMsg');if(m)m.textContent=t||''}
+function vrDT(t){try{return new Date(t).toLocaleString(LANG==='en'?'en-GB':'cs-CZ')}catch(e){return ''}}
+function vrD(t){try{return new Date(t).toLocaleDateString(LANG==='en'?'en-GB':'cs-CZ')}catch(e){return ''}}
+function vrDaysLeft(t){return Math.ceil((t-Date.now())/DAY)}
+// snímek = VŠECHNY hodnoty řízení pohromadě (to, co se má uložit i znovu natáhnout)
+function vrSnapshot(){
+  var now=Date.now();
+  return {version:2,id:VR?VR.id:null,createdAt:VR?VR.createdAt:now,updatedAt:now,
+    expiresAt:VR?VR.expiresAt:now+vrTtlDays()*DAY,closed:VR?!!VR.closed:false,closedAt:VR?(VR.closedAt||null):null,
+    savedAt:new Date(now).toISOString(),lang:LANG,model:model(),
+    inzerat:$('#inzerat').value,jobTitle:$('#jobTitle').value,minYears:$('#minYears').value,
+    skills:$('#skills').value,langs:($('#reqLangs')?$('#reqLangs').value:''),
+    weights:getWeights(),disabled:getDisabled(),
+    result:(typeof lastEval!=='undefined'&&lastEval)?slimResult(lastEval.result):null};
+}
+function vrMeta(s){return {id:s.id,title:(s.jobTitle||'').trim(),createdAt:s.createdAt,updatedAt:s.updatedAt,
+  expiresAt:s.expiresAt,closed:!!s.closed,closedAt:s.closedAt||null,
+  n:(s.result&&s.result.ranking)?s.result.ranking.length:0}}
+function vrWrite(s){
+  try{localStorage.setItem(VR_PREFIX+s.id,JSON.stringify(s));var idx=vrIdx();idx[s.id]=vrMeta(s);vrIdxSave(idx);return true}
+  catch(e){vrMsgSet(tl('Úložiště prohlížeče je plné — řízení se NEuložilo. Smaž stará řízení v přehledu.','Browser storage is full — the selection was NOT saved. Delete old selections in the list.'));return false}
+}
+function vrRead(id){try{return JSON.parse(localStorage.getItem(VR_PREFIX+id)||'null')}catch(e){return null}}
+// autosave: každá změna formuláře / každé vyhodnocení uloží celé řízení
 function saveSession(){
-  try{
-    const snap={version:1,savedAt:new Date().toISOString(),inzerat:$('#inzerat').value,jobTitle:$('#jobTitle').value,minYears:$('#minYears').value,skills:$('#skills').value,langs:($('#reqLangs')?$('#reqLangs').value:''),result:(typeof lastEval!=='undefined'&&lastEval)?slimResult(lastEval.result):null};
-    localStorage.setItem(SESSION_KEY,JSON.stringify(snap));
-  }catch(e){/* kvóta / soukromý režim → tichý fail (příště jen bez výsledku) */}
+  if(vrLocked())return;                       // uzavřené/vypršelé se nepřepisuje
+  if(!VR)vrAdopt(vrFreeId(vrStamp(new Date())),true);   // první změna na „/" = nové řízení
+  if(!VR)return;
+  var s=vrSnapshot();s.id=VR.id;
+  if(vrWrite(s))VR=vrMeta(s);
+  renderVr();
 }
-function clearSession(){try{localStorage.removeItem(SESSION_KEY)}catch(e){}lastEval=null;lastResult=null;$('#results').innerHTML='';$('#evalMsg').textContent=tl('Uložená relace vymazána.','Saved session cleared.')}
-function restoreSession(){
-  let snap=null;try{snap=JSON.parse(localStorage.getItem(SESSION_KEY)||'null')}catch(e){}
-  if(!snap)return;
-  if(snap.inzerat!=null)$('#inzerat').value=snap.inzerat;
-  if(snap.jobTitle!=null)$('#jobTitle').value=snap.jobTitle;
-  if(snap.minYears!=null)$('#minYears').value=snap.minYears;
-  if(snap.skills!=null)$('#skills').value=snap.skills;
-  if(snap.langs!=null&&$('#reqLangs'))$('#reqLangs').value=snap.langs;
-  if(snap.result&&snap.result.ranking){
-    curSig=evalSig();lastEval={sig:curSig,result:snap.result};
-    renderResults(snap.result);
-    const when=snap.savedAt?' ('+new Date(snap.savedAt).toLocaleString(LANG==='en'?'en-GB':'cs-CZ')+')':'';
-    $('#evalMsg').innerHTML=tl('↩︎ Obnovena poslední relace','↩︎ Last session restored')+when+' — '+tl('soubory nahraj znovu, chceš-li otevírat originály. ','re-upload the files if you want to open the originals. ')+'<a id="clrSess" style="cursor:pointer;text-decoration:underline">'+tl('Vymazat relaci','Clear session')+'</a>';
-    const clr=$('#clrSess');if(clr)clr.onclick=clearSession;
+// vyklidit plochu (hodnoty ZŮSTÁVAJÍ uložené pod svou adresou)
+function vrReset(){
+  ['#inzerat','#jobTitle','#skills'].forEach(function(s){var el=$(s);if(el)el.value=''});
+  var my=$('#minYears');if(my)my.value=0;
+  var rl=$('#reqLangs');if(rl)rl.value='angličtina';
+  files=[];renderFiles();
+  lastEval=null;lastResult=null;curSig='';
+  ['#results','#err','#evalMsg','#deriveMsg'].forEach(function(s){var el=$(s);if(el)el.innerHTML=''});
+}
+function vrApply(s){
+  if(s.inzerat!=null)$('#inzerat').value=s.inzerat;
+  if(s.jobTitle!=null)$('#jobTitle').value=s.jobTitle;
+  if(s.minYears!=null)$('#minYears').value=s.minYears;
+  if(s.skills!=null)$('#skills').value=s.skills;
+  if(s.langs!=null&&$('#reqLangs'))$('#reqLangs').value=s.langs;
+  if(s.weights)WKEYS.forEach(function(k){if(typeof s.weights[k]==='number')$('#w_'+k).value=s.weights[k]});
+  if(s.disabled)WKEYS.forEach(function(k){var c=$('#on_'+k);if(c)c.checked=(s.disabled||[]).indexOf(k)<0});
+  if(s.weights||s.disabled)saveWeights();
+  if(s.result&&s.result.ranking){curSig=evalSig();lastEval={sig:curSig,result:s.result};renderResults(s.result)}
+}
+// adopce adresy: řízení pod tímhle razítkem tu ještě není (nové / cizí odkaz) →
+// drž ho zatím v paměti, na disk se zapíše až první uloženou hodnotou
+function vrAdopt(id,nav){var now=Date.now();
+  VR={id:id,title:'',createdAt:now,updatedAt:now,expiresAt:now+vrTtlDays()*DAY,closed:false,closedAt:null,n:0};
+  if(nav)vrGo(id);renderVr();return VR}
+function vrNew(){
+  if(VR&&!vrLocked())saveSession();
+  vrReset();VR=null;
+  var v=vrAdopt(vrFreeId(vrStamp(new Date())),true);
+  vrMsgSet(tl('Založeno nové výběrové řízení '+v.id+'.','New selection '+v.id+' created.'));
+}
+function vrOpen(id,noNav){
+  var s=vrRead(id);
+  if(!s)return false;
+  if(VR&&VR.id!==id&&!vrLocked())saveSession();
+  vrReset();VR=vrMeta(s);vrApply(s);
+  if(!noNav)vrGo(id);
+  renderVr();
+  vrMsgSet(tl('Načteno řízení '+id+' ('+vrDT(s.updatedAt)+'). Soubory nahraj znovu, chceš-li otevírat originály.','Selection '+id+' loaded ('+vrDT(s.updatedAt)+'). Re-upload the files if you want to open the originals.'));
+  return true;
+}
+function vrCloseNow(){
+  if(!VR){vrMsgSet(tl('Není otevřené žádné výběrové řízení.','No selection is open.'));return}
+  var s=vrSnapshot();s.id=VR.id;s.closed=true;s.closedAt=Date.now();
+  if(!vrWrite(s))return;                       // plné úložiště → radši nic nezavírej
+  var id=VR.id;VR=null;vrReset();vrGo(null);renderVr();
+  vrMsgSet(tl('Řízení '+id+' uloženo a uzavřeno — plocha je prázdná. Zpátky ho otevřeš z přehledu níž.','Selection '+id+' saved and closed — the workspace is empty. Reopen it from the list below.'));
+}
+function vrExtendNow(){
+  if(!VR){vrMsgSet(tl('Není otevřené žádné výběrové řízení.','No selection is open.'));return}
+  var s=vrRead(VR.id)||vrSnapshot();s.id=VR.id;
+  s.expiresAt=Date.now()+vrTtlDays()*DAY;s.closed=false;s.closedAt=null;s.updatedAt=Date.now();
+  if(!vrWrite(s))return;
+  VR=vrMeta(s);renderVr();
+  vrMsgSet(tl('Platnost prodloužena do '+vrD(s.expiresAt)+' — řízení je zase otevřené k úpravám.','Validity extended to '+vrD(s.expiresAt)+' — the selection is open for edits again.'));
+}
+function vrDelete(id){
+  if(!confirm(tl('Smazat výběrové řízení '+id+' včetně uloženého vyhodnocení? Nejde vzít zpět.','Delete selection '+id+' including the saved evaluation? This cannot be undone.')))return;
+  try{localStorage.removeItem(VR_PREFIX+id)}catch(e){}
+  var idx=vrIdx();delete idx[id];vrIdxSave(idx);
+  if(VR&&VR.id===id){VR=null;vrReset();vrGo(null)}
+  renderVr();vrMsgSet(tl('Řízení '+id+' smazáno.','Selection '+id+' deleted.'));
+}
+// zámek jen pro čtení (uzavřené / po vypršení platnosti)
+function vrApplyLock(){
+  var lock=vrLocked();
+  ['#inzerat','#jobTitle','#minYears','#skills','#reqLangs'].forEach(function(s){var el=$(s);if(el)el.readOnly=lock});
+  ['#evalBtn','#deriveBtn','#file','#inzFile','#btnRescore'].forEach(function(s){var el=$(s);if(el)el.disabled=lock});
+  var d=$('#drop');if(d)d.style.opacity=lock?'.45':'';
+  var c=$('#vrCloseBtn');if(c)c.disabled=!VR||lock;
+  var e=$('#vrExtendBtn');if(e)e.disabled=!VR;
+}
+function renderVr(){
+  var now=$('#vrNow');if(!now)return;
+  if(!VR){
+    now.innerHTML='<div class="vrnow">'+tl('Žádné otevřené výběrové řízení — adresa <span class="vrid">/</span> je vždy čistý start. Jakmile začneš vyplňovat (nebo klikneš na „➕ Nové řízení"), dostane řízení vlastní adresu s časovým razítkem.','No selection is open — the address <span class="vrid">/</span> is always a clean start. As soon as you start filling in (or click “➕ New selection”), the selection gets its own address with a timestamp.')+'</div>';
+  }else{
+    var left=VR.expiresAt?vrDaysLeft(VR.expiresAt):null;
+    var head='<b class="vrid">/'+esc(VR.id)+'</b>'+(VR.title?' · <b>'+esc(VR.title)+'</b>':'')+' · '+tl('založeno ','opened ')+vrDT(VR.createdAt)
+      +(VR.n?' · '+VR.n+tl(' kandidátů',' candidates'):'')+' · '+tl('uloženo ','saved ')+vrDT(VR.updatedAt);
+    var box='';
+    if(VR.closed)box='<div class="vrbox stop">🔒 <b>'+tl('Uzavřeno ','Closed ')+vrDT(VR.closedAt||VR.updatedAt)+'</b> — '+tl('řízení je jen pro čtení. Tisk protokolu, výstup pro vedení i export JSON fungují; k úpravám ho vrátíš tlačítkem „⏳ Prodloužit platnost".','the selection is read-only. Printing the record, the management outcome and JSON export all work; use “⏳ Extend validity” to edit it again.')+'</div>';
+    else if(vrExpired(VR))box='<div class="vrbox stop">⌛ <b>'+tl('Platnost vypršela ','Validity expired ')+vrD(VR.expiresAt)+'</b> — '+tl('řízení je jen pro čtení, aby nezůstalo otevřené donekonečna. Nic se nesmazalo: tisk a export fungují, úpravy povolíš tlačítkem „⏳ Prodloužit platnost".','the selection is read-only so it does not stay open forever. Nothing was deleted: printing and export work, use “⏳ Extend validity” to allow edits.')+'</div>';
+    else if(left!=null&&left<=3)box='<div class="vrbox warn">⏳ '+tl('Platnost končí ','Validity ends ')+vrD(VR.expiresAt)+' ('+tl('zbývá ','in ')+left+tl(' dní',' days')+') — '+tl('potom se řízení zamkne jen pro čtení.','then the selection locks to read-only.')+'</div>';
+    else if(VR.expiresAt)box='<div class="vrbox">🗓 '+tl('Platnost do ','Valid until ')+vrD(VR.expiresAt)+' ('+tl('zbývá ','in ')+left+tl(' dní',' days')+')</div>';
+    now.innerHTML='<div class="vrnow">'+head+'</div>'+box;
   }
+  vrApplyLock();renderVrList();
 }
+function vrListOpen(v){var t=$('#vrTable');if(!t)return false;
+  if(v!=null)t.setAttribute('data-open',v?'1':'0');
+  return t.getAttribute('data-open')==='1'}
+function renderVrList(){
+  var t=$('#vrTable');if(!t)return;
+  if(!vrListOpen()){t.innerHTML='';return}
+  var idx=vrIdx(),ids=Object.keys(idx).sort().reverse();
+  if(!ids.length){t.innerHTML='<div class="hint">'+tl('V tomhle prohlížeči zatím není uložené žádné výběrové řízení.','No selection is stored in this browser yet.')+'</div>';return}
+  var rows=ids.map(function(id){var m=idx[id]||{};
+    var st=m.closed?'🔒 '+tl('uzavřeno','closed'):(vrExpired(m)?'⌛ '+tl('vypršelo','expired'):'🟢 '+tl('otevřeno','open'));
+    return '<tr class="'+(VR&&VR.id===id?'cur':'')+'"><td><span class="vrid">/'+esc(id)+'</span></td>'
+      +'<td>'+esc(m.title||tl('(bez názvu pozice)','(no position title)'))+'</td><td>'+(m.n||0)+'</td>'
+      +'<td>'+vrDT(m.updatedAt)+'</td><td>'+st+(m.expiresAt?'<div class="hint">'+tl('do ','until ')+vrD(m.expiresAt)+'</div>':'')+'</td>'
+      +'<td><a class="vra" data-vro="'+esc(id)+'" title="'+tl('Otevřít řízení a natáhnout všechny uložené hodnoty','Open the selection and restore all saved values')+'">'+tl('otevřít','open')+'</a> · '
+      +'<a class="vra del" data-vrd="'+esc(id)+'" title="'+tl('Nevratně smazat toto řízení z prohlížeče','Irreversibly delete this selection from the browser')+'">'+tl('smazat','delete')+'</a></td></tr>'}).join('');
+  t.innerHTML='<table class="vrt"><thead><tr><th>'+tl('Adresa','Address')+'</th><th>'+tl('Pozice','Position')+'</th><th>'+tl('Kand.','Cand.')+'</th><th>'+tl('Uloženo','Saved')+'</th><th>'+tl('Stav','State')+'</th><th></th></tr></thead><tbody>'+rows+'</tbody></table>';
+  $$('[data-vro]').forEach(function(a){a.onclick=function(){vrOpen(a.getAttribute('data-vro'))}});
+  $$('[data-vrd]').forEach(function(a){a.onclick=function(){vrDelete(a.getAttribute('data-vrd'))}});
+}
+// jednorázový převod staré jediné relace (faxx_session) na řízení s vlastní adresou
+function vrMigrate(){
+  var raw=null;try{raw=localStorage.getItem(SESSION_KEY)}catch(e){}
+  if(!raw)return null;
+  var o=null;try{o=JSON.parse(raw)}catch(e){}
+  try{localStorage.removeItem(SESSION_KEY)}catch(e){}
+  if(!o)return null;
+  var t=o.savedAt?Date.parse(o.savedAt):Date.now();if(isNaN(t))t=Date.now();
+  var id=vrFreeId(vrStamp(new Date(t)));
+  vrWrite({version:2,id:id,createdAt:t,updatedAt:t,expiresAt:t+vrTtlDays()*DAY,closed:false,closedAt:null,
+    savedAt:o.savedAt||new Date(t).toISOString(),lang:LANG,model:model(),
+    inzerat:o.inzerat||'',jobTitle:o.jobTitle||'',minYears:o.minYears||0,skills:o.skills||'',langs:o.langs||'',
+    weights:null,disabled:null,result:o.result||null});
+  return id;
+}
+function bootVr(){
+  var mig=vrMigrate();
+  var id=vrIdFromUrl();
+  if(id){ if(!vrOpen(id,true)){vrAdopt(id,false);
+      vrMsgSet(tl('Tahle adresa je v tomhle prohlížeči zatím prázdná — obsah řízení zůstává tam, kde vznikl. Co sem zadáš, se uloží pod tímhle razítkem.','This address is empty in this browser — the selection content stays where it was created. Whatever you enter here will be saved under this stamp.'))} }
+  else renderVr();
+  if(mig){vrListOpen(true);renderVrList();
+    vrMsgSet(tl('Rozpracovaná relace z dřívějška byla převedena na řízení '+mig+' — najdeš ho v přehledu.','The earlier working session was converted into selection '+mig+' — find it in the list.'))}
+}
+// zámek musí naskočit i bez akce uživatele (platnost vyprší při otevřené stránce)
+var vrLockWas=false;
+function vrTick(){var l=vrLocked();if(l!==vrLockWas){vrLockWas=l;renderVr()}}
 
 // tabs
 $$('.tab').forEach(t=>t.onclick=()=>{$$('.tab').forEach(x=>x.classList.remove('on'));$$('.view').forEach(x=>x.classList.remove('on'));t.classList.add('on');$('#'+t.dataset.v).classList.add('on')});
@@ -1325,7 +1547,8 @@ modelSel.onchange=()=>{localStorage.setItem('faxx_model',modelSel.value);updSb()
 $('#sbPing').onclick=pingAI;
 updSb();pingAI();
 // živé hodiny
-function tickClock(){const el=$('#sbClock');if(el)el.textContent=new Date().toLocaleTimeString(LANG==='en'?'en-GB':'cs-CZ')}
+function tickClock(){const el=$('#sbClock');if(el)el.textContent=new Date().toLocaleTimeString(LANG==='en'?'en-GB':'cs-CZ');
+  try{vrTick()}catch(e){}}
 tickClock();setInterval(tickClock,1000);
 // váhy kritérií (nastavitelné, ukládané v prohlížeči)
 const WKEYS=['roky_praxe','dovednosti','vzdelani','en','stabilita','certifikace'];
@@ -1440,7 +1663,8 @@ $('#deriveBtn').onclick=async()=>{
       const ry=r.requestedYears||0;
       $('#deriveMsg').textContent=tl('Hotovo (','Done (')+(r.ms||0)+' ms). '+(ry
         ?tl('Inzerát zmiňuje ~'+ry+' let praxe, ale gate (tvrdé vyřazení) nechávám VYPNUTÝ — roky se z CV spolehlivě nečtou, tak se nepenalizují. Chceš tvrdý limit? Zadej ho do „Min. roky praxe".','The ad mentions ~'+ry+' years of experience, but the gate (hard cut-off) stays OFF — years are not read reliably from CVs, so they are not penalised. Want a hard limit? Enter it under “Min. years of experience”.')
-        :tl('Uprav podle sebe.','Adjust as needed.'))}
+        :tl('Uprav podle sebe.','Adjust as needed.'));
+      saveSession();}   // programové vyplnění polí nevyvolá „change" → ulož ručně
   }catch(e){$('#deriveMsg').textContent=tl('Chyba: ','Error: ')+e}
   $('#deriveBtn').disabled=false;
 };
@@ -1451,7 +1675,7 @@ async function importInzerat(f,label){
   try{
     const r=await fetch('/api/extract-text',{method:'POST',body:fd}).then(r=>r.json());
     if(r.error){$('#deriveMsg').textContent=tl('Chyba: ','Error: ')+r.error}
-    else{$('#inzerat').value=r.text||'';$('#deriveMsg').textContent=(r.note?r.note+' ':tl('Načteno (','Loaded (')+((r.text||'').length)+tl(' zn.). ',' chars). '))+tl('Zkontroluj text a odvoď požadavky.','Check the text and derive the requirements.')}
+    else{$('#inzerat').value=r.text||'';saveSession();$('#deriveMsg').textContent=(r.note?r.note+' ':tl('Načteno (','Loaded (')+((r.text||'').length)+tl(' zn.). ',' chars). '))+tl('Zkontroluj text a odvoď požadavky.','Check the text and derive the requirements.')}
   }catch(e){$('#deriveMsg').textContent=tl('Chyba: ','Error: ')+e}
 }
 $('#inzFile').onchange=()=>{const f=$('#inzFile').files[0];if(f)importInzerat(f);$('#inzFile').value=''};
@@ -1780,8 +2004,21 @@ function renderResults(r){
   $('#btnDeck').onclick=()=>{const w=window.open('','_blank');if(!w){$('#err').textContent=tl('Povol vyskakovací okno pro prezentaci.','Allow the pop-up window for the presentation.');return}w.document.write(buildDeck(lastResult));w.document.close();wireDocBtns(w,tl('vystup-vyberoveho-rizeni','selection-outcome')+'.html');w.focus()};
   $('#btnSave').onclick=exportResult;
   $('#btnRescore').onclick=async()=>{const b=$('#btnRescore');b.disabled=true;const old=b.textContent;b.textContent=tl('Přepočítávám…','Recomputing…');const r=await rescoreNow();if(r&&r.error)$('#err').textContent=tl('Chyba přepočtu: ','Recompute error: ')+r.error;const nb=$('#btnRescore');if(nb){nb.disabled=false;nb.textContent=old}};
+  try{vrApplyLock()}catch(e){}   // tlačítka výsledků vznikají až tady → zámek nasadit znovu
 }
-// --- autosave relace: ulož při změně formuláře, obnov po startu (přežije obnovu prohlížeče) ---
+// --- výběrové řízení: autosave při změně formuláře + obsluha tlačítek + start podle adresy ---
 ['#inzerat','#jobTitle','#minYears','#skills','#reqLangs'].forEach(sel=>{const el=$(sel);if(el)el.addEventListener('change',saveSession)});
-restoreSession();
+{const b=$('#vrNew');if(b)b.onclick=vrNew}
+{const b=$('#vrCloseBtn');if(b)b.onclick=vrCloseNow}
+{const b=$('#vrExtendBtn');if(b)b.onclick=vrExtendNow}
+{const b=$('#vrListBtn');if(b)b.onclick=()=>{vrListOpen(!vrListOpen());renderVrList()}}
+{const s=$('#vrTtl');if(s){s.value=String(vrTtlDays());s.onchange=()=>{try{localStorage.setItem(VR_TTLKEY,s.value)}catch(e){}
+  $('#vrMsg')&&vrMsgSet(tl('Platnost nových řízení: '+s.value+' dní.','Validity of new selections: '+s.value+' days.'))}}}
+// tlačítka zpět/vpřed v prohlížeči přepínají mezi řízeními (adresa = klíč)
+window.addEventListener('popstate',()=>{const id=vrIdFromUrl();
+  if(!id){if(VR&&!vrLocked())saveSession();VR=null;vrReset();renderVr();return}
+  if(VR&&VR.id===id)return;
+  if(!vrOpen(id,true))vrAdopt(id,false);
+});
+bootVr();
 </script></body></html>`;

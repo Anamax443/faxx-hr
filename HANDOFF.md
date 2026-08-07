@@ -2,6 +2,41 @@
 
 Append-only. Nejnovější záznam nahoru. Slouží k pokračování z jiného počítače / po pauze.
 
+## 2026-08-07 (ag) — Výběrové řízení = relace s vlastní adresou, uzavření s uložením, platnost
+
+- **Proč:** appka měla **jeden** slot relace (`faxx_session`) a jednu adresu. Nešlo „uklidit stůl"
+  bez ztráty rozdělané práce, vrátit se ke staršímu řízení ani poznat, co je ještě živé.
+- **Adresa = klíč řízení.** `/` je vždy **čistý start**, jedno řízení má vlastní podstránku
+  **`/RRRRMMDD-HHMM`** (`-2`, `-3`… když jich v minutě vznikne víc). Server obojí obsluhuje
+  stejnou stránkou (`VR_PATH` v [`worker/src/app.ts`](worker/src/app.ts)) a o **obsahu řízení nic neví** —
+  ten leží dál jen v prohlížeči (rozhodnutí uživatele: server-side úložiště by u veřejné appky bez
+  přihlášení znamenalo cizí CV a kontakty za „kdo zná odkaz" + přepis GDPR části dokumentace).
+  Tvar razítka je přísný, takže nemůže spolknout `/about`, `/o-projektu`, `/api/*` ani `/security.txt`.
+- **🔒 Uzavřít a uložit** = vyklidit plochu **se zachováním všech hodnot** (inzerát, požadavky,
+  váhy, zapnutá kritéria i poslední vyhodnocení) → vrátí tě na `/`. **📂 Uložená řízení** je přehled
+  (adresa · pozice · počet kandidátů · uloženo · stav) s **otevřít** (natáhne úplně všechno zpátky)
+  a **smazat** (s potvrzením). Úložiště: `faxx_vr_<id>` + lehký `faxx_vr_index`.
+- **Platnost (timeout).** Nastavení → „Platnost otevřeného řízení" (7/14/30/90/365 dní, výchozí **30**).
+  Po vypršení se řízení **zamkne jen pro čtení** — pole `readOnly`, Vyhodnotit/Odvodit/Přepočítat
+  vypnuté, autosave i rescore mají centrální zámek (`vrLocked()`), takže hodnoty nejde přepsat.
+  **Nic se nemaže**: tisk protokolu, výstup pro vedení, export JSON i prohlížení výsledků fungují dál;
+  **⏳ Prodloužit platnost** řízení vrátí do hry (a znovu otevře i uzavřené). Zámek naskočí i bez akce
+  uživatele (kontrola v `tickClock`).
+- **Cizí/neznámá adresa** (odkaz z jiného PC, záložka): stránka to **řekne** místo tichého prázdna —
+  „obsah řízení zůstává tam, kde vznikl" — a adresu adoptuje, takže co pod ní zadáš, se uloží pod ní.
+- **Migrace:** stará jediná relace `faxx_session` se při prvním otevření převede na řízení s razítkem
+  podle `savedAt` a uživatel dostane hlášku, kde ho najde. Derive a import inzerátu teď volají
+  `saveSession()` (programové vyplnění polí nevyvolá `change` → dřív se to do relace nezapsalo).
+- **Nová regrese** [`worker/src/vr.test.mjs`](worker/src/vr.test.mjs) (41 kontrol): tvar `VR_PATH`
+  (co je appka a co 404) + **parsování VYGENEROVANÉHO klientského JS** — `app.syntax.test.mjs` čte
+  surový zdroj, kde je escapování o úroveň jinak, takže sám nezaručí, že to prohlížeč vůbec spustí.
+  Kvůli tomu jsou `PAGE` i `VR_PATH` exportované.
+- **Ověřeno:** 6/6 test suit; `wrangler dev` + jsdom nad **živou** stránkou (48 kontrol, scratchpad):
+  routing 6/6, vznik řízení psaním, uzavření (plocha prázdná, snímek drží pozici/váhy/výsledek),
+  znovunatažení včetně vah a rankingu, vypršelá platnost = zámek + **pokus o zápis neprojde**,
+  prodloužení odemkne, neznámá adresa, migrace v1, EN. Build 292 KiB.
+- **NENASAZENO** — čeká na svolení (`npm run deploy:app`).
+
 ## 2026-08-05 (af) — Doladění CSP: upgrade-insecure-requests, reporting, užší object-src
 
 - **`upgrade-insecure-requests`** — stránka nic přes `http:` nenačítá, direktiva je pojistka
