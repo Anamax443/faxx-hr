@@ -42,7 +42,9 @@ Around the verified core (`detect` → `extract` → `rubric`) sits a **tabbed w
   restores them completely. An open selection has a **validity** (Settings, 30 days by default);
   once it expires it **locks to read-only** (printing and export keep working), and **⏳ Extend
   validity** brings it back. Everything lives in the browser only — the server knows nothing
-  about the selection's content.
+  about the selection's content; move it elsewhere with **💾 Save as…** / **⬆️ Load from JSON**
+  (the whole selection incl. weights and evaluation; on an address collision the app asks whether
+  to overwrite or save alongside).
 - **Evaluation** — paste the job ad (text / file / screenshot via vision) → "✨ Derive
   requirements", upload a **batch of CVs ≤ 10 MB**, "Evaluate" → ranking with an **at-a-glance
   assessment** (states `● ◐ ○ —` + certainty axis ◆ stated / ◇ inferred) **or numeric** (toggleable),

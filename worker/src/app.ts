@@ -339,8 +339,9 @@ async function evaluate(cands: CandidateInput[], req: Requirements, ai: AiBindin
 
 // ---------------------------------------------------------------------------
 // Adresa jednoho výběrového řízení: /RRRRMMDD-HHMM (+ pořadí, když jich v minutě vznikne víc).
-// Exportováno kvůli regresi `vr.test.mjs` (aby se tvar adresy testoval, ne opisoval).
-export const VR_PATH = /^\/\d{8}-\d{4}(?:-\d{1,2})?$/;
+// POZOR: modul workeru smí exportovat jen `default` (a třídy DO) — runtime jinak odmítne
+// start („Incorrect type for map entry"). Regrese proto volá `default.fetch`, ne export.
+const VR_PATH = /^\/\d{8}-\d{4}(?:-\d{1,2})?$/;
 
 export default {
   async fetch(req: Request, env: Env): Promise<Response> {
@@ -559,9 +560,7 @@ export default {
 // (viz http.ts). Bez něj by prohlížeč inline skripty stránky vůbec nespustil.
 const NONCE_SLOT = "__CSP_NONCE__";
 
-// export = aby regrese (`vr.test.mjs`) parsovala PŘESNĚ ten JS, který dostane prohlížeč
-// (syntax-test čte jen surový zdroj, kde je escapování o úroveň jinak).
-export const PAGE = `<!DOCTYPE html><html lang="cs"><head><meta charset="UTF-8">
+const PAGE = `<!DOCTYPE html><html lang="cs"><head><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>faxx-hr — hodnocení kandidátů</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='88'>🛡️</text></svg>">
@@ -717,10 +716,12 @@ table.vrt tr.cur td{background:rgba(63,214,160,.07)}
       <button class="ghost" id="vrCloseBtn" data-i18n-title="t_vrclose" title="Uložit VŠECHNY hodnoty tohoto řízení (inzerát, požadavky, váhy, výsledek) a vyklidit plochu — vrátíš se k němu z přehledu níž"><span data-i18n="b_vrclose">🔒 Uzavřít a uložit</span></button>
       <button class="ghost" id="vrExtendBtn" data-i18n-title="t_vrextend" title="Prodloužit platnost o nastavený počet dní (a znovu otevřít uzavřené řízení k úpravám)"><span data-i18n="b_vrextend">⏳ Prodloužit platnost</span></button>
       <button class="ghost" id="vrListBtn" data-i18n-title="t_vrlist" title="Zobrazit / skrýt přehled uložených výběrových řízení v tomhle prohlížeči"><span data-i18n="b_vrlist">📂 Uložená řízení</span></button>
+      <button class="ghost" id="vrSaveAs" data-i18n-title="t_vrsave" title="Uložit celé výběrové řízení do souboru JSON (inzerát, požadavky, váhy i vyhodnocení) — dá se archivovat nebo přenést na jiný počítač"><span data-i18n="b_vrsave">💾 Uložit jako…</span></button>
+      <label class="filebtn" data-i18n-title="t_vrload" title="Načíst výběrové řízení ze souboru JSON — obnoví všechny hodnoty i vyhodnocení (přijme i starší export samotného výsledku)"><span data-i18n="b_vrload">⬆️ Načíst z JSON</span><input type="file" id="vrImport" accept=".json,application/json" style="display:none"></label>
       <span class="hint" id="vrMsg"></span>
     </div>
     <div id="vrTable"></div>
-    <div class="hint" data-i18n-html="hint_vr">Jedno výběrové řízení = jedna adresa (<span class="vrid">/20260807-1432</span>). Prázdná adresa <span class="vrid">/</span> je vždy čistý start. Obsah řízení leží <b>jen v tomhle prohlížeči</b> (nahrané soubory se neukládají — pro otevírání originálů je nahraj znovu). Po vypršení platnosti se řízení <b>zamkne jen pro čtení</b>; tisk, export i přehled fungují dál.</div>
+    <div class="hint" data-i18n-html="hint_vr">Jedno výběrové řízení = jedna adresa (<span class="vrid">/20260807-1432</span>). Prázdná adresa <span class="vrid">/</span> je vždy čistý start. Obsah řízení leží <b>jen v tomhle prohlížeči</b> (nahrané soubory se neukládají — pro otevírání originálů je nahraj znovu); na jiný počítač ho dostaneš přes <b>💾 Uložit jako…</b> a <b>⬆️ Načíst z JSON</b>. Po vypršení platnosti se řízení <b>zamkne jen pro čtení</b>; tisk, export i přehled fungují dál.</div>
   </div>
   <div class="card" id="inzeratCard">
     <h3 data-i18n="h_inzerat">1 · Inzerát</h3>
@@ -964,7 +965,7 @@ table.vrt tr.cur td{background:rgba(63,214,160,.07)}
   <div class="card doc" id="d-vystup">
     <h4>9 · Výstupy</h4>
     <ul>
-      <li><b>Výběrové řízení má vlastní adresu.</b> Každé řízení dostane při založení razítko a s ním adresu (<span class="vrid">/20260807-1432</span>), na kterou se dá odkázat záložkou; holá adresa <span class="vrid">/</span> je vždy čistý start. Tlačítko <b>🔒 Uzavřít a uložit</b> uloží všechny hodnoty (inzerát, požadavky, váhy, výsledek) a vyklidí plochu, <b>📂 Uložená řízení</b> je zase kompletně natáhne zpět. Otevřené řízení má <b>platnost</b> (Nastavení, výchozí 30 dní) — po jejím uplynutí se zamkne jen pro čtení, aby nezůstalo viset donekonečna; <b>⏳ Prodloužit platnost</b> ho vrátí do hry. Vše leží jen v tomhle prohlížeči.</li>
+      <li><b>Výběrové řízení má vlastní adresu.</b> Každé řízení dostane při založení razítko a s ním adresu (<span class="vrid">/20260807-1432</span>), na kterou se dá odkázat záložkou; holá adresa <span class="vrid">/</span> je vždy čistý start. Tlačítko <b>🔒 Uzavřít a uložit</b> uloží všechny hodnoty (inzerát, požadavky, váhy, výsledek) a vyklidí plochu, <b>📂 Uložená řízení</b> je zase kompletně natáhne zpět. Otevřené řízení má <b>platnost</b> (Nastavení, výchozí 30 dní) — po jejím uplynutí se zamkne jen pro čtení, aby nezůstalo viset donekonečna; <b>⏳ Prodloužit platnost</b> ho vrátí do hry. Vše leží jen v tomhle prohlížeči — <b>💾 Uložit jako…</b> uloží <b>celé řízení</b> (inzerát, požadavky, váhy, vyhodnocení i platnost) do souboru JSON a <b>⬆️ Načíst z JSON</b> ho obnoví tady nebo na jiném počítači. Když už řízení s tou adresou existuje, appka se zeptá, jestli ho přepsat, nebo uložit vedle jako nové.</li>
       <li><b>Ranking</b> — seřazený seznam kandidátů se skóre, kontakty, seznamem dokumentů (dokumenty jdou <b>otevřít přímo z aplikace</b> klikem na název) a nálezy skrytého obsahu.</li>
       <li><b>Jedno výběrové řízení = dva dokumenty.</b> Liší se čtenářem, ne obsahem „nazdařbůh": vedení dostane souhrn bez osobních údajů, personalista a archiv úplný doklad.</li>
       <li><b>📊 Výstup výběrového řízení</b> (dokument 1 ze 2, pro vedení) — samostatné HTML na promítání a tisk, <b>6 stran A4 na výšku</b>: titulní strana, čísla dávky, užší výběr (TOP 5), srovnání kandidátů podle kritérií, integrita podkladů a metodika s odpovědností. <b>Bez kontaktů a bez rozpadu detailů.</b> Uvnitř má tlačítka Tisk/PDF a Uložit HTML.</li>
@@ -992,7 +993,7 @@ table.vrt tr.cur td{background:rgba(63,214,160,.07)}
       <li><b>Kvalita zdarma modelu kolísá.</b> Llama 3.1 8B může u téhož CV dát mírně jiné pořadí. Pro stabilnější výsledky přepni na silnější model (a Claude, až bude klíč).</li>
       <li><b>Vision OCR není dokonalý.</b> U obrázkových CV / screenshotů může chybět či být nepřesné. Doporučeno dodávat CV jako PDF/DOCX s textovou vrstvou.</li>
       <li><b>PDF — hloubka detekce.</b> Přesné určení „proč skrytý“ (barva/render mód/XFA) běží na on-prem runneru; webová verze u PDF zachytí instrukční text v textové vrstvě.</li>
-      <li><b>Ukládání v prohlížeči, ne na serveru.</b> Dokumenty se zpracují v paměti a na server se neukládají. Celé výběrové řízení (inzerát, požadavky, váhy i poslední výsledek) se <b>automaticky ukládá v prohlížeči pod svou adresou</b> a po obnově stránky se samo natáhne; výsledek si můžeš i <b>stáhnout jako JSON a jinde načíst</b>. Nahrané soubory ale refresh nepřežijí — pro otevírání originálů je nahraj znovu. <b>Adresa řízení funguje jen v prohlížeči, kde vzniklo</b> (na jiném PC bude prázdná — přenos řeší export/import JSON). Sdílené úložiště dávek se stavem kandidáta (osloven/postupuje/odmítnut) teprve přijde — perzistence D1/R2 je na roadmapě.</li>
+      <li><b>Ukládání v prohlížeči, ne na serveru.</b> Dokumenty se zpracují v paměti a na server se neukládají. Celé výběrové řízení (inzerát, požadavky, váhy i poslední výsledek) se <b>automaticky ukládá v prohlížeči pod svou adresou</b> a po obnově stránky se samo natáhne; výsledek si můžeš i <b>stáhnout jako JSON a jinde načíst</b>. Nahrané soubory ale refresh nepřežijí — pro otevírání originálů je nahraj znovu. <b>Adresa řízení funguje jen v prohlížeči, kde vzniklo</b> (na jiném PC bude prázdná — přenos řeší <b>💾 Uložit jako…</b> a <b>⬆️ Načíst z JSON</b> v kartě Výběrové řízení). Sdílené úložiště dávek se stavem kandidáta (osloven/postupuje/odmítnut) teprve přijde — perzistence D1/R2 je na roadmapě.</li>
       <li><b>Skóre = podklad.</b> Vždy si projdi rozpad a nálezy; konečné rozhodnutí je tvoje.</li>
     </ul>
     <p style="font-size:12px;color:var(--muted)">Verze aplikace (commit + čas nasazení) je v horní liště.</p>
@@ -1109,7 +1110,7 @@ table.vrt tr.cur td{background:rgba(63,214,160,.07)}
   <div class="card doc" id="en-vystup">
     <h4>9 · Outputs</h4>
     <ul>
-      <li><b>A selection has its own address.</b> Each selection gets a timestamp when created and with it an address (<span class="vrid">/20260807-1432</span>) you can bookmark; the bare address <span class="vrid">/</span> is always a clean start. <b>🔒 Close and save</b> stores all values (job ad, requirements, weights, result) and clears the workspace, <b>📂 Saved selections</b> restores them completely. An open selection has a <b>validity</b> (Settings, 30 days by default) — once it passes, the selection locks to read-only so it does not hang around forever; <b>⏳ Extend validity</b> brings it back. Everything lives in this browser only.</li>
+      <li><b>A selection has its own address.</b> Each selection gets a timestamp when created and with it an address (<span class="vrid">/20260807-1432</span>) you can bookmark; the bare address <span class="vrid">/</span> is always a clean start. <b>🔒 Close and save</b> stores all values (job ad, requirements, weights, result) and clears the workspace, <b>📂 Saved selections</b> restores them completely. An open selection has a <b>validity</b> (Settings, 30 days by default) — once it passes, the selection locks to read-only so it does not hang around forever; <b>⏳ Extend validity</b> brings it back. Everything lives in this browser only — <b>💾 Save as…</b> writes the <b>whole selection</b> (job ad, requirements, weights, evaluation and validity) to a JSON file and <b>⬆️ Load from JSON</b> restores it here or on another computer. If a selection with that address already exists, the app asks whether to overwrite it or save it alongside as a new one.</li>
       <li><b>Ranking</b> — a sorted list of candidates with scores, contacts, a list of documents (documents can be <b>opened directly from the app</b> by clicking the name) and hidden-content findings.</li>
       <li><b>One selection procedure = two documents.</b> They differ by reader, not by arbitrary content: management gets a summary without personal data, the recruiter and the archive get the full record.</li>
       <li><b>📊 Selection outcome</b> (document 1 of 2, for management) — a standalone HTML document for presenting and printing, <b>6 A4 portrait pages</b>: cover, batch figures, shortlist (top 5), candidate comparison by criterion, integrity of the source documents, and methodology with accountability. <b>No contacts, no detailed breakdown.</b> It carries its own Print/PDF and Save HTML buttons.</li>
@@ -1137,7 +1138,7 @@ table.vrt tr.cur td{background:rgba(63,214,160,.07)}
       <li><b>Free-model quality varies.</b> Llama 3.1 8B may give a slightly different order for the same CV. For more stable results switch to a stronger model (and Claude, once there is a key).</li>
       <li><b>Vision OCR is not perfect.</b> For image CVs / screenshots it may be missing or inaccurate. Prefer supplying CVs as PDF/DOCX with a text layer.</li>
       <li><b>PDF — detection depth.</b> Determining exactly "why hidden" (colour/render mode/XFA) runs on the on-prem runner; the web version catches instruction text in the PDF text layer.</li>
-      <li><b>Stored in the browser, not on the server.</b> Documents are processed in memory and not stored on the server. The whole selection (job ad, requirements, weights and the last result) is <b>auto-saved in the browser under its own address</b> and restored after a page reload; you can also <b>download the result as JSON and load it elsewhere</b>. Uploaded files do not survive a reload, though — re-upload them to open the originals. <b>A selection address only works in the browser where it was created</b> (on another PC it will be empty — use the JSON export/import to move it). A shared batch store with candidate status (contacted/advancing/rejected) is still to come — D1/R2 persistence is on the roadmap.</li>
+      <li><b>Stored in the browser, not on the server.</b> Documents are processed in memory and not stored on the server. The whole selection (job ad, requirements, weights and the last result) is <b>auto-saved in the browser under its own address</b> and restored after a page reload; you can also <b>download the result as JSON and load it elsewhere</b>. Uploaded files do not survive a reload, though — re-upload them to open the originals. <b>A selection address only works in the browser where it was created</b> (on another PC it will be empty — move it with <b>💾 Save as…</b> and <b>⬆️ Load from JSON</b> on the Selection card). A shared batch store with candidate status (contacted/advancing/rejected) is still to come — D1/R2 persistence is on the roadmap.</li>
       <li><b>The score is a basis.</b> Always review the breakdown and findings; the final decision is yours.</li>
     </ul>
     <p style="font-size:12px;color:var(--muted)">The application version (commit + deploy time) is in the top bar.</p>
@@ -1185,7 +1186,9 @@ var EN={
   b_vrclose:"🔒 Close and save", t_vrclose:"Save ALL values of this selection (job ad, requirements, weights, result) and clear the workspace — return to it from the list below",
   b_vrextend:"⏳ Extend validity", t_vrextend:"Extend the validity by the configured number of days (and reopen a closed selection for edits)",
   b_vrlist:"📂 Saved selections", t_vrlist:"Show / hide the list of selections stored in this browser",
-  hint_vr:"One selection = one address (<span class='vrid'>/20260807-1432</span>). The bare address <span class='vrid'>/</span> is always a clean start. The content lives <b>only in this browser</b> (uploaded files are not stored — re-upload them to open the originals). When the validity expires the selection <b>locks to read-only</b>; printing, export and the list keep working.",
+  b_vrsave:"💾 Save as…", t_vrsave:"Save the whole selection to a JSON file (job ad, requirements, weights and the evaluation) — for archiving or moving to another computer",
+  b_vrload:"⬆️ Load from JSON", t_vrload:"Load a selection from a JSON file — restores all values and the evaluation (older exports of just the result are accepted too)",
+  hint_vr:"One selection = one address (<span class='vrid'>/20260807-1432</span>). The bare address <span class='vrid'>/</span> is always a clean start. The content lives <b>only in this browser</b> (uploaded files are not stored — re-upload them to open the originals); move it to another computer with <b>💾 Save as…</b> and <b>⬆️ Load from JSON</b>. When the validity expires the selection <b>locks to read-only</b>; printing, export and the list keep working.",
   h_vrset:"Selections (sessions)", l_vrttl:"Validity of an open selection",
   opt_ttl_7:"7 days", opt_ttl_14:"14 days", opt_ttl_30:"30 days (default)", opt_ttl_90:"90 days", opt_ttl_365:"1 year",
   hint_vrttl:"After this period the selection <b>locks to read-only</b> — no adding CVs and no recomputation until you extend it manually. Nothing is deleted: printing the record, JSON export and browsing the results all keep working. The setting applies to <b>newly created</b> selections; for open ones use “⏳ Extend validity”. The point: so a selection does not stay open forever and you can tell what is still live.",
@@ -1397,6 +1400,51 @@ function vrExtendNow(){
   if(!vrWrite(s))return;
   VR=vrMeta(s);renderVr();
   vrMsgSet(tl('Platnost prodloužena do '+vrD(s.expiresAt)+' — řízení je zase otevřené k úpravám.','Validity extended to '+vrD(s.expiresAt)+' — the selection is open for edits again.'));
+}
+// ---- přenos řízení mimo prohlížeč: soubor JSON (archiv / jiný počítač) ----
+// Vezme CELÉ řízení (inzerát, požadavky, váhy, zapnutá kritéria, vyhodnocení i platnost),
+// ne jen výsledek — tohle je jediná cesta, jak řízení dostat do jiného prohlížeče.
+function vrExportData(){var s=vrSnapshot();if(VR)s.id=VR.id;
+  return {app:'faxx-hr',kind:'selection',version:2,exportedAt:new Date().toISOString(),selection:s}}
+function vrFileName(){
+  var base=((VR&&VR.title)||'vyberove-rizeni').normalize('NFKD').replace(/[^\\w-]+/g,'_').slice(0,40)||'vyberove-rizeni';
+  return 'faxx-hr-'+((VR&&VR.id)||'rizeni')+'-'+base+'.json';
+}
+async function vrSaveAs(){
+  if(!VR){vrMsgSet(tl('Není otevřené žádné výběrové řízení.','No selection is open.'));return}
+  var txt=JSON.stringify(vrExportData(),null,2),name=vrFileName();
+  try{
+    if(window.showSaveFilePicker){                       // „Uložit jako…" = vlastní název a složka
+      var h=await window.showSaveFilePicker({suggestedName:name,types:[{description:'JSON',accept:{'application/json':['.json']}}]});
+      var wr=await h.createWritable();await wr.write(txt);await wr.close();
+      vrMsgSet(tl('Uloženo jako '+h.name+'.','Saved as '+h.name+'.'));return;
+    }
+  }catch(e){ if(e&&e.name==='AbortError'){vrMsgSet(tl('Uložení zrušeno.','Save cancelled.'));return} }
+  var b=new Blob([txt],{type:'application/json;charset=utf-8'});   // prohlížeč bez pickeru → stažení
+  var a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=name;a.click();
+  setTimeout(function(){URL.revokeObjectURL(a.href)},4000);
+  vrMsgSet(tl('Staženo jako '+name+'.','Downloaded as '+name+'.'));
+}
+async function vrImportFile(f){
+  var data=null;
+  try{data=JSON.parse(await f.text())}catch(e){vrMsgSet(tl('Soubor není platný JSON.','The file is not valid JSON.'));return}
+  var s=null;
+  if(data&&data.kind==='selection'&&data.selection)s=data.selection;
+  else if(data&&data.kind==='evaluation'&&data.result){            // starší export samotného vyhodnocení
+    var r=data.requirements||{},t0=Date.parse(data.savedAt||'')||Date.now();
+    s={version:2,id:null,createdAt:t0,updatedAt:t0,expiresAt:null,closed:false,closedAt:null,
+      inzerat:(data.result&&data.result.inzerat)||'',jobTitle:r.jobTitle||'',minYears:r.minYears||0,
+      skills:(r.requiredSkills||[]).join(', '),langs:(r.languages||[]).join(', '),
+      weights:r.weights||null,disabled:r.disabled||null,result:data.result};
+  }
+  if(!s){vrMsgSet(tl('Tenhle soubor není výběrové řízení ani uložené vyhodnocení faxx-hr.','This file is neither a faxx-hr selection nor a saved evaluation.'));return}
+  var want=vrValidId(s.id)?s.id:vrStamp(new Date(s.createdAt||Date.now())),id=want;
+  if(vrIdx()[id]&&!confirm(tl('Řízení '+id+' už v tomhle prohlížeči je.\\n\\nOK = přepsat ho souborem, Zrušit = uložit vedle jako nové.','Selection '+id+' already exists in this browser.\\n\\nOK = overwrite it from the file, Cancel = save alongside as a new one.')))id=vrFreeId(want);
+  if(VR&&!vrLocked())saveSession();                                 // rozpracované neztrácej
+  s.id=id;if(!s.expiresAt)s.expiresAt=Date.now()+vrTtlDays()*DAY;
+  if(!vrWrite(s))return;
+  vrReset();VR=vrMeta(s);vrApply(s);vrGo(id);renderVr();
+  vrMsgSet(tl('Načteno ze souboru do řízení '+id+(vrLocked()?' (je uzavřené / po platnosti → jen pro čtení).':'.'),'Loaded from file into selection '+id+(vrLocked()?' (closed / past validity → read-only).':'.')));
 }
 function vrDelete(id){
   if(!confirm(tl('Smazat výběrové řízení '+id+' včetně uloženého vyhodnocení? Nejde vzít zpět.','Delete selection '+id+' including the saved evaluation? This cannot be undone.')))return;
@@ -2012,6 +2060,8 @@ function renderResults(r){
 {const b=$('#vrCloseBtn');if(b)b.onclick=vrCloseNow}
 {const b=$('#vrExtendBtn');if(b)b.onclick=vrExtendNow}
 {const b=$('#vrListBtn');if(b)b.onclick=()=>{vrListOpen(!vrListOpen());renderVrList()}}
+{const b=$('#vrSaveAs');if(b)b.onclick=vrSaveAs}
+{const i=$('#vrImport');if(i)i.onchange=()=>{const f=i.files[0];if(f)vrImportFile(f);i.value=''}}
 {const s=$('#vrTtl');if(s){s.value=String(vrTtlDays());s.onchange=()=>{try{localStorage.setItem(VR_TTLKEY,s.value)}catch(e){}
   $('#vrMsg')&&vrMsgSet(tl('Platnost nových řízení: '+s.value+' dní.','Validity of new selections: '+s.value+' days.'))}}}
 // tlačítka zpět/vpřed v prohlížeči přepínají mezi řízeními (adresa = klíč)

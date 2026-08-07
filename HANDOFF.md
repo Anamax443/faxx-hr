@@ -2,6 +2,28 @@
 
 Append-only. Nejnovější záznam nahoru. Slouží k pokračování z jiného počítače / po pauze.
 
+## 2026-08-07 (ah) — Řízení jako soubor: „Uložit jako…" / „Načíst z JSON" + OPRAVA exportů workeru
+
+- **💾 Uložit jako…** uloží **celé řízení** (`{app,kind:'selection',version:2,selection:{…}}`) — inzerát,
+  požadavky, váhy, zapnutá kritéria, vyhodnocení i platnost. Kde prohlížeč umí **File System Access API**
+  (Edge/Chrome), otevře se dialog „uložit jako" s výběrem názvu a složky (jde tedy ukládat rovnou
+  na síťový disk); jinde spadne na běžné stažení. Název `faxx-hr-<adresa>-<pozice>.json`.
+- **⬆️ Načíst z JSON** obnoví řízení včetně adresy. **Kolize adresy** (řízení už v prohlížeči je) se
+  neřeší tichým přepisem: dialog nabídne *přepsat* × *uložit vedle jako nové* (`-2`). Importér bere
+  i **starší export samotného vyhodnocení** (`kind:'evaluation'` z tlačítka 💾 Uložit (JSON))
+  a dá mu čerstvou platnost. Vadný / cizí JSON = srozumitelná hláška, úložiště se nedotkne.
+  Tím je vyřešený i přenos mezi počítači, který u „jen v prohlížeči" jinak chybí.
+- **OPRAVENO (vlastní chyba z (ag)):** kvůli regresi jsem z `app.ts` exportoval `PAGE` a `VR_PATH`.
+  Modul workeru ale smí exportovat jen `default` (a třídy DO) — **`wrangler dev` odmítl nastartovat**
+  (`Incorrect type for map entry 'PAGE': not of type 'function or ExportedHandler'`). Produkce to
+  spolkla (nasazená `32222de` běžela), lokální runtime ne. Exporty zrušeny; `vr.test.mjs` teď volá
+  **`default.fetch`** a testuje reálné chování routingu (200/404) místo opsaného regulárního výrazu,
+  a hlídá, že se do modulu nevrátí export, na kterém runtime spadne.
+- **Ověřeno:** 6/6 test suit (`vr.test.mjs` nově 55 kontrol), `wrangler dev` **nastartuje**,
+  jsdom nad živou stránkou **64/64** — nově export nese celé řízení, import v čistém prohlížeči
+  obnoví požadavky/váhy/ranking a přepne adresu, kolize → `-2`, starší formát projde, vadný JSON
+  se odmítne. Build 292 KiB.
+
 ## 2026-08-07 (ag) — Výběrové řízení = relace s vlastní adresou, uzavření s uložením, platnost
 
 - **Proč:** appka měla **jeden** slot relace (`faxx_session`) a jednu adresu. Nešlo „uklidit stůl"

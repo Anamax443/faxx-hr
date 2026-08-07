@@ -41,7 +41,9 @@ Kolem ověřeného jádra (`detect` → `extract` → `rubric`) stojí **zálož
   všechny hodnoty (inzerát, požadavky, váhy, výsledek) a vyklidí plochu, **📂 Uložená řízení**
   je zase kompletně natáhne. Otevřené řízení má **platnost** (Nastavení, výchozí 30 dní);
   po vypršení se **zamkne jen pro čtení** (tisk a export fungují dál), **⏳ Prodloužit platnost**
-  ho vrátí. Vše leží jen v prohlížeči — server o obsahu řízení neví.
+  ho vrátí. Vše leží jen v prohlížeči — server o obsahu řízení neví; přenos jinam řeší
+  **💾 Uložit jako…** / **⬆️ Načíst z JSON** (celé řízení včetně vah a vyhodnocení, při kolizi
+  adresy se appka zeptá, jestli přepsat, nebo uložit vedle).
 - **Hodnocení** — vlož inzerát (text / soubor / printscreen přes vision) → „✨ Odvodit
   požadavky", nahraj **dávku CV ≤ 10 MB**, „Vyhodnotit" → ranking s **pohledovým hodnocením**
   (stavy `● ◐ ○ —` + osa jistoty ◆ doloženo / ◇ odvozeno) **nebo číselně** (přepínatelné), rozpad
