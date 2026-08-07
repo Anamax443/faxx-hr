@@ -35,7 +35,9 @@ Append-only. Nejnovější záznam nahoru. Slouží k pokračování z jiného p
   routing 6/6, vznik řízení psaním, uzavření (plocha prázdná, snímek drží pozici/váhy/výsledek),
   znovunatažení včetně vah a rankingu, vypršelá platnost = zámek + **pokus o zápis neprojde**,
   prodloužení odemkne, neznámá adresa, migrace v1, EN. Build 292 KiB.
-- **NENASAZENO** — čeká na svolení (`npm run deploy:app`).
+- **NASAZENO** 2026-08-07 v commitu `32222de` (`npm run deploy:app`, version 8659fc3d). Ověřeno živě:
+  `/api/health` hlásí `32222de`, `/` i `/20260807-1432` vrací 200, `/o-projektu` beze změny 200,
+  `/rizeni` dál 404; stránka nese `#vrCard`, `#vrTtl` i `bootVr()`.
 
 ## 2026-08-05 (af) — Doladění CSP: upgrade-insecure-requests, reporting, užší object-src
 
