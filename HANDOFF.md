@@ -22,7 +22,11 @@ Append-only. Nejnovější záznam nahoru. Slouží k pokračování z jiného p
 - **Ověřeno:** 6/6 test suit (`vr.test.mjs` nově 55 kontrol), `wrangler dev` **nastartuje**,
   jsdom nad živou stránkou **64/64** — nově export nese celé řízení, import v čistém prohlížeči
   obnoví požadavky/váhy/ranking a přepne adresu, kolize → `-2`, starší formát projde, vadný JSON
-  se odmítne. Build 292 KiB.
+  se odmítne. Build 298 KiB.
+- **NASAZENO** 2026-08-07 v commitu `7f95499` (`npm run deploy:app`, version 9a15d0ec). Ověřeno živě:
+  `/api/health` hlásí `7f95499` na custom doméně i na `workers.dev`, stránka nese `#vrSaveAs`,
+  `#vrImport`, `showSaveFilePicker` i `vrImportFile`, `/rizeni` dál 404. (Znovu potvrzena poznámka
+  z (ab): ~30 s po nasazení edge ještě chvíli vracel předchozí verzi — nepřenasazovat, počkat.)
 
 ## 2026-08-07 (ag) — Výběrové řízení = relace s vlastní adresou, uzavření s uložením, platnost
 
